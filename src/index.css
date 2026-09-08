@@ -1,0 +1,215 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #FAF9F6;
+  --terracotta: #C85A32;
+  --terracotta-dark: #A9481F;
+  --sage: #8A9A86;
+  --slate: #1E293B;
+}
+
+html, body {
+  background: var(--canvas);
+  color: var(--slate);
+  font-family: 'Kanit', sans-serif;
+  scroll-behavior: smooth;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9C6BB;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.hero-heading {
+  background: linear-gradient(180deg, var(--terracotta) 0%, var(--slate) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.about-heading {
+  background: linear-gradient(180deg, #1E293B 0%, #8A9A86 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.card-hover {
+  transition: transform .35s cubic-bezier(.25, .1, .25, 1), box-shadow .35s cubic-bezier(.25, .1, .25, 1);
+}
+.card-hover:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 24px 45px -18px rgba(30, 41, 59, 0.28);
+}
+
+.btn-terracotta {
+  background: var(--terracotta);
+  color: #fff;
+  transition: all .25s ease;
+}
+.btn-terracotta:hover {
+  background: var(--terracotta-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -10px rgba(200, 90, 50, 0.55);
+}
+
+.badge-sage {
+  background: rgba(138, 154, 134, 0.16);
+  color: #5c6a58;
+  border: 1px solid rgba(138, 154, 134, 0.4);
+}
+
+.fade-in {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fade-in.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@keyframes floatAnimation {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(3deg);
+  }
+}
+
+.float-icon {
+  animation: floatAnimation 5s ease-in-out infinite;
+}
+.float-delay-1 {
+  animation-delay: 1.2s;
+}
+.float-delay-2 {
+  animation-delay: 2.4s;
+}
+.float-delay-3 {
+  animation-delay: 3.6s;
+}
+
+@keyframes marqueeLeft {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes marqueeRight {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+.animate-marquee-left {
+  display: flex;
+  width: max-content;
+  animation: marqueeLeft 32s linear infinite;
+}
+.animate-marquee-right {
+  display: flex;
+  width: max-content;
+  animation: marqueeRight 32s linear infinite;
+}
+.animate-marquee-left:hover,
+.animate-marquee-right:hover {
+  animation-play-state: paused;
+}
+
+.marquee-track {
+  display: flex;
+  gap: 0.75rem;
+  will-change: transform;
+}
+.marquee-row {
+  overflow: hidden;
+}
+.marquee-tile {
+  flex: none;
+  width: 260px;
+  height: 180px;
+  border-radius: 1.25rem;
+  object-fit: cover;
+  transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.marquee-tile:hover {
+  transform: scale(1.04);
+}
+
+.pill-btn {
+  transition: all .25s ease;
+}
+.pill-btn.active {
+  background: var(--terracotta);
+  color: #fff;
+}
+.pill-btn:not(.active):hover {
+  background: rgba(200, 90, 50, 0.1);
+}
+
+.modal-overlay {
+  transition: opacity .3s ease;
+}
+.modal-panel {
+  transition: transform .35s cubic-bezier(.25, .1, .25, 1), opacity .35s ease;
+}
+
+.drawer-panel {
+  transition: transform .4s cubic-bezier(.25, .1, .25, 1);
+}
+
+.magnet-el {
+  will-change: transform;
+}
+
+.sticky-card {
+  position: sticky;
+  transform-origin: top center;
+  transition: transform .15s ease-out;
+}
+
+.toast {
+  animation: toastIn .35s ease forwards;
+}
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.stars {
+  color: #C85A32;
+}
+
+.char-anim span {
+  transition: opacity .15s linear;
+}
+
+input[type="text"]:focus, input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(200, 90, 50, 0.25);
+}
+
+.floating-icon {
+  filter: drop-shadow(0 8px 20px rgba(30, 41, 59, 0.12));
+}
+
+.view-toggle-btn {
+  transition: all .3s ease;
+}
+

@@ -1,0 +1,309 @@
+/*
+Theme Name: ArtisansKart
+Theme URI: https://artisanskart.in
+Author: ArtisansKart Studio
+Author URI: https://artisanskart.in
+Description: A modern, handcrafted goods marketplace multi-page WordPress theme with distinct templates for Home, Shop, Collections, How It Works, About Us, Maker Portal, and Contact.
+Version: 2.2.0
+Requires at least: 5.8
+Tested up to: 6.7
+Requires PHP: 7.4
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: artisanskart
+Tags: e-commerce, custom-colors, custom-logo, custom-menu, featured-images, full-width-template, theme-options, grid-layout
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --canvas: #FAF9F6;
+  --terracotta: #C85A32;
+  --terracotta-dark: #A9481F;
+  --sage: #8A9A86;
+  --sage-dark: #62725e;
+  --slate: #1E293B;
+  --border-color: #E7E0D8;
+  --card-bg: #FFFFFF;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--canvas);
+  color: var(--slate);
+  font-family: 'Kanit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.ak-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .ak-container {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--slate);
+  font-weight: 800;
+  line-height: 1.15;
+  margin-top: 0;
+}
+
+.hero-heading {
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: #1E293B;
+}
+
+.btn-terracotta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--terracotta);
+  color: #ffffff !important;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.85rem 1.75rem;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(200, 90, 50, 0.35);
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  text-decoration: none;
+}
+
+.btn-terracotta:hover {
+  background: var(--terracotta-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(200, 90, 50, 0.45);
+}
+
+.btn-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  color: var(--slate);
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.85rem 1.75rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-decoration: none;
+}
+
+.btn-outline:hover {
+  background: #f1ede8;
+  border-color: #d1c5bb;
+  transform: translateY(-2px);
+}
+
+.badge-sage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #EEF3EE;
+  color: var(--sage-dark);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid #DCE6DC;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-terracotta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #FDF2EE;
+  color: var(--terracotta);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid #F7DCD2;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.card-hover {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  transition: all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 16px 36px -10px rgba(30, 41, 59, 0.12);
+  border-color: #D9C6BB;
+}
+
+/* Sliding Marquee Styles */
+@keyframes ak-marquee-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes ak-marquee-right {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes ak-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.marquee-container {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  width: 100%;
+  padding: 12px 0;
+}
+
+.marquee-container:hover .marquee-track-left,
+.marquee-container:hover .marquee-track-right {
+  animation-play-state: paused;
+}
+
+.marquee-track-left {
+  display: flex;
+  flex-shrink: 0;
+  gap: 20px;
+  animation: ak-marquee-left 32s linear infinite;
+  will-change: transform;
+}
+
+.marquee-track-right {
+  display: flex;
+  flex-shrink: 0;
+  gap: 20px;
+  animation: ak-marquee-right 36s linear infinite;
+  will-change: transform;
+}
+
+.marquee-card {
+  flex-shrink: 0;
+  width: 260px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 12px;
+  margin: 0 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+  transition: transform 0.2s ease;
+  cursor: pointer;
+}
+
+.marquee-card:hover {
+  transform: scale(1.04);
+}
+
+.floating-badge {
+  animation: ak-float 4s ease-in-out infinite;
+}
+
+/* Tab filter button styling */
+.filter-btn {
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid #E7E0D8;
+  background: #FAF9F6;
+  color: #1E293B;
+  transition: all 0.2s ease;
+}
+
+.filter-btn.active, .filter-btn:hover {
+  background: #1E293B;
+  color: #ffffff;
+  border-color: #1E293B;
+}
+
+/* Modal Popup */
+.ak-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.ak-modal-overlay.open {
+  display: flex;
+}
+
+.ak-modal-box {
+  background: #ffffff;
+  border-radius: 24px;
+  max-width: 780px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+  position: relative;
+  animation: ak-modal-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes ak-modal-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Nav Menu Styling */
+.ak-nav-link {
+  color: #1E293B;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.ak-nav-link:hover, .ak-nav-link.active {
+  color: #C85A32;
+  background: #FDF2EE;
+}

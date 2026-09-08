@@ -1,0 +1,6 @@
+{
+  "name": "ArtisansKart",
+  "description": "Handcrafted goods marketplace by student artisans with dual customer and maker views.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
