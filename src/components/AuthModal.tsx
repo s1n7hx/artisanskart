@@ -16,6 +16,8 @@ import {
 import { useApp } from '../context/AppContext';
 import { signInWithGoogle, signInWithEmailPassword, signUpWithEmailPassword } from '../services/supabase';
 
+import { MASTER_ADMIN_EMAIL } from '../context/AppContext';
+
 export const AuthModal: React.FC = () => {
   const {
     isAuthModalOpen,
@@ -69,26 +71,37 @@ export const AuthModal: React.FC = () => {
         const res = await signUpWithEmailPassword(email, password, name || 'Student Creator');
         const user = res.user;
         if (user) {
+          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+          const assignedRole = isMaster ? 'admin' : 'customer';
           setCurrentUser({
             id: user.id,
             email: user.email || email,
-            name: name || 'Student Creator',
-            role: 'customer',
+            name: name || (isMaster ? 'Master Admin' : 'Customer Shopper'),
+            role: assignedRole,
           });
-          showToast('Account created! Master Admin can now promote you to Maker.', 'sparkles');
+          setUserRole(assignedRole);
+          showToast(
+            isMaster
+              ? 'Master Admin verified!'
+              : 'Account created as Customer! Master Admin can promote you to Maker.',
+            'sparkles'
+          );
           setIsAuthModalOpen(false);
         }
       } else {
         const res = await signInWithEmailPassword(email, password);
         const user = res.user;
         if (user) {
+          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+          const assignedRole = isMaster ? 'admin' : email.includes('admin') ? 'admin' : 'customer';
           setCurrentUser({
             id: user.id,
             email: user.email || email,
-            name: user.user_metadata?.full_name || email.split('@')[0],
-            role: email.includes('admin') ? 'admin' : 'customer',
+            name: user.user_metadata?.full_name || (isMaster ? 'Master Admin' : email.split('@')[0]),
+            role: assignedRole,
           });
-          showToast(`Welcome back, ${email.split('@')[0]}!`, 'check-circle-2');
+          setUserRole(assignedRole);
+          showToast(`Welcome back, ${isMaster ? 'Master Admin' : email.split('@')[0]}!`, 'check-circle-2');
           setIsAuthModalOpen(false);
         }
       }
@@ -102,25 +115,25 @@ export const AuthModal: React.FC = () => {
   const handleQuickRoleSwitch = (role: 'admin' | 'maker' | 'customer') => {
     const roleProfiles = {
       admin: {
-        id: 'usr_admin_1',
-        email: 'admin@artisanskart.in',
-        name: 'Master Admin (You)',
+        id: 'usr_master_admin_ssumollah',
+        email: 'ssumollah@gmail.com',
+        name: 'Master Admin (ssumollah)',
         role: 'admin' as const,
-        school: 'Platform Headquarters',
+        school: 'ArtisansKart HQ',
       },
       maker: {
         id: 'usr_maker_sakib',
         email: 'sakib.maker@delhischool.edu',
-        name: 'Sakib Ansari',
+        name: 'Sakib Ansari (Maker)',
         role: 'maker' as const,
         school: 'DPS RK Puram (Class 10)',
       },
       customer: {
-        id: 'usr_cust_priya',
-        email: 'priya.customer@gmail.com',
-        name: 'Priya Sharma',
+        id: 'usr_cust_patron',
+        email: 'visitor@artisanskart.in',
+        name: 'General Shopper',
         role: 'customer' as const,
-        school: 'Patron / Buyer',
+        school: 'Art Patron / Buyer',
       },
     };
 

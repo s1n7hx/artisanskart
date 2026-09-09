@@ -8,7 +8,7 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSignup }) => {
-  const { heroContent, animationSettings, setIsWpModalOpen } = useApp();
+  const { heroContent, animationSettings, setIsWpModalOpen, userRole } = useApp();
   const stageRef = useRef<HTMLDivElement>(null);
   const mainElRef = useRef<HTMLDivElement>(null);
   const leftElRef = useRef<HTMLDivElement>(null);
@@ -164,13 +164,15 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             >
               <PencilRuler className="w-4 h-4" /> Become a Maker
             </button>
-            <button
-              onClick={() => setIsWpModalOpen(true)}
-              title="Customize photos, text and animations"
-              className="text-xs text-slate-500 hover:text-[#C85A32] flex items-center gap-1.5 px-3 py-2 rounded-full border border-dashed border-[#E7E0D8] hover:border-[#C85A32] transition bg-white/50 cursor-pointer"
-            >
-              <Edit2 className="w-3 h-3" /> Customize Photos &amp; Motion
-            </button>
+            {userRole === 'admin' && (
+              <button
+                onClick={() => setIsWpModalOpen(true)}
+                title="Customize photos, text and animations"
+                className="text-xs text-slate-500 hover:text-[#C85A32] flex items-center gap-1.5 px-3 py-2 rounded-full border border-dashed border-[#E7E0D8] hover:border-[#C85A32] transition bg-white/50 cursor-pointer"
+              >
+                <Edit2 className="w-3 h-3" /> Customize Photos &amp; Motion
+              </button>
+            )}
           </div>
 
           <div

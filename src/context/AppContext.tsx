@@ -90,13 +90,22 @@ const LOCAL_STORAGE_ANIMATION_KEY = 'artisanskart_animation_settings_v1';
 const LOCAL_STORAGE_USER_KEY = 'artisanskart_current_user_v1';
 const LOCAL_STORAGE_USERS_LIST_KEY = 'artisanskart_all_users_v1';
 
+export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
+
 const INITIAL_USERS: UserAccount[] = [
   {
-    id: 'usr_admin_1',
-    email: 'admin@artisanskart.in',
-    name: 'Master Admin (You)',
+    id: 'usr_master_admin_ssumollah',
+    email: 'ssumollah@gmail.com',
+    name: 'Master Admin (ssumollah)',
     role: 'admin',
-    school: 'Platform Headquarters',
+    school: 'ArtisansKart Platform Headquarters',
+  },
+  {
+    id: 'usr_admin_default',
+    email: 'admin@artisanskart.in',
+    name: 'Platform Administrator',
+    role: 'admin',
+    school: 'Operations HQ',
   },
   {
     id: 'usr_maker_sakib',
@@ -123,11 +132,11 @@ const INITIAL_USERS: UserAccount[] = [
     bio: 'Handcrafted macrame bookmarks & keychains.',
   },
   {
-    id: 'usr_cust_priya',
-    email: 'priya.customer@gmail.com',
-    name: 'Priya Sharma',
+    id: 'usr_cust_patron',
+    email: 'visitor@artisanskart.in',
+    name: 'Customer Shopper',
     role: 'customer',
-    school: 'Customer Patron',
+    school: 'Art Patron & Supporter',
   },
 ];
 
@@ -219,7 +228,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_HERO_CONTENT;
   });
 
-  // On mount, pull live CMS settings from Supabase if available
+  // On mount, pull live CMS settings from Supabase and listen for Supabase auth events
   useEffect(() => {
     async function initSupabaseData() {
       try {
@@ -255,6 +264,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     initSupabaseData();
+
+    // Supabase Auth State Change Listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const email = session.user.email || '';
+        const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+
+        // Check if there is an existing profile or granted role
+        const profile = await getProfile(session.user.id);
+        const resolvedRole: 'admin' | 'maker' | 'customer' = isMaster
+          ? 'admin'
+          : profile?.role || (email.includes('admin') ? 'admin' : 'customer');
+
+        const userAccount: UserAccount = {
+          id: session.user.id,
+          email: email,
+          name:
+            session.user.user_metadata?.full_name ||
+            session.user.user_metadata?.name ||
+            (isMaster ? 'Master Admin' : email.split('@')[0]),
+          role: resolvedRole,
+          school: profile?.school || (isMaster ? 'Platform Headquarters' : 'Artisans Patron'),
+        };
+
+        setCurrentUser(userAccount);
+        setUserRoleState(resolvedRole);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(userAccount));
+        } catch (e) {}
+
+        // Add to users list if not present
+        setUsersList((prev) => {
+          if (!prev.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
+            const next = [userAccount, ...prev];
+            try {
+              localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
+            } catch (e) {}
+            return next;
+          }
+          return prev.map((u) => (u.email.toLowerCase() === email.toLowerCase() ? { ...u, ...userAccount } : u));
+        });
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   const [animationSettings, setAnimationSettings] = useState<AnimationSettings>(() => {
