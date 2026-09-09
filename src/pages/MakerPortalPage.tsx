@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
   CheckCircle2,
@@ -18,11 +19,15 @@ import {
   AlertCircle,
   Image as ImageIcon,
   Lock,
+  ShieldAlert,
+  ArrowLeft,
+  User,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product } from '../types';
 
 export const MakerPortalPage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     orders,
     acceptOrder,
@@ -31,7 +36,6 @@ export const MakerPortalPage: React.FC = () => {
     setIsMakerSignupOpen,
     currentUser,
     userRole,
-    setUserRole,
     addNewProduct,
     showToast,
     setIsAuthModalOpen,
@@ -98,39 +102,66 @@ export const MakerPortalPage: React.FC = () => {
 
   const isMakerOrAdmin = userRole === 'maker' || userRole === 'admin';
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 min-h-screen space-y-8">
-      {/* Role Alert / Permission Banner */}
-      {!isMakerOrAdmin && (
-        <div className="bg-amber-50 border border-amber-300 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Lock className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-extrabold text-amber-900 text-sm">
-                Student Maker Role Required to Publish &amp; Fulfill Crafts
-              </h3>
-              <p className="text-amber-700 text-xs mt-0.5 leading-relaxed">
-                You are currently signed in with Customer/Guest permissions. The Master Admin can grant your account Maker permissions from the <strong>Admin Portal &rarr; Users &amp; Permissions</strong> tab.
-              </p>
-            </div>
+  // Strict Route Guard: If the user is a customer/visitor, display the Restricted Maker Portal banner
+  if (!isMakerOrAdmin) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <Hammer className="w-8 h-8 text-[#C85A32]" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#C85A32] bg-[#C85A32]/10 px-3 py-1 rounded-full">
+            Student Artisan Portal
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#1E293B] tracking-tight">
+            Maker Permission Required
+          </h1>
+          <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+            The Student Maker Workspace is reserved for enrolled student artisans to accept custom orders, mark production milestones, and receive UPI payouts.
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-[#e7e0d8] shadow-sm text-left max-w-md mx-auto space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 font-medium">Current Status:</span>
+            <span className="font-bold text-slate-700 capitalize">{userRole} Account</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setUserRole('maker')}
-              className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-slate-800 transition whitespace-nowrap cursor-pointer shadow-xs"
-            >
-              ⚡ Enable Maker Mode (Demo)
-            </button>
-            <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className="bg-white border border-amber-300 text-amber-900 text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-100 transition whitespace-nowrap cursor-pointer"
-            >
-              Sign In With Google
-            </button>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 font-medium">Logged in User:</span>
+            <span className="font-semibold text-slate-700">{currentUser?.email || 'Guest / Not Signed In'}</span>
+          </div>
+          <div className="pt-2 border-t border-slate-100 text-slate-500 text-[11px] leading-relaxed">
+            💡 <strong>Need Maker Access?</strong> Sign in with your registered Google account, or have the Master Admin (<strong>ssumollah@gmail.com</strong>) grant you Maker permission from the Admin Portal.
           </div>
         </div>
-      )}
 
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => navigate('/')}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" /> Return to Storefront
+          </button>
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full btn-terracotta text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Lock className="w-4 h-4" /> Sign In with Google
+          </button>
+          <button
+            onClick={() => setIsMakerSignupOpen(true)}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-slate-900 text-white font-semibold text-sm hover:bg-slate-800 transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" /> Apply as Student Maker
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 min-h-screen space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#e7e0d8]">
         <div>

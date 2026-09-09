@@ -59,6 +59,8 @@ interface AppContextType {
   setIsAuthModalOpen: (open: boolean) => void;
   usersList: UserAccount[];
   grantUserRole: (userId: string, newRole: 'admin' | 'maker' | 'customer') => Promise<void>;
+  addNewUserAccount: (email: string, name: string, role: 'admin' | 'maker' | 'customer', school?: string) => Promise<void>;
+  removeUserAccount: (userId: string) => Promise<void>;
 
   // Hero & Animation Customization
   heroContent: HeroContent;
@@ -198,6 +200,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     showToast(`Permission updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
+  };
+
+  // Add new authorized email / user account
+  const addNewUserAccount = async (
+    email: string,
+    name: string,
+    role: 'admin' | 'maker' | 'customer',
+    school?: string
+  ) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const existingIndex = usersList.findIndex((u) => u.email.toLowerCase() === trimmedEmail);
+
+    const newUser: UserAccount = {
+      id: `usr_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      email: trimmedEmail,
+      name: name.trim() || trimmedEmail.split('@')[0],
+      role: role,
+      school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Campus Arts Club' : 'Customer Patron'),
+    };
+
+    let nextList: UserAccount[];
+    if (existingIndex >= 0) {
+      nextList = usersList.map((u, i) => (i === existingIndex ? { ...u, role, name: newUser.name, school: newUser.school } : u));
+    } else {
+      nextList = [newUser, ...usersList];
+    }
+
+    setUsersList(nextList);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
+    } catch (e) {}
+
+    // If active user is the one being updated
+    if (currentUser && currentUser.email.toLowerCase() === trimmedEmail) {
+      setUserRole(role);
+    }
+
+    showToast(`Added ${trimmedEmail} with ${role.toUpperCase()} access!`, 'check-circle-2');
+  };
+
+  // Remove / revoke user account
+  const removeUserAccount = async (userId: string) => {
+    const targetUser = usersList.find((u) => u.id === userId);
+    if (targetUser?.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
+      showToast('Cannot delete the Master Admin account!', 'alert-circle');
+      return;
+    }
+
+    const nextList = usersList.filter((u) => u.id !== userId);
+    setUsersList(nextList);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
+    } catch (e) {}
+
+    showToast('User removed successfully.', 'trash-2');
   };
 
   // Load products from localStorage or default PRODUCTS
@@ -548,6 +605,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthModalOpen,
         usersList,
         grantUserRole,
+        addNewUserAccount,
+        removeUserAccount,
 
         // Hero & Animation Customization
         heroContent,

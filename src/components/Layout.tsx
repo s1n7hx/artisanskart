@@ -96,8 +96,8 @@ export const Layout: React.FC = () => {
       {/* Persistent Footer */}
       <Footer />
 
-      {/* Floating View Portal Switcher for Admins, Makers, or on dedicated portal pages */}
-      {(userRole === 'admin' || userRole === 'maker' || isMakerPage || isAdminPage) && (
+      {/* Floating View Portal Switcher for Admins or Makers */}
+      {(userRole === 'admin' || userRole === 'maker') && (
         <div className="fixed z-40 bottom-5 left-1/2 -translate-x-1/2 md:left-auto md:right-6 md:translate-x-0 glass-panel rounded-full p-1.5 flex shadow-2xl border border-white/80 bg-white/90 backdrop-blur-md gap-1">
           <button
             id="viewCustomerBtn"
@@ -119,25 +119,27 @@ export const Layout: React.FC = () => {
             <span className="sm:hidden">Store</span>
           </button>
 
-          <button
-            id="viewMakerBtn"
-            onClick={() => {
-              if (!isMakerPage) {
-                navigate('/maker');
-              } else {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }
-            }}
-            className={`px-3 sm:px-4 py-2 rounded-full text-xs md:text-sm font-semibold flex items-center gap-1.5 cursor-pointer transition ${
-              isMakerPage
-                ? 'bg-[#1E293B] text-white shadow-xs'
-                : 'text-[#1E293B] hover:bg-black/5'
-            }`}
-          >
-            <Hammer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C85A32]" />
-            <span className="hidden sm:inline">Maker</span>
-            <span className="sm:hidden">Maker</span>
-          </button>
+          {(userRole === 'maker' || userRole === 'admin') && (
+            <button
+              id="viewMakerBtn"
+              onClick={() => {
+                if (!isMakerPage) {
+                  navigate('/maker');
+                } else {
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              }}
+              className={`px-3 sm:px-4 py-2 rounded-full text-xs md:text-sm font-semibold flex items-center gap-1.5 cursor-pointer transition ${
+                isMakerPage
+                  ? 'bg-[#1E293B] text-white shadow-xs'
+                  : 'text-[#1E293B] hover:bg-black/5'
+              }`}
+            >
+              <Hammer className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#C85A32]" />
+              <span className="hidden sm:inline">Maker</span>
+              <span className="sm:hidden">Maker</span>
+            </button>
+          )}
 
           {userRole === 'admin' && (
             <button

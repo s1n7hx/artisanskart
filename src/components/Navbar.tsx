@@ -101,19 +101,21 @@ export const Navbar: React.FC = () => {
             <NavLink to="/contact" className={navLinkClass}>
               Contact
             </NavLink>
-            <NavLink
-              to="/maker"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#1E293B] text-white shadow-xs'
-                    : 'text-[#1E293B] hover:text-[#C85A32] hover:bg-black/5'
-                }`
-              }
-            >
-              <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
-              Maker Portal
-            </NavLink>
+            {(userRole === 'maker' || userRole === 'admin') && (
+              <NavLink
+                to="/maker"
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-full text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#1E293B] text-white shadow-xs'
+                      : 'text-[#1E293B] hover:text-[#C85A32] hover:bg-black/5'
+                  }`
+                }
+              >
+                <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
+                Maker Portal
+              </NavLink>
+            )}
             {userRole === 'admin' && (
               <NavLink
                 to="/admin"
@@ -145,18 +147,20 @@ export const Navbar: React.FC = () => {
             >
               Marketplace
             </NavLink>
-            <NavLink
-              to="/maker"
-              className={({ isActive }) =>
-                `px-3 py-2 rounded-full text-xs font-semibold transition flex items-center gap-1 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#1E293B] text-white shadow-xs'
-                    : 'text-[#1E293B] hover:text-[#C85A32]'
-                }`
-              }
-            >
-              <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker
-            </NavLink>
+            {(userRole === 'maker' || userRole === 'admin') && (
+              <NavLink
+                to="/maker"
+                className={({ isActive }) =>
+                  `px-3 py-2 rounded-full text-xs font-semibold transition flex items-center gap-1 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#1E293B] text-white shadow-xs'
+                      : 'text-[#1E293B] hover:text-[#C85A32]'
+                  }`
+                }
+              >
+                <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker
+              </NavLink>
+            )}
             {userRole === 'admin' && (
               <NavLink
                 to="/admin"
@@ -316,23 +320,25 @@ export const Navbar: React.FC = () => {
             >
               <span>Contact</span>
             </NavLink>
-            <NavLink
-              to="/maker"
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `px-4 py-3 rounded-xl text-sm font-semibold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
-                  isActive
-                    ? 'bg-[#1E293B] text-white shadow-xs'
-                    : 'bg-white border border-[#e7e0d8] text-[#1E293B] hover:border-[#1E293B] active:bg-[#FAF9F6]'
-                }`
-              }
-            >
-              <span className="flex items-center gap-1.5">
-                <Hammer className="w-4 h-4 text-[#C85A32]" />
-                Maker Portal
-              </span>
-              <span className="text-xs text-[#C85A32] font-bold">65%</span>
-            </NavLink>
+            {(userRole === 'maker' || userRole === 'admin') && (
+              <NavLink
+                to="/maker"
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `px-4 py-3 rounded-xl text-sm font-semibold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
+                    isActive
+                      ? 'bg-[#1E293B] text-white shadow-xs'
+                      : 'bg-white border border-[#e7e0d8] text-[#1E293B] hover:border-[#1E293B] active:bg-[#FAF9F6]'
+                  }`
+                }
+              >
+                <span className="flex items-center gap-1.5">
+                  <Hammer className="w-4 h-4 text-[#C85A32]" />
+                  Maker Portal
+                </span>
+                <span className="text-xs text-[#C85A32] font-bold">65%</span>
+              </NavLink>
+            )}
             {userRole === 'admin' && (
               <NavLink
                 to="/admin"

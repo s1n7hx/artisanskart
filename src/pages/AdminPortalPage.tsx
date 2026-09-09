@@ -46,6 +46,8 @@ export const AdminPortalPage: React.FC = () => {
     showToast,
     usersList,
     grantUserRole,
+    addNewUserAccount,
+    removeUserAccount,
     currentUser,
     userRole,
     setUserRole,
@@ -56,6 +58,13 @@ export const AdminPortalPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState<'cms' | 'users' | 'products' | 'orders' | 'supabase'>('cms');
+
+  // New authorized user state
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'admin' | 'maker' | 'customer'>('maker');
+  const [newUserSchool, setNewUserSchool] = useState('');
 
   // Local CMS form state
   const [cmsForm, setCmsForm] = useState<HeroContent>({ ...heroContent });
@@ -618,24 +627,126 @@ export const AdminPortalPage: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-black text-slate-900">
-                  User Roles &amp; Student Maker Permissions
+                  User Roles &amp; Email Authorization
                 </h2>
                 <span className="text-xs bg-[#C85A32]/10 text-[#C85A32] font-black px-2.5 py-0.5 rounded-full">
-                  {usersList.length} registered
+                  {usersList.length} registered accounts
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Grant registered Google users permission to become <strong>Student Makers</strong> so they can publish crafts and fulfill orders.
+                Add authorized Google emails and grant permissions for <strong>Admins</strong> or <strong>Student Makers</strong>.
               </p>
             </div>
 
-            {/* Filter Buttons */}
-            <div className="flex items-center gap-1 bg-[#FAF9F6] border border-[#e7e0d8] p-1 rounded-2xl text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsAddingUser(!isAddingUser)}
+                className="bg-[#C85A32] text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-xs hover:bg-[#b04a25] transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{isAddingUser ? 'Close Form' : 'Authorize New Email'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Add New Authorized User Form */}
+          {isAddingUser && (
+            <div className="p-5 rounded-2xl bg-amber-50/50 border border-amber-200 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-extrabold text-sm text-amber-950 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-[#C85A32]" />
+                  Authorize Email for Admin or Maker Role
+                </h3>
+                <span className="text-[11px] text-amber-800">
+                  When this user signs in with Google, they will automatically receive this role.
+                </span>
+              </div>
+
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!newUserEmail.trim()) {
+                    showToast('Please enter a valid email.', 'alert-circle');
+                    return;
+                  }
+                  await addNewUserAccount(newUserEmail, newUserName, newUserRole, newUserSchool);
+                  setNewUserEmail('');
+                  setNewUserName('');
+                  setNewUserSchool('');
+                  setIsAddingUser(false);
+                }}
+                className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
+              >
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Google Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    placeholder="student@gmail.com"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Full Name
+                  </label>
+                  <input
+                    type="text"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    placeholder="e.g. Priya Sharma"
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Role to Assign <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newUserRole}
+                    onChange={(e) => setNewUserRole(e.target.value as any)}
+                    className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs font-semibold focus:outline-hidden focus:border-[#C85A32]"
+                  >
+                    <option value="maker">🔨 Student Maker (Publish & Fulfill)</option>
+                    <option value="admin">🛡️ Co-Admin (Full CMS Access)</option>
+                    <option value="customer">👤 Customer (Standard Buyer)</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newUserSchool}
+                    onChange={(e) => setNewUserSchool(e.target.value)}
+                    placeholder="School / College (Optional)"
+                    className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-[#1E293B] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#C85A32] transition cursor-pointer shrink-0"
+                  >
+                    Save &amp; Grant
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Filter Buttons & Search */}
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="flex items-center gap-1 bg-[#FAF9F6] border border-[#e7e0d8] p-1 rounded-2xl text-xs font-bold w-full sm:w-auto">
               {(['all', 'admin', 'maker', 'customer'] as const).map((r) => (
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
-                  className={`px-3 py-1.5 rounded-xl capitalize transition cursor-pointer ${
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-xl capitalize transition cursor-pointer ${
                     roleFilter === r
                       ? 'bg-[#C85A32] text-white shadow-xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -645,18 +756,18 @@ export const AdminPortalPage: React.FC = () => {
                 </button>
               ))}
             </div>
-          </div>
 
-          {/* User Search Input */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              placeholder="Search user by name, email, or school..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-sm focus:bg-white focus:outline-hidden focus:border-[#C85A32]"
-            />
+            {/* User Search Input */}
+            <div className="relative w-full sm:w-80">
+              <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                placeholder="Search by name, email, or school..."
+                className="w-full pl-10 pr-4 py-2 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-xs focus:bg-white focus:outline-hidden focus:border-[#C85A32]"
+              />
+            </div>
           </div>
 
           {/* User Cards Grid */}
@@ -664,6 +775,7 @@ export const AdminPortalPage: React.FC = () => {
             {filteredUsers.map((u) => {
               const isAdmin = u.role === 'admin';
               const isMaker = u.role === 'maker';
+              const isMasterAdmin = u.email.toLowerCase() === 'ssumollah@gmail.com';
 
               return (
                 <div
@@ -685,12 +797,28 @@ export const AdminPortalPage: React.FC = () => {
                         >
                           {u.role}
                         </span>
+                        {isMasterAdmin && (
+                          <span className="text-[10px] bg-amber-400 text-amber-950 font-black px-2 py-0.5 rounded-full">
+                            ★ Master
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 font-mono mt-0.5">{u.email}</p>
                       {u.school && (
                         <p className="text-xs text-slate-600 font-medium mt-1">🏫 {u.school}</p>
                       )}
                     </div>
+
+                    {!isMasterAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => removeUserAccount(u.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                        title="Remove user account"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Action Role Elevation Buttons */}
@@ -707,7 +835,7 @@ export const AdminPortalPage: React.FC = () => {
                       }`}
                     >
                       <Hammer className="w-3.5 h-3.5" />
-                      <span>{isMaker ? '✓ Active Maker' : 'Grant Maker Permission'}</span>
+                      <span>{isMaker ? '✓ Maker' : 'Grant Maker'}</span>
                     </button>
 
                     <button

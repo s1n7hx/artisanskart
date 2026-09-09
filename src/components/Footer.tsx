@@ -123,11 +123,13 @@ export const Footer: React.FC = () => {
                 <Sparkles className="w-3.5 h-3.5" /> Sell Your Crafts
               </button>
             </li>
-            <li>
-              <Link to="/maker" className="hover:text-white transition">
-                Maker Portal Dashboard
-              </Link>
-            </li>
+            {(userRole === 'maker' || userRole === 'admin') && (
+              <li>
+                <Link to="/maker" className="hover:text-white transition">
+                  Maker Portal Dashboard
+                </Link>
+              </li>
+            )}
             <li>
               <Link to="/about" className="hover:text-white transition">
                 Our Fair-Trade Pledge
