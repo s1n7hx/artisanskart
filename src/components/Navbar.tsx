@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, ShoppingBag, Search, Hammer, ShieldCheck, Menu, X } from 'lucide-react';
+import { Sparkles, ShoppingBag, Search, Hammer, ShieldCheck, Menu, X, User } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Navbar: React.FC = () => {
@@ -100,6 +100,9 @@ export const Navbar: React.FC = () => {
             </NavLink>
             <NavLink to="/contact" className={navLinkClass}>
               Contact
+            </NavLink>
+            <NavLink to="/login" className={navLinkClass}>
+              Sign In
             </NavLink>
             {(userRole === 'maker' || userRole === 'admin') && (
               <NavLink

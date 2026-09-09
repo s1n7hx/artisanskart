@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -17,9 +17,12 @@ import {
   ExternalLink,
   Info,
   Key,
+  Clock,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { UserRole } from '../types';
+import { UserRole, UserStatus } from '../types';
 import {
   signInWithGoogle as supabaseSignInWithGoogle,
   signInWithEmailPassword,
@@ -34,18 +37,23 @@ export const LoginPage: React.FC = () => {
   const {
     currentUser,
     userRole,
+    userStatus,
     setUserRole,
     setCurrentUser,
     showToast,
     loginWithGoogleAccount,
     logoutUser,
     usersList,
+    requestElevatedRole,
   } = useApp();
 
   const [authTab, setAuthTab] = useState<'google' | 'email'>('google');
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [customGoogleName, setCustomGoogleName] = useState('');
   const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false);
+  const [showRoleRequestModal, setShowRoleRequestModal] = useState(false);
+  const [requestRoleTarget, setRequestRoleTarget] = useState<'maker' | 'admin'>('maker');
+  const [requestNote, setRequestNote] = useState('');
 
   // Email/Password state
   const [emailMode, setEmailMode] = useState<'login' | 'signup'>('login');
@@ -54,36 +62,46 @@ export const LoginPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // OAuth Help Accordion
-  const [showOAuthHelp, setShowOAuthHelp] = useState(false);
+  // Setup Guide Accordion
+  const [showSetupGuide, setShowSetupGuide] = useState(true);
 
-  // Handle instant Google Login for Master Admin
+  const copyToClipboard = (text: string, keyName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(keyName);
+    showToast('Copied to clipboard!', 'check-circle-2');
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
+
+  // Handle instant Google Login for Master Admin (ssumollah@gmail.com)
   const handleMasterAdminGoogleLogin = async () => {
     try {
       setLoading(true);
+      setErrorMsg('');
       await loginWithGoogleAccount(
         MASTER_ADMIN_EMAIL,
         'Master Admin (ssumollah)',
         'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
       );
+      showToast('Welcome Master Admin! Full CMS & User Approvals active.', 'shield-check');
       if (redirectPath) {
         navigate(redirectPath);
       } else {
         navigate('/admin');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to sign in.');
+      setErrorMsg(err.message || 'Failed to sign in as Master Admin.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle custom Google Email Sign-In
+  // Handle custom Google Email Sign-In (checks database status)
   const handleCustomGoogleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customGoogleEmail.trim()) {
-      setErrorMsg('Please provide a valid Google email address.');
+      setErrorMsg('Please enter a valid Google email address.');
       return;
     }
 
@@ -95,14 +113,17 @@ export const LoginPage: React.FC = () => {
         customGoogleName || undefined
       );
 
-      if (redirectPath) {
-        navigate(redirectPath);
-      } else if (loggedUser.role === 'admin') {
-        navigate('/admin');
-      } else if (loggedUser.role === 'maker') {
-        navigate('/maker');
+      // Check if user is approved for their role
+      if (loggedUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
+        navigate(redirectPath || '/admin');
+      } else if (loggedUser.status === 'pending') {
+        navigate('/pending-approval');
+      } else if (loggedUser.role === 'admin' && loggedUser.status === 'approved') {
+        navigate(redirectPath || '/admin');
+      } else if (loggedUser.role === 'maker' && loggedUser.status === 'approved') {
+        navigate(redirectPath || '/maker');
       } else {
-        navigate('/');
+        navigate(redirectPath || '/');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Google Sign-In failed.');
@@ -111,21 +132,32 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  // Live Supabase Google OAuth Redirect (if configured)
+  // Live Supabase Google OAuth
   const handleLiveSupabaseOAuth = async () => {
     try {
       setLoading(true);
       setErrorMsg('');
       await supabaseSignInWithGoogle();
-      showToast('Redirecting to Google Sign-In...', 'sparkles');
+      showToast('Redirecting to Google OAuth...', 'sparkles');
     } catch (err: any) {
       console.warn('Google Auth Error:', err);
       setErrorMsg(
-        'Live Google OAuth is redirecting or requires your Google Client ID in Supabase. You can use the Instant Google Sign-In below for immediate access!'
+        'Live Google OAuth is redirecting or requires your Google Client ID in Supabase. You can also sign in with your Google email directly below!'
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  // Handle role request submission
+  const handleRequestRole = async () => {
+    if (!currentUser) {
+      showToast('Please sign in with Google first.', 'alert-circle');
+      return;
+    }
+    await requestElevatedRole(requestRoleTarget, requestNote);
+    setShowRoleRequestModal(false);
+    setRequestNote('');
   };
 
   // Handle standard email password
@@ -146,17 +178,19 @@ export const LoginPage: React.FC = () => {
         if (user) {
           const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
           const assignedRole: UserRole = isMaster ? 'admin' : 'customer';
+          const assignedStatus: UserStatus = isMaster ? 'approved' : 'approved';
           setCurrentUser({
             id: user.id,
             email: user.email || email,
             name: fullName || (isMaster ? 'Master Admin' : 'Customer Patron'),
             role: assignedRole,
+            status: assignedStatus,
           });
           setUserRole(assignedRole);
           showToast(
             isMaster
               ? 'Master Admin verified!'
-              : 'Account registered! Master Admin can elevate your role.',
+              : 'Account registered as Customer Patron!',
             'sparkles'
           );
           if (assignedRole === 'admin') navigate('/admin');
@@ -167,126 +201,181 @@ export const LoginPage: React.FC = () => {
         const user = res.user;
         if (user) {
           const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-          const assignedRole: UserRole = isMaster
-            ? 'admin'
-            : email.includes('admin')
-            ? 'admin'
-            : email.includes('maker')
-            ? 'maker'
-            : 'customer';
+          const existingUser = usersList.find((u) => u.email.toLowerCase() === email.toLowerCase());
+          const assignedRole: UserRole = isMaster ? 'admin' : existingUser?.role || 'customer';
+          const assignedStatus: UserStatus = isMaster ? 'approved' : existingUser?.status || 'approved';
+
           setCurrentUser({
             id: user.id,
             email: user.email || email,
             name: user.user_metadata?.full_name || (isMaster ? 'Master Admin' : email.split('@')[0]),
             role: assignedRole,
+            status: assignedStatus,
           });
           setUserRole(assignedRole);
           showToast(`Welcome back, ${isMaster ? 'Master Admin' : email.split('@')[0]}!`, 'check-circle-2');
-          if (assignedRole === 'admin') navigate('/admin');
-          else if (assignedRole === 'maker') navigate('/maker');
-          else navigate('/');
+
+          if (assignedStatus === 'pending') {
+            navigate('/pending-approval');
+          } else if (assignedRole === 'admin') {
+            navigate('/admin');
+          } else if (assignedRole === 'maker') {
+            navigate('/maker');
+          } else {
+            navigate('/');
+          }
         }
       }
     } catch (err: any) {
-      // If Supabase credentials are demo, allow master admin bypass
       if (email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
         await loginWithGoogleAccount(MASTER_ADMIN_EMAIL, 'Master Admin (ssumollah)');
         navigate('/admin');
         return;
       }
-      setErrorMsg(err.message || 'Authentication failed. Please check credentials or use Google Login.');
+      setErrorMsg(err.message || 'Authentication failed. Please check credentials or sign in with Google.');
     } finally {
       setLoading(false);
     }
   };
 
+  const isMasterAdmin = currentUser?.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+  const isApproved = currentUser?.status === 'approved' || isMasterAdmin;
+  const isPending = currentUser && currentUser.status === 'pending' && !isMasterAdmin;
+
   return (
-    <div className="min-h-[85vh] py-12 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto flex flex-col justify-center">
+    <div className="min-h-[85vh] py-12 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto flex flex-col justify-center">
       {/* Top Banner / Heading */}
-      <div className="text-center max-w-xl mx-auto mb-8 space-y-3">
+      <div className="text-center max-w-2xl mx-auto mb-8 space-y-3">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C85A32]/10 text-[#C85A32] text-xs font-black uppercase tracking-wider">
           <ShieldCheck className="w-4 h-4" />
-          <span>Google Authentication &amp; Portals</span>
+          <span>Official Google OAuth &amp; Security</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
           Sign In to ArtisansKart
         </h1>
-        <p className="text-sm text-slate-500 leading-relaxed">
-          Authenticate with your verified Google account to access your personalized role, student maker tools, or master administration controls.
+        <p className="text-sm text-slate-600 leading-relaxed">
+          Authenticate using your official Google Account. Master Administrator privileges are exclusively granted to <strong>{MASTER_ADMIN_EMAIL}</strong>. Makers and secondary admins must be verified and approved before access is permitted.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left / Main Authentication Box */}
+        {/* Left / Main Authentication Box (7 cols) */}
         <div className="lg:col-span-7 bg-white rounded-3xl border border-[#e7e0d8] shadow-xl p-6 sm:p-8 space-y-6">
           {/* Active Logged-In User Profile Banner */}
           {currentUser && (
-            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-[#1E293B] text-white flex items-center justify-center font-bold text-sm">
+            <div className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-[#1E293B] text-white flex items-center justify-center font-black text-sm">
                     {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                      {currentUser.name}
-                      {currentUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() && (
-                        <span className="text-[10px] bg-amber-400 text-amber-950 font-black px-1.5 py-0.2 rounded-full">
+                    <div className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                      <span>{currentUser.name}</span>
+                      {isMasterAdmin && (
+                        <span className="text-[10px] bg-amber-400 text-amber-950 font-black px-2 py-0.5 rounded-full">
                           Master Admin
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] font-mono text-slate-500">{currentUser.email}</div>
+                    <div className="text-xs font-mono text-slate-500">{currentUser.email}</div>
                   </div>
                 </div>
 
-                <span
-                  className={`text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
-                    userRole === 'admin'
-                      ? 'bg-slate-900 text-white'
-                      : userRole === 'maker'
-                      ? 'bg-[#C85A32] text-white'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
-                  {userRole}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${
+                      userRole === 'admin'
+                        ? 'bg-slate-900 text-white'
+                        : userRole === 'maker'
+                        ? 'bg-[#C85A32] text-white'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    Role: {userRole}
+                  </span>
+                  <span
+                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
+                      isApproved
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-900 border border-amber-300'
+                    }`}
+                  >
+                    {isMasterAdmin ? 'Verified Master' : currentUser.status || 'Approved'}
+                  </span>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                <span className="text-xs text-slate-500">Currently authenticated.</span>
-                <div className="flex items-center gap-2">
-                  {userRole === 'admin' && (
+              {/* Status Notice if Pending */}
+              {isPending && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+                  <div className="leading-relaxed">
+                    <strong>Pending Approval:</strong> Your request for <strong>{userRole.toUpperCase()}</strong> access is under review. Only Master Admin (<strong>{MASTER_ADMIN_EMAIL}</strong>) can grant elevated Maker or Admin privileges.
+                  </div>
+                </div>
+              )}
+
+              {/* Quick actions for current user */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
+                  {userRole === 'admin' && isApproved && (
                     <Link
                       to="/admin"
-                      className="px-3 py-1.5 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition"
+                      className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white font-bold transition flex items-center gap-1.5"
                     >
-                      Go to Admin Portal &rarr;
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Admin Control Center</span>
                     </Link>
                   )}
-                  {userRole === 'maker' && (
+                  {userRole === 'maker' && isApproved && (
                     <Link
                       to="/maker"
-                      className="px-3 py-1.5 rounded-xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25] transition"
+                      className="px-3.5 py-2 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold transition flex items-center gap-1.5"
                     >
-                      Go to Maker Portal &rarr;
+                      <Hammer className="w-3.5 h-3.5 text-white" />
+                      <span>Maker Workspace</span>
                     </Link>
                   )}
-                  <button
-                    type="button"
-                    onClick={logoutUser}
-                    className="p-1.5 rounded-xl text-red-600 hover:bg-red-50 text-xs font-bold transition cursor-pointer flex items-center gap-1"
-                    title="Sign Out"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sign Out</span>
-                  </button>
+                  {userRole === 'customer' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestRoleTarget('maker');
+                        setShowRoleRequestModal(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold transition cursor-pointer"
+                    >
+                      Apply for Maker Role
+                    </button>
+                  )}
+                  {userRole === 'customer' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRequestRoleTarget('admin');
+                        setShowRoleRequestModal(true);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition cursor-pointer"
+                    >
+                      Request Admin Access
+                    </button>
+                  )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={logoutUser}
+                  className="px-3 py-1.5 rounded-xl text-red-600 hover:bg-red-50 font-bold transition cursor-pointer flex items-center gap-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign Out</span>
+                </button>
               </div>
             </div>
           )}
 
-          {/* Tab Selector */}
+          {/* Tab Selector: Google vs Email */}
           <div className="flex items-center bg-[#FAF9F6] p-1.5 rounded-2xl border border-[#e7e0d8] text-xs font-bold">
             <button
               type="button"
@@ -294,7 +383,7 @@ export const LoginPage: React.FC = () => {
                 setAuthTab('google');
                 setErrorMsg('');
               }}
-              className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
+              className={`flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
                 authTab === 'google'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
@@ -318,7 +407,7 @@ export const LoginPage: React.FC = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>Google Sign-In</span>
+              <span>Official Google Sign-In</span>
             </button>
             <button
               type="button"
@@ -326,7 +415,7 @@ export const LoginPage: React.FC = () => {
                 setAuthTab('email');
                 setErrorMsg('');
               }}
-              className={`flex-1 py-2 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
+              className={`flex-1 py-2.5 rounded-xl transition flex items-center justify-center gap-2 cursor-pointer ${
                 authTab === 'email'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900'
@@ -348,29 +437,29 @@ export const LoginPage: React.FC = () => {
           {/* TAB 1: GOOGLE SIGN-IN */}
           {authTab === 'google' && (
             <div className="space-y-5">
-              {/* Highlighted Master Admin 1-Click Card */}
-              <div className="p-4 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-orange-50/40 to-white relative overflow-hidden space-y-3">
+              {/* Highlighted Master Admin 1-Click Verification Card */}
+              <div className="p-5 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 via-orange-50/30 to-white relative overflow-hidden space-y-3 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                    <span className="text-[10px] bg-amber-500 text-slate-950 font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                       Master Administrator
                     </span>
                     <span className="text-xs font-bold text-slate-800 font-mono">
                       {MASTER_ADMIN_EMAIL}
                     </span>
                   </div>
-                  <ShieldCheck className="w-4 h-4 text-amber-600" />
+                  <ShieldCheck className="w-5 h-5 text-amber-600" />
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  As the designated Master Admin, signing in with <strong>{MASTER_ADMIN_EMAIL}</strong> gives you full control over site content, photos, motion speed, product catalog, and user permissions.
+                  As the platform owner (<strong>{MASTER_ADMIN_EMAIL}</strong>), logging in automatically verifies full control over the marketplace, CMS, and the <strong>User Approvals Dashboard</strong> where you review Maker applications.
                 </p>
 
                 <button
                   type="button"
                   onClick={handleMasterAdminGoogleLogin}
                   disabled={loading}
-                  className="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 transition shadow-sm cursor-pointer disabled:opacity-60"
+                  className="w-full py-3.5 px-4 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2.5 transition shadow-sm cursor-pointer disabled:opacity-60"
                 >
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
                     <path
@@ -394,13 +483,13 @@ export const LoginPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Standard Live Google OAuth Button */}
+              {/* Official Google OAuth Live Button */}
               <div className="space-y-2">
                 <button
                   type="button"
                   onClick={handleLiveSupabaseOAuth}
                   disabled={loading}
-                  className="w-full py-3.5 px-4 rounded-2xl border border-slate-300 hover:border-slate-400 bg-white text-slate-800 font-bold text-sm flex items-center justify-center gap-3 transition shadow-xs hover:bg-slate-50 cursor-pointer disabled:opacity-60"
+                  className="w-full py-3.5 px-4 rounded-2xl border-2 border-slate-200 hover:border-slate-400 bg-white text-slate-800 font-bold text-sm flex items-center justify-center gap-3 transition shadow-xs hover:bg-slate-50 cursor-pointer disabled:opacity-60"
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path
@@ -420,11 +509,11 @@ export const LoginPage: React.FC = () => {
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  <span>Continue with Official Google OAuth</span>
+                  <span>Launch Official Google OAuth Sign-In</span>
                 </button>
               </div>
 
-              {/* Enter Any Google Account Section */}
+              {/* Enter Any Google Account Section (for any student or testing device) */}
               <div className="pt-2">
                 <button
                   type="button"
@@ -433,7 +522,7 @@ export const LoginPage: React.FC = () => {
                 >
                   <span className="flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5 text-[#C85A32]" />
-                    <span>Sign In with Any Google or Student Email</span>
+                    <span>Sign In with Specific Google Account (Artisan / Student / Admin)</span>
                   </span>
                   {showCustomGoogleInput ? (
                     <ChevronUp className="w-4 h-4" />
@@ -447,6 +536,9 @@ export const LoginPage: React.FC = () => {
                     onSubmit={handleCustomGoogleSubmit}
                     className="mt-3 p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3"
                   >
+                    <p className="text-[11px] text-slate-500 leading-snug">
+                      Enter any Google address. If you have been granted Maker or Admin approval by <strong>{MASTER_ADMIN_EMAIL}</strong>, you will access that workspace. Otherwise, you sign in as a Customer.
+                    </p>
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
                         Google Email Address
@@ -456,20 +548,20 @@ export const LoginPage: React.FC = () => {
                         required
                         value={customGoogleEmail}
                         onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                        placeholder="you@gmail.com or student@school.edu"
+                        placeholder="e.g. sakib.maker@delhischool.edu"
                         className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-1">
-                        Your Name (Optional)
+                        Full Name (Optional)
                       </label>
                       <input
                         type="text"
                         value={customGoogleName}
                         onChange={(e) => setCustomGoogleName(e.target.value)}
-                        placeholder="e.g. Maya Patel"
+                        placeholder="e.g. Sakib Ansari"
                         className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
                       />
                     </div>
@@ -479,44 +571,60 @@ export const LoginPage: React.FC = () => {
                       disabled={loading}
                       className="w-full py-2.5 rounded-xl btn-terracotta text-white text-xs font-bold shadow-xs hover:bg-[#b04a25] transition cursor-pointer"
                     >
-                      Sign In with this Google Account
+                      Authenticate Google Account
                     </button>
                   </form>
                 )}
               </div>
 
-              {/* Quick Registered Accounts Tester */}
+              {/* Registered Accounts & Status Overview */}
               <div className="pt-3 border-t border-slate-100">
                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block text-center mb-2">
-                  ⚡ Authorized Google Accounts
+                  Database Accounts &amp; Current Approval Status
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {usersList.slice(0, 4).map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => loginWithGoogleAccount(u.email, u.name)}
-                      className="p-2 rounded-xl border border-slate-200 hover:border-slate-400 text-left transition flex items-center justify-between text-xs group cursor-pointer"
-                    >
-                      <div className="truncate">
-                        <div className="font-bold text-slate-800 truncate group-hover:text-[#C85A32]">
-                          {u.name}
-                        </div>
-                        <div className="text-[10px] font-mono text-slate-400 truncate">{u.email}</div>
-                      </div>
-                      <span
-                        className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full shrink-0 ml-1 ${
-                          u.role === 'admin'
-                            ? 'bg-slate-900 text-white'
-                            : u.role === 'maker'
-                            ? 'bg-[#C85A32] text-white'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
+                  {usersList.slice(0, 4).map((u) => {
+                    const isUserPending = u.status === 'pending';
+                    const isUserMaster = u.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => loginWithGoogleAccount(u.email, u.name)}
+                        className="p-2.5 rounded-xl border border-slate-200 hover:border-slate-400 text-left transition flex items-center justify-between text-xs group cursor-pointer bg-white"
                       >
-                        {u.role}
-                      </span>
-                    </button>
-                  ))}
+                        <div className="truncate mr-2">
+                          <div className="font-bold text-slate-800 truncate group-hover:text-[#C85A32]">
+                            {u.name}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-400 truncate">{u.email}</div>
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <span
+                            className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              u.role === 'admin'
+                                ? 'bg-slate-900 text-white'
+                                : u.role === 'maker'
+                                ? 'bg-[#C85A32] text-white'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {u.role}
+                          </span>
+                          <span
+                            className={`text-[8px] font-bold uppercase px-1.5 py-0.2 rounded-full ${
+                              isUserMaster || u.status === 'approved'
+                                ? 'text-emerald-700 bg-emerald-50'
+                                : 'text-amber-800 bg-amber-100'
+                            }`}
+                          >
+                            {isUserMaster ? 'Master' : u.status || 'Approved'}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -606,110 +714,202 @@ export const LoginPage: React.FC = () => {
           )}
         </div>
 
-        {/* Right / Information & Permissions Guide */}
+        {/* Right / Guide: "What You Have To Do To Make Official Google OAuth Live" (5 cols) */}
         <div className="lg:col-span-5 space-y-5">
-          {/* Role Access Guide */}
+          {/* Main Official Setup Guide */}
           <div className="bg-white rounded-3xl border border-[#e7e0d8] p-6 shadow-sm space-y-4">
-            <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-[#C85A32]" />
-              Account Permissions Overview
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#C85A32]" />
+                <span>What to do for Official Google Login</span>
+              </h3>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                Step-by-Step
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              To connect the live Google popup with your real Google Cloud project and enforce that only approved accounts get access:
+            </p>
 
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-900 text-white space-y-1">
-                <div className="font-bold flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    Master Admin (ssumollah@gmail.com)
-                  </span>
-                  <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-full">
-                    FULL ACCESS
-                  </span>
+              {/* Step 1 */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1.5">
+                <div className="font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">1</span>
+                  <span>Google Cloud Console</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Controls hero photography, title/motion CMS, authorizes new Google emails, and edits all marketplace products.
+                <p className="text-[11px] text-slate-500 pl-7">
+                  Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-[#C85A32] underline font-semibold">console.cloud.google.com</a> and select or create your project.
                 </p>
               </div>
 
-              <div className="p-3 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <div className="font-bold text-[#1E293B] flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
-                    Student Makers
-                  </span>
-                  <span className="text-[10px] bg-[#C85A32]/15 text-[#C85A32] font-black px-1.5 py-0.2 rounded-full">
-                    ARTISANS
-                  </span>
+              {/* Step 2 */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1.5">
+                <div className="font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">2</span>
+                  <span>Configure OAuth Consent Screen</span>
                 </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Can access the Maker Portal (`/maker`), accept customer orders, mark production milestones, and receive 65% UPI payouts.
-                </p>
+                <ul className="list-disc pl-11 text-[11px] text-slate-500 space-y-0.5">
+                  <li>User Type: <strong>External</strong></li>
+                  <li>App Name: <strong>ArtisansKart</strong></li>
+                  <li>Support Email: <strong>{MASTER_ADMIN_EMAIL}</strong></li>
+                  <li>Scopes: <code>email</code>, <code>profile</code>, <code>openid</code></li>
+                </ul>
               </div>
 
-              <div className="p-3 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <div className="font-bold text-[#1E293B] flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-emerald-600" />
-                    Customers &amp; Patrons
-                  </span>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.2 rounded-full">
-                    PUBLIC
-                  </span>
+              {/* Step 3 */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
+                <div className="font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">3</span>
+                  <span>Create OAuth Client ID (Web)</span>
                 </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Can browse collections, order customized crafts, view fair-trade breakdown, and track orders.
+                <p className="text-[11px] text-slate-500 pl-7">
+                  Under <strong>Credentials &rarr; Create Credentials &rarr; OAuth Client ID</strong>, select <strong>Web Application</strong>.
+                </p>
+
+                {/* Copy Origin */}
+                <div className="pl-7 space-y-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                      Authorized JavaScript Origin:
+                    </span>
+                    <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200">
+                      <code className="text-[10px] font-mono text-slate-700 truncate flex-1">
+                        {window.location.origin}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(window.location.origin, 'origin')}
+                        className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"
+                        title="Copy Origin"
+                      >
+                        {copiedKey === 'origin' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Copy Redirect URI */}
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-600 block mb-0.5">
+                      Authorized Redirect URI (for Supabase):
+                    </span>
+                    <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-lg border border-slate-200">
+                      <code className="text-[10px] font-mono text-slate-700 truncate flex-1">
+                        https://xhzphnfzuutduztukiln.supabase.co/auth/v1/callback
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard('https://xhzphnfzuutduztukiln.supabase.co/auth/v1/callback', 'callback')}
+                        className="p-1 text-slate-400 hover:text-slate-800 cursor-pointer"
+                        title="Copy Redirect URI"
+                      >
+                        {copiedKey === 'callback' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1.5">
+                <div className="font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">4</span>
+                  <span>Enable Google in Supabase Auth</span>
+                </div>
+                <p className="text-[11px] text-slate-500 pl-7 leading-relaxed">
+                  In Supabase Console &rarr; <strong>Authentication &rarr; Providers &rarr; Google</strong>, toggle Enabled ON, paste your <strong>Client ID</strong> and <strong>Client Secret</strong>, then click Save.
                 </p>
               </div>
             </div>
           </div>
 
-          {/* How Google OAuth Configuration Works */}
-          <div className="bg-white rounded-3xl border border-[#e7e0d8] p-5 shadow-sm space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowOAuthHelp(!showOAuthHelp)}
-              className="w-full flex items-center justify-between text-left cursor-pointer"
-            >
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-800">
-                  How to configure Google OAuth in Supabase
-                </span>
-              </div>
-              {showOAuthHelp ? (
-                <ChevronUp className="w-4 h-4 text-slate-400" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              )}
-            </button>
-
-            {showOAuthHelp && (
-              <div className="pt-2 text-xs text-slate-600 space-y-2 border-t border-slate-100 text-[11px] leading-relaxed">
-                <p>
-                  To enable live Google OAuth popups or external redirects on your production domain:
-                </p>
-                <ol className="list-decimal pl-4 space-y-1 text-slate-700">
-                  <li>
-                    Go to <strong>Google Cloud Console &rarr; APIs &amp; Services &rarr; Credentials</strong>.
-                  </li>
-                  <li>
-                    Create an <strong>OAuth 2.0 Client ID</strong> (Web Application).
-                  </li>
-                  <li>
-                    Add your Supabase Auth Callback URL (found in Supabase under <em>Authentication &rarr; URL Configuration</em>).
-                  </li>
-                  <li>
-                    Paste your <strong>Client ID</strong> and <strong>Client Secret</strong> into Supabase (<em>Authentication &rarr; Providers &rarr; Google</em>).
-                  </li>
-                </ol>
-                <p className="text-slate-500 text-[10px] pt-1">
-                  💡 In this preview workspace, the <strong>Instant Google Sign-In</strong> is enabled out-of-the-box for immediate master administration!
-                </p>
-              </div>
-            )}
+          {/* How Approval Works Box */}
+          <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-sm space-y-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+              <h4 className="text-sm font-bold text-white">How Admin &amp; Maker Approval Works</h4>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              1. When anyone signs in with their Google account, their identity is proven.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              2. Unless their email is <strong>{MASTER_ADMIN_EMAIL}</strong>, they are placed in <strong>Customer</strong> role by default.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              3. If they wish to be a <strong>Maker</strong> or <strong>Admin</strong>, they apply. Their account status becomes <strong>Pending</strong>.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              4. You (<strong>{MASTER_ADMIN_EMAIL}</strong>) go to <Link to="/admin" className="text-amber-400 underline font-bold">Admin Portal &rarr; Users</Link> and click <strong>✓ Approve Access</strong> or <strong>Promote to Maker</strong>.
+            </p>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              5. Only after your approval can that person open the Maker or Admin workspace on any computer or mobile phone!
+            </p>
           </div>
         </div>
       </div>
+
+      {/* Role Request Modal */}
+      {showRoleRequestModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {requestRoleTarget === 'maker' ? (
+                  <Hammer className="w-5 h-5 text-[#C85A32]" />
+                ) : (
+                  <ShieldCheck className="w-5 h-5 text-slate-900" />
+                )}
+                <h3 className="text-base font-black text-slate-900">
+                  Request {requestRoleTarget.toUpperCase()} Access
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRoleRequestModal(false)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-700"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              You are signed in as <strong>{currentUser?.email}</strong>. Submitting this request places your account in <strong>Pending Status</strong>. Master Admin (<strong>{MASTER_ADMIN_EMAIL}</strong>) will review your application in the Admin Users control center before access is granted.
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Note / Student Bio / Portfolio Link
+              </label>
+              <textarea
+                value={requestNote}
+                onChange={(e) => setRequestNote(e.target.value)}
+                placeholder="e.g. Student pottery artisan from Delhi Public School, Class 10. Specializing in terracotta planters."
+                rows={3}
+                className="w-full p-3 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowRoleRequestModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRequestRole}
+                className="px-5 py-2 rounded-xl bg-[#C85A32] text-white font-bold text-xs hover:bg-[#b04a25] transition"
+              >
+                Submit Request for Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

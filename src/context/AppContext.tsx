@@ -72,6 +72,7 @@ interface AppContextType {
   removeUserAccount: (userId: string) => Promise<void>;
   loginWithGoogleAccount: (email: string, name?: string, avatarUrl?: string) => Promise<UserAccount>;
   logoutUser: () => void;
+  requestElevatedRole: (role: 'admin' | 'maker', note?: string) => Promise<void>;
 
   // Hero & Animation Customization
   heroContent: HeroContent;
@@ -411,6 +412,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
     } catch (e) {}
     showToast('Signed out successfully.', 'log-out');
+  };
+
+  // Submit request for Maker or Admin role (requires Master Admin ssumollah@gmail.com approval)
+  const requestElevatedRole = async (targetRole: 'admin' | 'maker', note?: string) => {
+    if (!currentUser) {
+      showToast('Please sign in with your Google account first.', 'alert-circle');
+      return;
+    }
+
+    if (currentUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
+      showToast('You are already the Master Administrator!', 'shield-check');
+      return;
+    }
+
+    const updatedUser: UserAccount = {
+      ...currentUser,
+      role: targetRole,
+      status: 'pending',
+      bio: note || currentUser.bio || `Requested ${targetRole} role`,
+    };
+
+    const exists = usersList.some((u) => u.email.toLowerCase() === currentUser.email.toLowerCase());
+    let nextList: UserAccount[];
+    if (exists) {
+      nextList = usersList.map((u) =>
+        u.email.toLowerCase() === currentUser.email.toLowerCase()
+          ? { ...u, role: targetRole, status: 'pending' as UserStatus, bio: note || u.bio }
+          : u
+      );
+    } else {
+      nextList = [updatedUser, ...usersList];
+    }
+
+    setUsersList(nextList);
+    setCurrentUser(updatedUser);
+    setUserRoleState(targetRole);
+    setUserStatusState('pending');
+
+    try {
+      localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
+      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updatedUser));
+    } catch (e) {}
+
+    showToast(
+      `Request submitted for ${targetRole.toUpperCase()}! Master Admin (ssumollah@gmail.com) must approve before access is granted.`,
+      'sparkles'
+    );
   };
 
   // Load products from localStorage or default PRODUCTS
@@ -769,6 +817,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         removeUserAccount,
         loginWithGoogleAccount,
         logoutUser,
+        requestElevatedRole,
 
         // Hero & Animation Customization
         heroContent,
