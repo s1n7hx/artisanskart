@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Sparkles, ShoppingBag, Search, Hammer, Menu, X, Globe, Download, Package } from 'lucide-react';
+import { Sparkles, ShoppingBag, Search, Hammer, ShieldCheck, Menu, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Navbar: React.FC = () => {
@@ -11,8 +11,6 @@ export const Navbar: React.FC = () => {
     setIsMakerSignupOpen,
     searchTerm,
     setSearchTerm,
-    setIsWpModalOpen,
-    wpConfig,
   } = useApp();
 
   const navigate = useNavigate();
@@ -113,20 +111,20 @@ export const Navbar: React.FC = () => {
               <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
               Maker Portal
             </NavLink>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#C85A32] text-white shadow-xs'
+                    : 'text-slate-700 hover:text-[#C85A32] hover:bg-black/5'
+                }`
+              }
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
+              Admin
+            </NavLink>
           </nav>
-
-          {/* WordPress Theme / Live Studio Hub Trigger */}
-          <button
-            onClick={() => setIsWpModalOpen(true)}
-            title="Download WordPress Theme (.zip) & Live Studio"
-            className="hidden lg:flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold bg-[#1E293B] text-white hover:bg-[#C85A32] cursor-pointer transition shadow-xs border border-slate-700 hover:border-[#C85A32]"
-          >
-            <Download className="w-3.5 h-3.5 text-[#C85A32] group-hover:text-white" />
-            <span>WordPress Theme</span>
-            <span className="bg-[#C85A32] text-white text-[10px] px-1.5 py-0.5 rounded-full font-extrabold tracking-wide">
-              .ZIP
-            </span>
-          </button>
 
           {/* Medium Screen Nav Quick Links */}
           <div className="hidden md:flex lg:hidden items-center gap-1">
@@ -152,7 +150,19 @@ export const Navbar: React.FC = () => {
                 }`
               }
             >
-              <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker Portal
+              <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker
+            </NavLink>
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `px-3 py-2 rounded-full text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#C85A32] text-white shadow-xs'
+                    : 'text-slate-800 hover:text-[#C85A32]'
+                }`
+              }
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" /> Admin
             </NavLink>
           </div>
 
@@ -163,7 +173,7 @@ export const Navbar: React.FC = () => {
             className="hidden sm:flex items-center gap-1.5 btn-terracotta text-xs md:text-sm font-semibold px-4 py-2.5 rounded-full cursor-pointer shadow-xs touch-manipulation"
           >
             <Sparkles className="w-4 h-4" />
-            <span>Sell Your Crafts</span>
+            <span>Sell Crafts</span>
           </button>
 
           {/* Cart Button */}
@@ -280,60 +290,59 @@ export const Navbar: React.FC = () => {
               to="/maker"
               onClick={() => setMobileMenuOpen(false)}
               className={({ isActive }) =>
-                `col-span-2 px-4 py-3 rounded-xl text-sm font-semibold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
+                `px-4 py-3 rounded-xl text-sm font-semibold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
                   isActive
                     ? 'bg-[#1E293B] text-white shadow-xs'
                     : 'bg-white border border-[#e7e0d8] text-[#1E293B] hover:border-[#1E293B] active:bg-[#FAF9F6]'
                 }`
               }
             >
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5">
                 <Hammer className="w-4 h-4 text-[#C85A32]" />
-                Student Maker Portal
+                Maker Portal
               </span>
-              <span className="text-xs text-[#C85A32] font-bold">Earn 65% &rarr;</span>
+              <span className="text-xs text-[#C85A32] font-bold">65%</span>
+            </NavLink>
+            <NavLink
+              to="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `px-4 py-3 rounded-xl text-sm font-bold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
+                  isActive
+                    ? 'bg-[#C85A32] text-white shadow-xs'
+                    : 'bg-white border border-[#e7e0d8] text-slate-800 hover:border-[#C85A32] active:bg-[#FAF9F6]'
+                }`
+              }
+            >
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-[#C85A32]" />
+                Admin CMS
+              </span>
+              <span className="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded font-bold">RBAC</span>
             </NavLink>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2.5 pt-3 border-t border-[#e7e0d8]">
+          <div className="flex gap-2 pt-3 border-t border-[#e7e0d8]">
             <button
               type="button"
               onClick={() => {
                 setMobileMenuOpen(false);
-                setIsWpModalOpen(true);
+                setIsMakerSignupOpen(true);
               }}
-              className="bg-[#1E293B] text-white text-xs font-bold py-3 px-4 rounded-xl flex items-center justify-between gap-2 cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs border border-slate-700"
+              className="flex-1 btn-terracotta text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs"
             >
-              <div className="flex items-center gap-2">
-                <Download className="w-4 h-4 text-[#C85A32]" />
-                <span>WordPress Theme &amp; Visual Studio</span>
-              </div>
-              <span className="bg-[#C85A32] text-white text-[10px] px-2 py-0.5 rounded-full font-black">
-                Download .ZIP
-              </span>
+              <Sparkles className="w-4 h-4" /> Sell Your Crafts
             </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setIsMakerSignupOpen(true);
-                }}
-                className="flex-1 btn-terracotta text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs"
-              >
-                <Sparkles className="w-4 h-4" /> Sell Your Crafts
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setIsCartOpen(true);
-                }}
-                className="px-4 bg-white border border-[#e7e0d8] text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 text-[#1E293B] cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs"
-              >
-                <ShoppingBag className="w-4 h-4 text-[#C85A32]" /> Cart ({cartCount})
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setIsCartOpen(true);
+              }}
+              className="px-4 bg-white border border-[#e7e0d8] text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 text-[#1E293B] cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs"
+            >
+              <ShoppingBag className="w-4 h-4 text-[#C85A32]" /> Cart ({cartCount})
+            </button>
           </div>
         </div>
       )}

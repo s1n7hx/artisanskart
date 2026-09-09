@@ -8,6 +8,7 @@ import { HowItWorksPage } from './pages/HowItWorksPage';
 import { CollectionsPage } from './pages/CollectionsPage';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { MakerPortalPage } from './pages/MakerPortalPage';
+import { AdminPortalPage } from './pages/AdminPortalPage';
 import { ContactPage } from './pages/ContactPage';
 
 export default function App() {
@@ -22,6 +23,8 @@ export default function App() {
             <Route path="collections" element={<CollectionsPage />} />
             <Route path="marketplace" element={<MarketplacePage />} />
             <Route path="maker" element={<MakerPortalPage />} />
+            <Route path="admin" element={<AdminPortalPage />} />
+            <Route path="admin/cms" element={<AdminPortalPage />} />
             <Route path="contact" element={<ContactPage />} />
             {/* Fallback to home */}
             <Route path="*" element={<Navigate to="/" replace />} />

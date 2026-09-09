@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Instagram, Facebook, Youtube, Heart, Sparkles, Mail, Download } from 'lucide-react';
+import { Instagram, Facebook, Youtube, Heart, Sparkles, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Footer: React.FC = () => {
-  const { setActiveCategory, setIsMakerSignupOpen, setIsWpModalOpen } = useApp();
+  const { setActiveCategory, setIsMakerSignupOpen } = useApp();
 
   const handleCategoryClick = (category: string) => {
     setActiveCategory(category);
@@ -158,14 +158,13 @@ export const Footer: React.FC = () => {
               </Link>
             </li>
             <li>
-              <button
-                type="button"
-                onClick={() => setIsWpModalOpen(true)}
-                className="text-left text-[#E6A373] hover:text-white transition flex items-center gap-1.5 cursor-pointer font-medium"
+              <Link
+                to="/admin"
+                className="text-left text-[#E6A373] hover:text-white transition flex items-center gap-1.5 font-medium"
               >
-                <Download className="w-3.5 h-3.5 text-[#C85A32]" />
-                <span>WordPress Theme (.ZIP)</span>
-              </button>
+                <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
+                <span>Admin Portal &amp; CMS</span>
+              </Link>
             </li>
             <li className="pt-2 text-xs text-white/50">
               <span className="block text-white/80 font-medium">Student Support:</span>

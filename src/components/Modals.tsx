@@ -98,17 +98,9 @@ export const Modals: React.FC<ModalsProps> = ({
                   <div className="my-3 p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-xs leading-relaxed text-slate-700">
                     <div className="flex items-center justify-between mb-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                       <span>Artisan Craft Description</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onCloseQuickView();
-                          openEditorForProduct(quickViewProduct.id);
-                        }}
-                        className="text-[#C85A32] hover:underline flex items-center gap-1 cursor-pointer"
-                        title="Edit description in WordPress / Live Hub without touching code"
-                      >
-                        <Edit3 className="w-3 h-3" /> Edit in WordPress / Live Hub
-                      </button>
+                      <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
+                        Verified Student Work
+                      </span>
                     </div>
                     <p>{quickViewProduct.description}</p>
                   </div>
