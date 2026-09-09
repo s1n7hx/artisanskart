@@ -1,11 +1,27 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, Order, CartItem, ToastItem, HeroContent, AnimationSettings } from '../types';
+import {
+  Product,
+  Order,
+  CartItem,
+  ToastItem,
+  HeroContent,
+  AnimationSettings,
+  UserAccount,
+} from '../types';
 import { PRODUCTS, INITIAL_ORDERS, DEFAULT_HERO_CONTENT, DEFAULT_ANIMATION_SETTINGS } from '../data';
 import {
   WordPressConfig,
   DEFAULT_WP_CONFIG,
   fetchWordPressContent,
 } from '../services/wordpress';
+import {
+  supabase,
+  fetchHeroCmsContent,
+  saveHeroCmsContent,
+  fetchAllProfiles,
+  updateUserRole as updateSupabaseUserRole,
+  getProfile,
+} from '../services/supabase';
 
 interface AppContextType {
   products: Product[];
@@ -34,6 +50,16 @@ interface AppContextType {
   markCompleted: (id: number) => void;
   confirmCheckout: () => void;
 
+  // Authentication & RBAC
+  currentUser: UserAccount | null;
+  setCurrentUser: (user: UserAccount | null) => void;
+  userRole: 'admin' | 'maker' | 'customer';
+  setUserRole: (role: 'admin' | 'maker' | 'customer') => void;
+  isAuthModalOpen: boolean;
+  setIsAuthModalOpen: (open: boolean) => void;
+  usersList: UserAccount[];
+  grantUserRole: (userId: string, newRole: 'admin' | 'maker' | 'customer') => Promise<void>;
+
   // Hero & Animation Customization
   heroContent: HeroContent;
   updateHeroContent: (partial: Partial<HeroContent>) => void;
@@ -52,18 +78,120 @@ interface AppContextType {
   openEditorForProduct: (id: number) => void;
   updateProduct: (updated: Product) => void;
   addNewProduct: (product: Product) => void;
+  deleteProduct: (id: number) => void;
   resetProductsToDefault: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'artisanskart_custom_products_v1';
-const LOCAL_STORAGE_WP_CONFIG_KEY = 'artisanskart_wp_config_v1';
 const LOCAL_STORAGE_HERO_KEY = 'artisanskart_hero_content_v1';
 const LOCAL_STORAGE_ANIMATION_KEY = 'artisanskart_animation_settings_v1';
+const LOCAL_STORAGE_USER_KEY = 'artisanskart_current_user_v1';
+const LOCAL_STORAGE_USERS_LIST_KEY = 'artisanskart_all_users_v1';
+
+const INITIAL_USERS: UserAccount[] = [
+  {
+    id: 'usr_admin_1',
+    email: 'admin@artisanskart.in',
+    name: 'Master Admin (You)',
+    role: 'admin',
+    school: 'Platform Headquarters',
+  },
+  {
+    id: 'usr_maker_sakib',
+    email: 'sakib.maker@delhischool.edu',
+    name: 'Sakib Ansari',
+    role: 'maker',
+    school: 'DPS RK Puram (Class 10)',
+    bio: 'Sculpting terracotta planters & traditional wheel pottery.',
+  },
+  {
+    id: 'usr_maker_meera',
+    email: 'meera.art@punecampus.in',
+    name: 'Meera Nair',
+    role: 'maker',
+    school: 'Bishop Cotton Pune (Class 12)',
+    bio: 'Watercolor greeting cards and botanical paintings.',
+  },
+  {
+    id: 'usr_maker_arjun',
+    email: 'arjun.crafts@jaipur.edu',
+    name: 'Arjun Verma',
+    role: 'maker',
+    school: 'Maharaja Sawai Man Jaipur (Class 9)',
+    bio: 'Handcrafted macrame bookmarks & keychains.',
+  },
+  {
+    id: 'usr_cust_priya',
+    email: 'priya.customer@gmail.com',
+    name: 'Priya Sharma',
+    role: 'customer',
+    school: 'Customer Patron',
+  },
+];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load products from localStorage if user customized descriptions, otherwise default PRODUCTS
+  // Load user profile from localStorage or default to Master Admin for easy management
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_USERS[0]; // Default to Master Admin
+  });
+
+  const [userRole, setUserRoleState] = useState<'admin' | 'maker' | 'customer'>(
+    currentUser?.role || 'admin'
+  );
+
+  const [usersList, setUsersList] = useState<UserAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_USERS_LIST_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_USERS;
+  });
+
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  // Sync role state when current user changes
+  const setUserRole = (role: 'admin' | 'maker' | 'customer') => {
+    setUserRoleState(role);
+    if (currentUser) {
+      const updated = { ...currentUser, role };
+      setCurrentUser(updated);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updated));
+      } catch (e) {}
+    }
+  };
+
+  // Master Admin grants/elevates user permissions
+  const grantUserRole = async (userId: string, newRole: 'admin' | 'maker' | 'customer') => {
+    setUsersList((prev) => {
+      const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u));
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // If active user is the one being updated
+    if (currentUser && currentUser.id === userId) {
+      setUserRole(newRole);
+    }
+
+    try {
+      await updateSupabaseUserRole(userId, newRole);
+    } catch (err) {
+      console.warn('Supabase profile role update error:', err);
+    }
+
+    showToast(`Permission updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
+  };
+
+  // Load products from localStorage or default PRODUCTS
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_PRODUCTS_KEY);
@@ -87,11 +215,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         return { ...DEFAULT_HERO_CONTENT, ...JSON.parse(saved) };
       }
-    } catch (e) {
-      console.warn('Failed to load cached hero content', e);
-    }
+    } catch (e) {}
     return DEFAULT_HERO_CONTENT;
   });
+
+  // On mount, pull live CMS settings from Supabase if available
+  useEffect(() => {
+    async function initSupabaseData() {
+      try {
+        const remoteHero = await fetchHeroCmsContent();
+        if (remoteHero) {
+          setHeroContent(remoteHero);
+        }
+        const remoteProfiles = await fetchAllProfiles();
+        if (remoteProfiles && remoteProfiles.length > 0) {
+          setUsersList((prev) => {
+            const remoteMap = new Map(remoteProfiles.map((p) => [p.id, p]));
+            const merged = prev.map((u) => {
+              const r = remoteMap.get(u.id);
+              return r ? { ...u, role: r.role, name: r.full_name || u.name } : u;
+            });
+            // Add new remote profiles
+            remoteProfiles.forEach((rp) => {
+              if (!merged.some((m) => m.id === rp.id)) {
+                merged.push({
+                  id: rp.id,
+                  email: rp.email,
+                  name: rp.full_name || 'Student Creator',
+                  role: rp.role,
+                  school: rp.school || 'Campus Arts Club',
+                });
+              }
+            });
+            return merged;
+          });
+        }
+      } catch (err) {
+        console.warn('Supabase background fetch notice:', err);
+      }
+    }
+    initSupabaseData();
+  }, []);
 
   const [animationSettings, setAnimationSettings] = useState<AnimationSettings>(() => {
     try {
@@ -99,9 +263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         return { ...DEFAULT_ANIMATION_SETTINGS, ...JSON.parse(saved) };
       }
-    } catch (e) {
-      console.warn('Failed to load cached animation settings', e);
-    }
+    } catch (e) {}
     return DEFAULT_ANIMATION_SETTINGS;
   });
 
@@ -116,21 +278,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState<boolean>(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  // WordPress Hub & Live Editor state
   const [isWpModalOpen, setIsWpModalOpen] = useState<boolean>(false);
   const [selectedProductIdForEdit, setSelectedProductIdForEdit] = useState<number | null>(null);
-
-  const [wpConfig, setWpConfig] = useState<WordPressConfig>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_WP_CONFIG_KEY);
-      if (saved) {
-        return { ...DEFAULT_WP_CONFIG, ...JSON.parse(saved) };
-      }
-    } catch (e) {
-      console.warn('Failed to load WordPress config', e);
-    }
-    return DEFAULT_WP_CONFIG;
-  });
+  const [wpConfig, setWpConfig] = useState<WordPressConfig>(DEFAULT_WP_CONFIG);
 
   const showToast = (message: string, icon: string = 'check-circle-2') => {
     const id = Date.now() + Math.random();
@@ -145,21 +295,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = { ...prev, ...partial };
       try {
         localStorage.setItem(LOCAL_STORAGE_HERO_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to persist hero content', e);
-      }
+      } catch (e) {}
+      // Sync to Supabase in background
+      saveHeroCmsContent(next).catch((err) =>
+        console.warn('Supabase CMS sync warning:', err)
+      );
       return next;
     });
-    showToast('Hero photo & content updated successfully!', 'sparkles');
+    showToast('Live storefront headlines & photography saved!', 'sparkles');
   };
 
   const resetHeroToDefault = () => {
     setHeroContent(DEFAULT_HERO_CONTENT);
     try {
       localStorage.removeItem(LOCAL_STORAGE_HERO_KEY);
-    } catch (e) {
-      console.warn('Failed to reset hero content', e);
-    }
+    } catch (e) {}
+    saveHeroCmsContent(DEFAULT_HERO_CONTENT).catch(() => {});
     showToast('Hero photos reset to default', 'rotate-ccw');
   };
 
@@ -168,34 +319,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = { ...prev, ...partial };
       try {
         localStorage.setItem(LOCAL_STORAGE_ANIMATION_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to persist animation settings', e);
-      }
+      } catch (e) {}
       return next;
     });
-    showToast('Animation settings updated!', 'sparkles');
   };
 
   const resetAnimationToDefault = () => {
     setAnimationSettings(DEFAULT_ANIMATION_SETTINGS);
     try {
       localStorage.removeItem(LOCAL_STORAGE_ANIMATION_KEY);
-    } catch (e) {
-      console.warn('Failed to reset animation settings', e);
-    }
-    showToast('Animation settings reset to default', 'rotate-ccw');
+    } catch (e) {}
   };
 
   const updateWpConfig = (partial: Partial<WordPressConfig>) => {
-    setWpConfig((prev) => {
-      const next = { ...prev, ...partial };
-      try {
-        localStorage.setItem(LOCAL_STORAGE_WP_CONFIG_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to save WordPress config', e);
-      }
-      return next;
-    });
+    setWpConfig((prev) => ({ ...prev, ...partial }));
   };
 
   const updateProduct = (updated: Product) => {
@@ -203,11 +340,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = prev.map((p) => (p.id === updated.id ? updated : p));
       try {
         localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to persist custom product edit', e);
-      }
+      } catch (e) {}
       return next;
     });
+    showToast(`Updated product "${updated.title}"`, 'edit-2');
   };
 
   const addNewProduct = (newProd: Product) => {
@@ -215,20 +351,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const next = [newProd, ...prev];
       try {
         localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('Failed to persist new product', e);
-      }
+      } catch (e) {}
       return next;
     });
+    showToast(`Published "${newProd.title}" live!`, 'sparkles');
+  };
+
+  const deleteProduct = (id: number) => {
+    setProducts((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+    showToast('Product removed from marketplace', 'trash-2');
   };
 
   const resetProductsToDefault = () => {
     setProducts(PRODUCTS);
     try {
       localStorage.removeItem(LOCAL_STORAGE_PRODUCTS_KEY);
-    } catch (e) {
-      console.warn('Failed to reset products', e);
-    }
+    } catch (e) {}
   };
 
   const openEditorForProduct = (id: number) => {
@@ -238,60 +382,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncWithWordPress = async (overrideUrl?: string): Promise<boolean> => {
     const activeUrl = overrideUrl || wpConfig.url;
-    if (!activeUrl) {
-      showToast('Please enter a valid WordPress URL first.', 'alert-circle');
-      return false;
-    }
-
+    if (!activeUrl) return false;
     updateWpConfig({ status: 'syncing' });
-    showToast('Syncing craft catalog with WordPress...', 'refresh-cw');
-
     const result = await fetchWordPressContent({ ...wpConfig, url: activeUrl });
-
     if (result.success && result.products.length > 0) {
-      setProducts(result.products);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(result.products));
-      } catch (e) {
-        console.warn('Failed to persist synced products', e);
-      }
-
-      updateWpConfig({
-        isConnected: true,
-        status: 'connected',
-        lastSync: new Date().toISOString(),
+      setProducts((prev) => {
+        const customItems = prev.filter((p) => p.source === 'custom');
+        return [...result.products, ...customItems];
       });
-      showToast(`Successfully synced ${result.products.length} crafts from WordPress!`, 'sparkles');
+      updateWpConfig({ status: 'connected' });
       return true;
-    } else {
-      updateWpConfig({
-        status: 'error',
-        errorMessage: result.error,
-      });
-      showToast(result.error || 'Failed to sync with WordPress', 'alert-circle');
-      return false;
     }
+    updateWpConfig({ status: 'error' });
+    return false;
   };
-
-  // Auto-sync with WordPress on initial load if configured
-  useEffect(() => {
-    if (wpConfig.autoSync && wpConfig.url && wpConfig.isConnected) {
-      syncWithWordPress(wpConfig.url);
-    }
-  }, []);
 
   const addToCart = (id: number) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.id === id);
       if (existing) {
-        return prev.map((item) => (item.id === id ? { ...item, qty: item.qty + 1 } : item));
+        return prev.map((item) =>
+          item.id === id ? { ...item, qty: item.qty + 1 } : item
+        );
       }
       return [...prev, { id, qty: 1 }];
     });
-    const p = products.find((prod) => prod.id === id);
-    if (p) {
-      showToast(`${p.title} added to cart`, 'shopping-cart');
-    }
+    const prod = products.find((p) => p.id === id);
+    showToast(`Added ${prod?.title || 'item'} to cart!`, 'shopping-bag');
   };
 
   const changeQty = (id: number, delta: number) => {
@@ -310,28 +427,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'in_production' } : o))
     );
-    showToast('Order accepted — happy crafting!', 'hammer');
+    showToast('Order accepted — student maker crafting started!', 'hammer');
   };
 
   const markReady = (id: number) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'ready' } : o))
     );
-    showToast('Marked ready for dispatch!', 'package');
+    showToast('Marked ready for campus dispatch!', 'package');
   };
 
   const markCompleted = (id: number) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'completed' } : o))
     );
-    showToast('Order marked completed. Earnings updated!', 'wallet');
+    showToast('Order completed. 65% Student Fund updated!', 'wallet');
   };
 
   const confirmCheckout = () => {
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCart([]);
-    showToast('Order placed! Your student maker will start crafting soon.', 'party-popper');
+    showToast('Order placed! Your student maker will begin crafting.', 'party-popper');
   };
 
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);
@@ -366,6 +483,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markCompleted,
         confirmCheckout,
 
+        // Authentication & RBAC
+        currentUser,
+        setCurrentUser,
+        userRole,
+        setUserRole,
+        isAuthModalOpen,
+        setIsAuthModalOpen,
+        usersList,
+        grantUserRole,
+
         // Hero & Animation Customization
         heroContent,
         updateHeroContent,
@@ -384,6 +511,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openEditorForProduct,
         updateProduct,
         addNewProduct,
+        deleteProduct,
         resetProductsToDefault,
       }}
     >
@@ -399,4 +527,3 @@ export const useApp = () => {
   }
   return context;
 };
-

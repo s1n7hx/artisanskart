@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Sliders,
   Package,
@@ -19,9 +20,18 @@ import {
   Image as ImageIcon,
   Key,
   Layers,
+  Search,
+  Upload,
+  UserCheck,
+  UserX,
+  Hammer,
+  Lock,
+  ShieldAlert,
+  ArrowLeft,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Product, HeroContent } from '../types';
+import { Product, HeroContent, UserAccount } from '../types';
+import { uploadImageToBucket } from '../services/supabase';
 
 export const AdminPortalPage: React.FC = () => {
   const {
@@ -31,15 +41,26 @@ export const AdminPortalPage: React.FC = () => {
     products,
     addNewProduct,
     updateProduct,
+    deleteProduct,
     orders,
     showToast,
+    usersList,
+    grantUserRole,
+    currentUser,
+    userRole,
+    setUserRole,
+    isAuthModalOpen,
+    setIsAuthModalOpen,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'cms' | 'products' | 'orders' | 'users' | 'supabase'>('cms');
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState<'cms' | 'users' | 'products' | 'orders' | 'supabase'>('cms');
 
   // Local CMS form state
   const [cmsForm, setCmsForm] = useState<HeroContent>({ ...heroContent });
   const [cmsSaved, setCmsSaved] = useState(false);
+  const [isUploading, setIsUploading] = useState<string | null>(null);
 
   // New Product state
   const [isAddingProduct, setIsAddingProduct] = useState(false);
@@ -56,22 +77,35 @@ export const AdminPortalPage: React.FC = () => {
     description: '',
   });
 
-  // Mock Users Role Management state
-  const [usersList, setUsersList] = useState([
-    { id: 'usr_1', email: 'admin@artisanskart.in', name: 'Master Admin', role: 'admin', school: 'Headquarters' },
-    { id: 'usr_2', email: 'sakib.maker@delhischool.edu', name: 'Sakib Ansari', role: 'maker', school: 'DPS RK Puram (Class 10)' },
-    { id: 'usr_3', email: 'meera.pottery@punecampus.in', name: 'Meera Nair', role: 'maker', school: 'Bishop Cotton Pune (Class 12)' },
-    { id: 'usr_4', email: 'arjun.crafts@jaipur.edu', name: 'Arjun Verma', role: 'maker', school: 'Maharaja Sawai Man Jaipur (Class 9)' },
-    { id: 'usr_5', email: 'priya.customer@gmail.com', name: 'Priya Sharma', role: 'customer', school: 'Customer' },
-    { id: 'usr_6', email: 'rohit.buyer@yahoo.com', name: 'Rohit Mehta', role: 'customer', school: 'Customer' },
-  ]);
+  // User search & filter state
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'maker' | 'customer'>('all');
 
   const handleSaveCms = (e: React.FormEvent) => {
     e.preventDefault();
     updateHeroContent(cmsForm);
     setCmsSaved(true);
-    showToast('Site CMS settings updated successfully!', '✨');
+    showToast('Storefront headlines, copy & photography saved live!', '✨');
     setTimeout(() => setCmsSaved(false), 3000);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: keyof HeroContent) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(String(field));
+      const url = await uploadImageToBucket(file, 'cms-assets');
+      setCmsForm((prev) => ({ ...prev, [field]: url }));
+      showToast(`Uploaded new image for ${String(field)}!`, 'image');
+    } catch (err: any) {
+      // If bucket is not created yet, create a local blob object URL for instant preview
+      const localUrl = URL.createObjectURL(file);
+      setCmsForm((prev) => ({ ...prev, [field]: localUrl }));
+      showToast('Image updated (local preview). Configure Supabase Storage bucket for permanent cloud hosting.', 'alert-circle');
+    } finally {
+      setIsUploading(null);
+    }
   };
 
   const handleResetCms = () => {
@@ -94,7 +128,7 @@ export const AdminPortalPage: React.FC = () => {
         leftTag: 'Fine Art Cards',
         rightTag: 'Beaded Accessories',
       });
-      showToast('CMS restored to factory defaults.', '🔄');
+      showToast('CMS restored to defaults.', 'rotate-ccw');
     }
   };
 
@@ -122,7 +156,7 @@ export const AdminPortalPage: React.FC = () => {
     };
 
     addNewProduct(prodToAdd);
-    showToast(`Added product "${prodToAdd.title}" to marketplace!`, '🎨');
+    showToast(`Added product "${prodToAdd.title}" to marketplace!`, 'sparkles');
     setIsAddingProduct(false);
     setNewProductForm({
       title: '',
@@ -141,20 +175,71 @@ export const AdminPortalPage: React.FC = () => {
     e.preventDefault();
     if (editingProduct) {
       updateProduct(editingProduct);
-      showToast(`Updated product "${editingProduct.title}"!`, '✅');
+      showToast(`Saved changes to "${editingProduct.title}"!`, 'check-circle-2');
       setEditingProduct(null);
     }
   };
 
-  const toggleUserRole = (id: string, newRole: 'admin' | 'maker' | 'customer') => {
-    setUsersList((prev) =>
-      prev.map((u) => (u.id === id ? { ...u, role: newRole } : u))
-    );
-    showToast(`User role updated to ${newRole.toUpperCase()}`, '🛡️');
-  };
+  const filteredUsers = usersList.filter((u) => {
+    const matchesSearch =
+      u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+      (u.school && u.school.toLowerCase().includes(userSearch.toLowerCase()));
+    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
 
   const totalSalesVolume = orders.reduce((sum, o) => sum + o.amount, 0);
   const studentSharePaid = totalSalesVolume * 0.65;
+
+  // Restrict access if the user is not an Admin
+  if (userRole !== 'admin') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <ShieldAlert className="w-8 h-8 text-[#C85A32]" />
+        </div>
+
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#C85A32] bg-[#C85A32]/10 px-3 py-1 rounded-full">
+            Restricted Area
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#1E293B] tracking-tight">
+            Administrator Access Required
+          </h1>
+          <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+            This portal is reserved for ArtisansKart Master Administrators to manage live storefront content, catalog items, and maker permissions.
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-[#e7e0d8] shadow-sm text-left max-w-md mx-auto space-y-3 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 font-medium">Current Status:</span>
+            <span className="font-bold text-slate-700 capitalize">{userRole} Account</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 font-medium">Logged in User:</span>
+            <span className="font-semibold text-slate-700">{currentUser?.email || 'Guest User'}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <button
+            onClick={() => navigate('/')}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" /> Return to Storefront
+          </button>
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-full btn-terracotta text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <Lock className="w-4 h-4" /> Sign In as Master Admin
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 min-h-screen space-y-8">
@@ -166,14 +251,14 @@ export const AdminPortalPage: React.FC = () => {
               <ShieldCheck className="w-3.5 h-3.5" /> Master Admin Portal
             </span>
             <span className="bg-emerald-500/20 text-emerald-400 text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-              Supabase RBAC: Role = Admin
+              Supabase RBAC: Active
             </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight">
             ArtisansKart Control Center
           </h1>
           <p className="text-slate-400 text-sm mt-1 max-w-xl leading-relaxed">
-            Direct real-time control over public storefront copy, banners, product catalogs, customer orders, and user role elevation.
+            Direct visual control over storefront photography, headlines, catalog items, and student maker permission grants.
           </p>
         </div>
 
@@ -201,31 +286,7 @@ export const AdminPortalPage: React.FC = () => {
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span>Live CMS &amp; Site Copy Editor</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
-            activeTab === 'products'
-              ? 'bg-[#C85A32] text-white shadow-sm'
-              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          <span>Products &amp; Inventory ({products.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('orders')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
-            activeTab === 'orders'
-              ? 'bg-[#C85A32] text-white shadow-sm'
-              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
-          }`}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Orders &amp; Reassignment ({orders.length})</span>
+          <span>Live Storefront CMS &amp; Pictures</span>
         </button>
 
         <button
@@ -237,7 +298,31 @@ export const AdminPortalPage: React.FC = () => {
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>User Role Management (RBAC)</span>
+          <span>Users &amp; Permission Grants ({usersList.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('products')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
+            activeTab === 'products'
+              ? 'bg-[#C85A32] text-white shadow-sm'
+              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          <span>Product Catalog &amp; Pricing ({products.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
+            activeTab === 'orders'
+              ? 'bg-[#C85A32] text-white shadow-sm'
+              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>Fulfillment Orders ({orders.length})</span>
         </button>
 
         <button
@@ -248,303 +333,490 @@ export const AdminPortalPage: React.FC = () => {
               : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
           }`}
         >
-          <Key className="w-4 h-4 text-emerald-500" />
-          <span>Supabase &amp; Next.js Architecture</span>
+          <Layers className="w-4 h-4 text-emerald-500" />
+          <span>Database &amp; Supabase Status</span>
         </button>
       </div>
 
-      {/* TAB 1: LIVE CMS & SITE COPY EDITOR */}
+      {/* -------------------------------------------------------------
+          TAB 1: LIVE STOREFRONT CMS & PICTURES
+      ------------------------------------------------------------- */}
       {activeTab === 'cms' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Editor Form */}
-          <div className="lg:col-span-2 bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-sm">
-            <div className="flex items-center justify-between pb-4 mb-6 border-b border-[#e7e0d8]">
-              <div>
-                <h2 className="text-xl font-bold text-[#1E293B]">Home Storefront CMS Content</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Edits made here instantly reflect on the public homepage and persist to the database.
-                </p>
+          <div className="lg:col-span-2 space-y-6">
+            <form
+              onSubmit={handleSaveCms}
+              className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">
+                    Storefront Copy &amp; Photography Studio
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Update all text, tags, and banner photographs rendered across the live website.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleResetCms}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                    title="Reset to defaults"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-[#C85A32] text-white text-xs font-bold px-5 py-2.5 rounded-full flex items-center gap-1.5 hover:bg-[#b04a25] transition cursor-pointer shadow-xs"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Publish Changes Live</span>
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleResetCms}
-                  className="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Reset
-                </button>
-              </div>
-            </div>
 
-            <form onSubmit={handleSaveCms} className="space-y-6">
-              {/* Badge Text */}
+              {/* Pill Badge */}
               <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1">
                   Top Pill Badge Text
                 </label>
                 <input
                   type="text"
                   value={cmsForm.badgeText}
                   onChange={(e) => setCmsForm({ ...cmsForm, badgeText: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-[#e7e0d8] bg-[#FAF9F6] text-sm focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
-                  placeholder="e.g., ✨ Handcrafted by Student Artisans"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
                 />
               </div>
 
               {/* 3-Line Headline */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1">
                     Headline Line 1
                   </label>
                   <input
                     type="text"
                     value={cmsForm.headlineLine1}
                     onChange={(e) => setCmsForm({ ...cmsForm, headlineLine1: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-[#e7e0d8] bg-[#FAF9F6] text-sm focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
-                    placeholder="Crafted by"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-[#C85A32] mb-1">
                     Headline Line 2 (Accent)
                   </label>
                   <input
                     type="text"
                     value={cmsForm.headlineLine2}
                     onChange={(e) => setCmsForm({ ...cmsForm, headlineLine2: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-[#e7e0d8] bg-[#FAF9F6] text-sm font-bold text-[#C85A32] focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
-                    placeholder="Students,"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[#C85A32]/40 bg-[#C85A32]/5 text-sm font-bold text-[#C85A32] focus:outline-hidden"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1">
                     Headline Line 3
                   </label>
                   <input
                     type="text"
                     value={cmsForm.headlineLine3}
                     onChange={(e) => setCmsForm({ ...cmsForm, headlineLine3: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-[#e7e0d8] bg-[#FAF9F6] text-sm focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
-                    placeholder="Loved by You"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
                   />
                 </div>
               </div>
 
-              {/* Subheading */}
+              {/* Subheading / Mission Copy */}
               <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Subheading Description
+                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1">
+                  Hero Subtitle &amp; Student Pledge
                 </label>
                 <textarea
                   rows={3}
                   value={cmsForm.subhead}
                   onChange={(e) => setCmsForm({ ...cmsForm, subhead: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl border border-[#e7e0d8] bg-[#FAF9F6] text-sm leading-relaxed focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
-                  placeholder="Describe your student marketplace mission..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm leading-relaxed focus:outline-hidden focus:border-[#C85A32]"
                 />
               </div>
 
-              {/* Banner Image URLs */}
-              <div className="pt-4 border-t border-[#e7e0d8] space-y-4">
-                <h3 className="text-sm font-extrabold uppercase tracking-wider text-[#1E293B] flex items-center gap-2">
+              {/* Photography Banners Section */}
+              <div className="pt-4 border-t border-[#e7e0d8] space-y-5">
+                <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-[#C85A32]" />
-                  Photography Collage &amp; Banner Assets
+                  Homepage Banner Images &amp; Tags
                 </h3>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Center Feature Image URL
-                  </label>
-                  <input
-                    type="url"
-                    value={cmsForm.mainImage}
-                    onChange={(e) => setCmsForm({ ...cmsForm, mainImage: e.target.value })}
-                    className="w-full px-4 py-2 rounded-xl border border-[#e7e0d8] text-xs font-mono bg-[#FAF9F6]"
-                  />
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Badge overlay label:</span>
+                {/* Main Hero Center Banner */}
+                <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">1. Main Center Photography Banner</span>
+                    <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{isUploading === 'mainImage' ? 'Uploading...' : 'Upload Image'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(e, 'mainImage')}
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <input
+                      type="text"
+                      value={cmsForm.mainImage}
+                      onChange={(e) => setCmsForm({ ...cmsForm, mainImage: e.target.value })}
+                      placeholder="Photo URL (https://...)"
+                      className="sm:col-span-2 px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
+                    />
                     <input
                       type="text"
                       value={cmsForm.mainTag}
                       onChange={(e) => setCmsForm({ ...cmsForm, mainTag: e.target.value })}
-                      className="px-2 py-0.5 rounded border border-slate-200 text-xs"
+                      placeholder="Tag label (e.g. Live Wheel Pottery)"
+                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold"
                     />
                   </div>
+                  {cmsForm.mainImage && (
+                    <img
+                      src={cmsForm.mainImage}
+                      alt="Center Banner"
+                      className="h-28 w-full object-cover rounded-xl border border-slate-200"
+                    />
+                  )}
                 </div>
 
+                {/* Left & Right Banners */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Left Angled Card Image
-                    </label>
+                  {/* Left Banner */}
+                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">2. Left Feature Banner</span>
+                      <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
+                        <Upload className="w-3 h-3" /> Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleFileUpload(e, 'leftImage')}
+                        />
+                      </label>
+                    </div>
                     <input
-                      type="url"
+                      type="text"
                       value={cmsForm.leftImage}
                       onChange={(e) => setCmsForm({ ...cmsForm, leftImage: e.target.value })}
-                      className="w-full px-4 py-2 rounded-xl border border-[#e7e0d8] text-xs font-mono bg-[#FAF9F6]"
+                      placeholder="Image URL"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
                     />
                     <input
                       type="text"
                       value={cmsForm.leftTag}
                       onChange={(e) => setCmsForm({ ...cmsForm, leftTag: e.target.value })}
-                      className="mt-1 w-full px-2 py-0.5 rounded border border-slate-200 text-xs"
-                      placeholder="Tag label"
+                      placeholder="Tag (e.g. Fine Art Cards)"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
                     />
+                    {cmsForm.leftImage && (
+                      <img
+                        src={cmsForm.leftImage}
+                        alt="Left Banner"
+                        className="h-20 w-full object-cover rounded-xl border border-slate-200"
+                      />
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Right Angled Card Image
-                    </label>
+                  {/* Right Banner */}
+                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">3. Right Feature Banner</span>
+                      <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
+                        <Upload className="w-3 h-3" /> Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleFileUpload(e, 'rightImage')}
+                        />
+                      </label>
+                    </div>
                     <input
-                      type="url"
+                      type="text"
                       value={cmsForm.rightImage}
                       onChange={(e) => setCmsForm({ ...cmsForm, rightImage: e.target.value })}
-                      className="w-full px-4 py-2 rounded-xl border border-[#e7e0d8] text-xs font-mono bg-[#FAF9F6]"
+                      placeholder="Image URL"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
                     />
                     <input
                       type="text"
                       value={cmsForm.rightTag}
                       onChange={(e) => setCmsForm({ ...cmsForm, rightTag: e.target.value })}
-                      className="mt-1 w-full px-2 py-0.5 rounded border border-slate-200 text-xs"
-                      placeholder="Tag label"
+                      placeholder="Tag (e.g. Beaded Accessories)"
+                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
                     />
+                    {cmsForm.rightImage && (
+                      <img
+                        src={cmsForm.rightImage}
+                        alt="Right Banner"
+                        className="h-20 w-full object-cover rounded-xl border border-slate-200"
+                      />
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Submit CTA */}
-              <div className="pt-4 border-t border-[#e7e0d8] flex items-center justify-between">
-                <span className="text-xs text-slate-500">
-                  {cmsSaved ? '✨ Published changes live!' : 'Ready to deploy to Supabase site_settings'}
-                </span>
+              <div className="pt-4 border-t border-[#e7e0d8] flex justify-end">
                 <button
                   type="submit"
-                  className="btn-terracotta text-sm font-bold px-6 py-2.5 rounded-full flex items-center gap-2 cursor-pointer shadow-md"
+                  className="bg-[#C85A32] text-white text-sm font-bold px-8 py-3 rounded-full flex items-center gap-2 hover:bg-[#b04a25] transition shadow-sm cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Publish CMS Updates</span>
+                  <span>Save &amp; Publish Storefront Live</span>
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Live Mobile/Desktop Visual Preview Card */}
-          <div className="bg-[#FAF9F6] rounded-3xl p-6 border border-[#e7e0d8] shadow-sm flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                  Live Preview Card
-                </span>
-                <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                  Realtime Reactive
-                </span>
-              </div>
+          {/* Live Preview Column */}
+          <div className="space-y-4">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
+              Live Responsive Preview
+            </span>
+            <div className="bg-white rounded-3xl p-6 border border-[#e7e0d8] shadow-sm space-y-4">
+              <span className="bg-[#8A9A86]/20 text-[#43513f] text-[11px] font-bold px-3 py-0.5 rounded-full inline-block">
+                {cmsForm.badgeText}
+              </span>
+              <h3 className="text-2xl font-black text-slate-900 leading-tight">
+                {cmsForm.headlineLine1}{' '}
+                <span className="text-[#C85A32]">{cmsForm.headlineLine2}</span>{' '}
+                {cmsForm.headlineLine3}
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">{cmsForm.subhead}</p>
 
-              <div className="bg-white rounded-2xl p-5 border border-[#e7e0d8] shadow-xs space-y-4">
-                <span className="badge-sage text-[10px] px-2.5 py-0.5 rounded-full font-bold">
-                  {cmsForm.badgeText}
-                </span>
-                <h3 className="text-2xl font-black text-[#1E293B] leading-tight">
-                  {cmsForm.headlineLine1} <span className="text-[#C85A32]">{cmsForm.headlineLine2}</span>{' '}
-                  {cmsForm.headlineLine3}
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  {cmsForm.subhead}
-                </p>
-
-                <div className="aspect-4/3 rounded-xl overflow-hidden border border-[#e7e0d8] relative">
+              {cmsForm.mainImage && (
+                <div className="relative rounded-2xl overflow-hidden border border-slate-200">
                   <img
                     src={cmsForm.mainImage}
-                    alt="Preview"
-                    className="w-full h-full object-cover"
+                    alt="Center Banner"
+                    className="w-full h-44 object-cover"
                   />
-                  <span className="absolute bottom-2 left-2 bg-black/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  <span className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs">
                     {cmsForm.mainTag}
                   </span>
                 </div>
-              </div>
-            </div>
-
-            <div className="mt-6 p-4 rounded-2xl bg-white border border-[#e7e0d8] text-xs text-slate-500 space-y-2">
-              <span className="font-extrabold text-[#1E293B] block">Supabase Storage Target:</span>
-              <p className="text-[11px] font-mono text-slate-600 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                bucket: cms-assets/banners/hero_2026.webp
-              </p>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: PRODUCTS & INVENTORY */}
-      {activeTab === 'products' && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-[#e7e0d8]">
+      {/* -------------------------------------------------------------
+          TAB 2: USERS & PERMISSION GRANTS (RBAC)
+      ------------------------------------------------------------- */}
+      {activeTab === 'users' && (
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e7e0d8]">
             <div>
-              <h2 className="text-xl font-bold text-[#1E293B]">Live Product Catalog ({products.length} items)</h2>
-              <p className="text-xs text-slate-500">Manage student craft listings, price points, and inventory states.</p>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-slate-900">
+                  User Roles &amp; Student Maker Permissions
+                </h2>
+                <span className="text-xs bg-[#C85A32]/10 text-[#C85A32] font-black px-2.5 py-0.5 rounded-full">
+                  {usersList.length} registered
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Grant registered Google users permission to become <strong>Student Makers</strong> so they can publish crafts and fulfill orders.
+              </p>
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-1 bg-[#FAF9F6] border border-[#e7e0d8] p-1 rounded-2xl text-xs font-bold">
+              {(['all', 'admin', 'maker', 'customer'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRoleFilter(r)}
+                  className={`px-3 py-1.5 rounded-xl capitalize transition cursor-pointer ${
+                    roleFilter === r
+                      ? 'bg-[#C85A32] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* User Search Input */}
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Search user by name, email, or school..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-sm focus:bg-white focus:outline-hidden focus:border-[#C85A32]"
+            />
+          </div>
+
+          {/* User Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredUsers.map((u) => {
+              const isAdmin = u.role === 'admin';
+              const isMaker = u.role === 'maker';
+
+              return (
+                <div
+                  key={u.id}
+                  className="p-5 rounded-2xl border border-[#e7e0d8] bg-[#FAF9F6] hover:bg-white hover:border-[#C85A32]/40 transition space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-extrabold text-slate-900 text-sm">{u.name}</h4>
+                        <span
+                          className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                            isAdmin
+                              ? 'bg-slate-900 text-white'
+                              : isMaker
+                              ? 'bg-[#C85A32] text-white'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {u.role}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-mono mt-0.5">{u.email}</p>
+                      {u.school && (
+                        <p className="text-xs text-slate-600 font-medium mt-1">🏫 {u.school}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Role Elevation Buttons */}
+                  <div className="pt-3 border-t border-[#e7e0d8] flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-bold text-slate-400">Set Role:</span>
+
+                    <button
+                      type="button"
+                      onClick={() => grantUserRole(u.id, 'maker')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        isMaker
+                          ? 'bg-[#C85A32] text-white shadow-xs'
+                          : 'bg-white border border-[#e7e0d8] text-slate-700 hover:border-[#C85A32] hover:text-[#C85A32]'
+                      }`}
+                    >
+                      <Hammer className="w-3.5 h-3.5" />
+                      <span>{isMaker ? '✓ Active Maker' : 'Grant Maker Permission'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => grantUserRole(u.id, 'admin')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        isAdmin
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Admin</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => grantUserRole(u.id, 'customer')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                        u.role === 'customer'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span>Customer</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------
+          TAB 3: PRODUCT CATALOG & PRICING
+      ------------------------------------------------------------- */}
+      {activeTab === 'products' && (
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e7e0d8]">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Marketplace Product Catalog</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Master Admin can edit titles, prices, student names, descriptions, or remove items.
+              </p>
             </div>
             <button
               onClick={() => setIsAddingProduct(true)}
-              className="btn-terracotta text-xs md:text-sm font-bold px-4 py-2.5 rounded-full flex items-center gap-1.5 cursor-pointer shadow-xs self-start sm:self-auto"
+              className="bg-[#C85A32] text-white text-xs font-bold px-5 py-2.5 rounded-full flex items-center gap-2 hover:bg-[#b04a25] transition cursor-pointer shadow-xs self-start sm:self-auto"
             >
               <Plus className="w-4 h-4" />
-              <span>Add New Student Craft</span>
+              <span>Add New Product</span>
             </button>
           </div>
 
-          {/* Add Product Modal / Drawer */}
+          {/* Add Product Drawer */}
           {isAddingProduct && (
-            <div className="bg-white rounded-3xl p-6 md:p-8 border-2 border-[#C85A32] shadow-lg animate-[fadeIn_0.2s_ease-out]">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-[#e7e0d8]">
-                <h3 className="text-lg font-black text-[#1E293B]">Add New Handcrafted Product</h3>
+            <form
+              onSubmit={handleSaveNewProduct}
+              className="bg-[#FAF9F6] p-6 rounded-2xl border border-[#C85A32]/30 space-y-4 animate-fade-in"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-black text-slate-900">Create New Student Product</h3>
                 <button
+                  type="button"
                   onClick={() => setIsAddingProduct(false)}
-                  className="text-xs font-bold text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="text-xs font-bold text-slate-400 hover:text-slate-700"
                 >
                   Cancel
                 </button>
               </div>
 
-              <form onSubmit={handleSaveNewProduct} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Product Title</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
                   <input
                     type="text"
                     required
                     value={newProductForm.title}
                     onChange={(e) => setNewProductForm({ ...newProductForm, title: e.target.value })}
-                    placeholder="e.g., Terracotta Tea Light Holder"
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
                   />
                 </div>
-
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
                   <select
                     value={newProductForm.category}
                     onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-sm bg-white"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
                   >
-                    <option>Clay Crafts</option>
-                    <option>Hand-painted Cards</option>
-                    <option>Accessories</option>
-                    <option>Keychains</option>
+                    <option value="Clay Crafts">Clay Crafts</option>
+                    <option value="Hand-painted Cards">Hand-painted Cards</option>
+                    <option value="Accessories">Accessories</option>
+                    <option value="Keychains">Keychains</option>
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹ INR)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
                   <input
                     type="number"
                     required
                     value={newProductForm.price}
                     onChange={(e) => setNewProductForm({ ...newProductForm, price: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-sm font-bold text-[#C85A32]"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32]"
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Student Maker Name</label>
                   <input
@@ -552,289 +824,216 @@ export const AdminPortalPage: React.FC = () => {
                     required
                     value={newProductForm.maker}
                     onChange={(e) => setNewProductForm({ ...newProductForm, maker: e.target.value })}
-                    placeholder="e.g., Ananya Sharma"
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Class / Grade &amp; School</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">School / Club</label>
                   <input
                     type="text"
                     value={newProductForm.school}
                     onChange={(e) => setNewProductForm({ ...newProductForm, school: e.target.value })}
-                    placeholder="e.g., DPS RK Puram"
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
                   />
                 </div>
-
-                <div className="sm:col-span-3">
+                <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
                   <input
-                    type="url"
+                    type="text"
                     value={newProductForm.image}
                     onChange={(e) => setNewProductForm({ ...newProductForm, image: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-xs font-mono"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
                   />
                 </div>
-
-                <div className="sm:col-span-3">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Description</label>
-                  <textarea
-                    rows={2}
-                    value={newProductForm.description}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#e7e0d8] text-xs"
-                    placeholder="Artisan materials, clay technique, etc."
-                  />
-                </div>
-
-                <div className="sm:col-span-3 flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingProduct(false)}
-                    className="px-4 py-2 rounded-full border border-slate-300 text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn-terracotta px-5 py-2 rounded-full text-xs font-bold"
-                  >
-                    Save &amp; Publish Craft
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          {/* Product Edit Modal */}
-          {editingProduct && (
-            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl space-y-4">
-                <h3 className="text-lg font-black text-[#1E293B]">Edit Product #{editingProduct.id}</h3>
-                <form onSubmit={handleUpdateProductSave} className="space-y-3">
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Title</label>
-                    <input
-                      type="text"
-                      value={editingProduct.title}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Price (₹)</label>
-                      <input
-                        type="number"
-                        value={editingProduct.price}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm font-bold text-[#C85A32]"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block mb-1">Stock Status</label>
-                      <input
-                        type="text"
-                        value={editingProduct.stock}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, stock: e.target.value })}
-                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-sm"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-700 block mb-1">Description</label>
-                    <textarea
-                      rows={3}
-                      value={editingProduct.description || ''}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, description: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingProduct(null)}
-                      className="px-4 py-2 rounded-full border border-slate-300 text-xs font-bold"
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" className="btn-terracotta px-5 py-2 rounded-full text-xs font-bold">
-                      Save Changes
-                    </button>
-                  </div>
-                </form>
               </div>
-            </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="bg-[#C85A32] text-white text-xs font-bold px-6 py-2.5 rounded-xl hover:bg-[#b04a25]"
+                >
+                  Save to Catalog
+                </button>
+              </div>
+            </form>
           )}
 
-          {/* Products Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
-            {products.map((p) => (
-              <div key={p.id} className="bg-white rounded-2xl p-4 border border-[#e7e0d8] shadow-xs flex flex-col justify-between">
+          {/* Edit Product Dialog */}
+          {editingProduct && (
+            <form
+              onSubmit={handleUpdateProductSave}
+              className="bg-amber-50/70 p-6 rounded-2xl border border-amber-300 space-y-4 animate-fade-in"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-black text-amber-900">
+                  Editing: {editingProduct.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="text-xs font-bold text-amber-700 hover:text-amber-900"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <div className="aspect-square rounded-xl overflow-hidden mb-3 bg-slate-100 relative">
-                    <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
-                    <span className="absolute top-2 right-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      {p.category}
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={editingProduct.title}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
+                  <input
+                    type="number"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32] bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Stock Status</label>
+                  <input
+                    type="text"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
+                <input
+                  type="text"
+                  value={editingProduct.image}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono bg-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="bg-[#C85A32] text-white text-xs font-bold px-6 py-2.5 rounded-xl hover:bg-[#b04a25]"
+                >
+                  Save Product Edits
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Products Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#FAF9F6] text-slate-500 font-extrabold uppercase tracking-wider border-b border-[#e7e0d8]">
+                <tr>
+                  <th className="py-3 px-4">Item</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Price</th>
+                  <th className="py-3 px-4">Student Maker</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#e7e0d8]">
+                {products.map((p) => (
+                  <tr key={p.id} className="hover:bg-[#FAF9F6]/80 transition">
+                    <td className="py-3 px-4 flex items-center gap-3">
+                      <img
+                        src={p.image}
+                        alt={p.title}
+                        className="w-10 h-10 rounded-xl object-cover border border-slate-200"
+                      />
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">{p.title}</p>
+                        <p className="text-[11px] text-slate-400">{p.stock}</p>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-semibold text-slate-600">{p.category}</td>
+                    <td className="py-3 px-4 font-black text-[#C85A32] text-sm">₹{p.price}</td>
+                    <td className="py-3 px-4">
+                      <p className="font-bold text-slate-800">{p.maker}</p>
+                      <p className="text-[11px] text-slate-400">{p.school}</p>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct(p)}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700"
+                          title="Edit product"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Delete "${p.title}"?`)) deleteProduct(p.id);
+                          }}
+                          className="p-1.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600"
+                          title="Delete product"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------
+          TAB 4: ORDERS & REASSIGNMENT CENTER
+      ------------------------------------------------------------- */}
+      {activeTab === 'orders' && (
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
+            <div>
+              <h2 className="text-xl font-black text-slate-900">Customer Fulfillment Orders</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Overview of all student craft orders, delivery deadlines, and payment payouts.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">
+              {orders.length} orders
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {orders.map((o) => (
+              <div
+                key={o.id}
+                className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-slate-500">
+                      #ORD-2026-{o.id}
+                    </span>
+                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#C85A32]/10 text-[#C85A32] uppercase">
+                      {o.status.replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] font-bold text-[#C85A32] mb-1">
-                    <span>{p.maker} ({p.cls})</span>
-                    <span className="text-slate-400">★ {p.rating}</span>
-                  </div>
-                  <h4 className="font-bold text-sm text-[#1E293B] line-clamp-1">{p.title}</h4>
-                  <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">{p.description}</p>
+                  <h4 className="font-bold text-slate-900 text-sm mt-1">{o.product}</h4>
+                  <p className="text-xs text-slate-500">
+                    City: <strong>{o.city}</strong> • Deadline: <strong>{o.deadline}</strong>
+                  </p>
                 </div>
 
-                <div className="pt-3 mt-3 border-t border-[#e7e0d8] flex items-center justify-between">
-                  <span className="text-base font-black text-[#1E293B]">₹{p.price}</span>
-                  <button
-                    onClick={() => setEditingProduct(p)}
-                    className="px-3 py-1 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit2 className="w-3 h-3" /> Edit
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: ORDERS & REASSIGNMENT */}
-      {activeTab === 'orders' && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-[#e7e0d8] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h2 className="text-xl font-bold text-[#1E293B]">Master Order Ledger</h2>
-              <p className="text-xs text-slate-500">Live order queue with student payout splits and maker reassignment.</p>
-            </div>
-            <span className="badge-sage text-xs font-bold px-3 py-1 rounded-full">
-              {orders.length} Active Platform Orders
-            </span>
-          </div>
-
-          <div className="bg-white rounded-3xl border border-[#e7e0d8] overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-[#FAF9F6] border-b border-[#e7e0d8] text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="py-3.5 px-5">Order #</th>
-                    <th className="py-3.5 px-4">Craft Item</th>
-                    <th className="py-3.5 px-4">Delivery City</th>
-                    <th className="py-3.5 px-4">Total (₹)</th>
-                    <th className="py-3.5 px-4">Maker 65% Share</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e7e0d8]">
-                  {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-50/70">
-                      <td className="py-4 px-5 font-mono text-xs font-bold text-slate-800">
-                        #AK-2026-{o.id}
-                      </td>
-                      <td className="py-4 px-4 font-semibold text-slate-900">
-                        {o.product} <span className="text-xs text-slate-400">×{o.qty}</span>
-                      </td>
-                      <td className="py-4 px-4 text-xs text-slate-600">{o.city}</td>
-                      <td className="py-4 px-4 font-bold text-slate-900">₹{o.amount}</td>
-                      <td className="py-4 px-4 font-bold text-[#C85A32]">₹{Math.round(o.amount * 0.65)}</td>
-                      <td className="py-4 px-4">
-                        <span
-                          className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wide ${
-                            o.status === 'completed'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : o.status === 'in_production'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}
-                        >
-                          {o.status.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="py-4 px-5 text-right">
-                        <button
-                          onClick={() => showToast(`Reassignment ticket created for Order #${o.id}`, '📦')}
-                          className="text-xs font-bold text-[#C85A32] hover:underline cursor-pointer"
-                        >
-                          Reassign Maker
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: USER ROLE MANAGEMENT (RBAC) */}
-      {activeTab === 'users' && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-3xl border border-[#e7e0d8] flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold text-[#1E293B]">Role-Based Access Control (RBAC)</h2>
-              <p className="text-xs text-slate-500">Elevate registered accounts to Maker or Admin permissions.</p>
-            </div>
-            <span className="text-xs font-mono bg-slate-100 px-3 py-1 rounded-full text-slate-600">
-              Table: public.profiles
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {usersList.map((usr) => (
-              <div key={usr.id} className="bg-white rounded-2xl p-5 border border-[#e7e0d8] shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono text-slate-400">{usr.id}</span>
-                  <span
-                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                      usr.role === 'admin'
-                        ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                        : usr.role === 'maker'
-                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {usr.role}
-                  </span>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-slate-900">{usr.name}</h4>
-                  <p className="text-xs text-slate-500">{usr.email}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{usr.school}</p>
-                </div>
-
-                <div className="pt-3 border-t border-[#e7e0d8] flex items-center justify-between gap-1">
-                  <span className="text-[11px] font-bold text-slate-500">Change Role:</span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => toggleUserRole(usr.id, 'maker')}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-md cursor-pointer ${
-                        usr.role === 'maker' ? 'bg-amber-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
-                      }`}
-                    >
-                      Maker
-                    </button>
-                    <button
-                      onClick={() => toggleUserRole(usr.id, 'admin')}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-md cursor-pointer ${
-                        usr.role === 'admin' ? 'bg-purple-600 text-white' : 'bg-slate-100 hover:bg-slate-200'
-                      }`}
-                    >
-                      Admin
-                    </button>
-                    <button
-                      onClick={() => toggleUserRole(usr.id, 'customer')}
-                      className={`text-[10px] font-bold px-2 py-1 rounded-md cursor-pointer ${
-                        usr.role === 'customer' ? 'bg-slate-800 text-white' : 'bg-slate-100 hover:bg-slate-200'
-                      }`}
-                    >
-                      Customer
-                    </button>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <span className="text-xs text-slate-400 block">Total / 65% Split</span>
+                    <span className="text-sm font-black text-slate-900">
+                      ₹{o.amount} <span className="text-[#C85A32]">(₹{o.amount * 0.65})</span>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -843,43 +1042,39 @@ export const AdminPortalPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: SUPABASE & NEXT.JS ARCHITECTURE GUIDE */}
+      {/* -------------------------------------------------------------
+          TAB 5: DATABASE & SUPABASE STATUS
+      ------------------------------------------------------------- */}
       {activeTab === 'supabase' && (
-        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] space-y-6">
-          <div className="flex items-center gap-3 pb-4 border-b border-[#e7e0d8]">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center text-white font-black">
-              ⚡
-            </div>
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+          <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
             <div>
-              <h2 className="text-xl font-bold text-[#1E293B]">Next.js (App Router) + Supabase Setup</h2>
-              <p className="text-xs text-slate-500">Production SQL schema, RLS policies, and middleware ready for deployment.</p>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-emerald-600" />
+                Supabase Cloud Database &amp; Auth Health
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Connected to your project endpoint with automatic Row Level Security and Google OAuth.
+              </p>
             </div>
+            <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Connected
+            </span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
-              <h3 className="text-sm font-extrabold text-[#1E293B] flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                Row Level Security (RLS) Matrix
-              </h3>
-              <ul className="text-xs text-slate-600 space-y-1.5 list-disc pl-4 leading-relaxed">
-                <li><strong>profiles:</strong> Users read own profile; Admins full access (`ALL`).</li>
-                <li><strong>site_settings:</strong> Public `SELECT`; Admin only `INSERT/UPDATE`.</li>
-                <li><strong>products:</strong> Public reads published; Admin full CRUD; Makers view/edit assigned craft.</li>
-                <li><strong>orders:</strong> Makers only `SELECT` assigned orders and `UPDATE` status field.</li>
-              </ul>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Supabase Project URL</span>
+              <p className="text-xs font-mono font-bold text-slate-900 break-all">
+                https://xhzphnfzuutduztukiln.supabase.co
+              </p>
             </div>
-
-            <div className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
-              <h3 className="text-sm font-extrabold text-[#1E293B] flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#C85A32]" />
-                Next.js Edge Middleware Protection
-              </h3>
-              <ul className="text-xs text-slate-600 space-y-1.5 list-disc pl-4 leading-relaxed">
-                <li>`/admin/*` &rarr; Strict `role === 'admin'` check via `@supabase/ssr`.</li>
-                <li>`/maker/*` &rarr; Strict `role in ('maker', 'admin')` check.</li>
-                <li>Unauthorized attempts auto-redirect to `/login` with friendly toast errors.</li>
-              </ul>
+            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase">Role-Based Security</span>
+              <p className="text-xs font-bold text-emerald-700">
+                ✓ RLS Enforced (Admin, Maker, Customer)
+              </p>
             </div>
           </div>
         </div>

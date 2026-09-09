@@ -4,7 +4,7 @@ import { Instagram, Facebook, Youtube, Heart, Sparkles, ShieldCheck } from 'luci
 import { useApp } from '../context/AppContext';
 
 export const Footer: React.FC = () => {
-  const { setActiveCategory, setIsMakerSignupOpen } = useApp();
+  const { setActiveCategory, setIsMakerSignupOpen, userRole } = useApp();
 
   const handleCategoryClick = (category: string) => {
     setActiveCategory(category);
@@ -157,15 +157,17 @@ export const Footer: React.FC = () => {
                 Contact &amp; Support
               </Link>
             </li>
-            <li>
-              <Link
-                to="/admin"
-                className="text-left text-[#E6A373] hover:text-white transition flex items-center gap-1.5 font-medium"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
-                <span>Admin Portal &amp; CMS</span>
-              </Link>
-            </li>
+            {userRole === 'admin' && (
+              <li>
+                <Link
+                  to="/admin"
+                  className="text-left text-[#E6A373] hover:text-white transition flex items-center gap-1.5 font-medium"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
+                  <span>Admin Portal &amp; CMS</span>
+                </Link>
+              </li>
+            )}
             <li className="pt-2 text-xs text-white/50">
               <span className="block text-white/80 font-medium">Student Support:</span>
               hello@artisanskart.in

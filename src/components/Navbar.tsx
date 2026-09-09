@@ -11,6 +11,9 @@ export const Navbar: React.FC = () => {
     setIsMakerSignupOpen,
     searchTerm,
     setSearchTerm,
+    currentUser,
+    userRole,
+    setIsAuthModalOpen,
   } = useApp();
 
   const navigate = useNavigate();
@@ -111,19 +114,21 @@ export const Navbar: React.FC = () => {
               <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
               Maker Portal
             </NavLink>
-            <NavLink
-              to="/admin"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#C85A32] text-white shadow-xs'
-                    : 'text-slate-700 hover:text-[#C85A32] hover:bg-black/5'
-                }`
-              }
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
-              Admin
-            </NavLink>
+            {userRole === 'admin' && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `px-3 py-1.5 rounded-full text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#C85A32] text-white shadow-xs'
+                      : 'text-slate-700 hover:text-[#C85A32] hover:bg-black/5'
+                  }`
+                }
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" />
+                Admin
+              </NavLink>
+            )}
           </nav>
 
           {/* Medium Screen Nav Quick Links */}
@@ -152,18 +157,20 @@ export const Navbar: React.FC = () => {
             >
               <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker
             </NavLink>
-            <NavLink
-              to="/admin"
-              className={({ isActive }) =>
-                `px-3 py-2 rounded-full text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
-                  isActive
-                    ? 'bg-[#C85A32] text-white shadow-xs'
-                    : 'text-slate-800 hover:text-[#C85A32]'
-                }`
-              }
-            >
-              <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" /> Admin
-            </NavLink>
+            {userRole === 'admin' && (
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `px-3 py-2 rounded-full text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#C85A32] text-white shadow-xs'
+                      : 'text-slate-800 hover:text-[#C85A32]'
+                  }`
+                }
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-[#C85A32]" /> Admin
+              </NavLink>
+            )}
           </div>
 
           {/* Sell Your Crafts Action Button */}
@@ -174,6 +181,29 @@ export const Navbar: React.FC = () => {
           >
             <Sparkles className="w-4 h-4" />
             <span>Sell Crafts</span>
+          </button>
+
+          {/* User Profile / Google Sign-In Trigger */}
+          <button
+            id="authProfileBtn"
+            type="button"
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#e7e0d8] hover:border-[#C85A32] transition cursor-pointer shadow-xs touch-manipulation text-xs font-bold text-slate-700"
+            title="User Account & Google Sign In"
+          >
+            {userRole === 'admin' ? (
+              <span className="w-2 h-2 rounded-full bg-slate-900 ring-2 ring-slate-300" />
+            ) : userRole === 'maker' ? (
+              <span className="w-2 h-2 rounded-full bg-[#C85A32] ring-2 ring-orange-200" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
+            )}
+            <span className="hidden sm:inline">
+              {currentUser ? currentUser.name.split(' ')[0] : 'Sign In'}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full uppercase font-black bg-slate-100 text-slate-600">
+              {userRole}
+            </span>
           </button>
 
           {/* Cart Button */}
@@ -303,23 +333,25 @@ export const Navbar: React.FC = () => {
               </span>
               <span className="text-xs text-[#C85A32] font-bold">65%</span>
             </NavLink>
-            <NavLink
-              to="/admin"
-              onClick={() => setMobileMenuOpen(false)}
-              className={({ isActive }) =>
-                `px-4 py-3 rounded-xl text-sm font-bold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
-                  isActive
-                    ? 'bg-[#C85A32] text-white shadow-xs'
-                    : 'bg-white border border-[#e7e0d8] text-slate-800 hover:border-[#C85A32] active:bg-[#FAF9F6]'
-                }`
-              }
-            >
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-[#C85A32]" />
-                Admin CMS
-              </span>
-              <span className="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded font-bold">RBAC</span>
-            </NavLink>
+            {userRole === 'admin' && (
+              <NavLink
+                to="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className={({ isActive }) =>
+                  `px-4 py-3 rounded-xl text-sm font-bold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
+                    isActive
+                      ? 'bg-[#C85A32] text-white shadow-xs'
+                      : 'bg-white border border-[#e7e0d8] text-slate-800 hover:border-[#C85A32] active:bg-[#FAF9F6]'
+                  }`
+                }
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-[#C85A32]" />
+                  Admin CMS
+                </span>
+                <span className="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded font-bold">RBAC</span>
+              </NavLink>
+            )}
           </div>
 
           <div className="flex gap-2 pt-3 border-t border-[#e7e0d8]">

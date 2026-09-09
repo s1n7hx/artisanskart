@@ -74,3 +74,17 @@ export interface AnimationSettings {
   enableFloatingBadges: boolean;
   enableScrollReveal: boolean;
 }
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl?: string;
+  role: 'admin' | 'maker' | 'customer';
+  school?: string;
+  grade?: string;
+  bio?: string;
+  payoutUpi?: string;
+  createdAt?: string;
+}
+

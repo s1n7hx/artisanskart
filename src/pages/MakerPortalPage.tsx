@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Wallet,
   CheckCircle2,
@@ -13,8 +13,14 @@ import {
   ArrowRight,
   TrendingUp,
   Clock,
+  Plus,
+  ShieldCheck,
+  AlertCircle,
+  Image as ImageIcon,
+  Lock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { Product } from '../types';
 
 export const MakerPortalPage: React.FC = () => {
   const {
@@ -23,7 +29,23 @@ export const MakerPortalPage: React.FC = () => {
     markReady,
     markCompleted,
     setIsMakerSignupOpen,
+    currentUser,
+    userRole,
+    setUserRole,
+    addNewProduct,
+    showToast,
+    setIsAuthModalOpen,
   } = useApp();
+
+  const [isAddingCraft, setIsAddingCraft] = useState(false);
+  const [craftForm, setCraftForm] = useState({
+    title: '',
+    category: 'Clay Crafts',
+    price: 299,
+    description: '',
+    image: 'https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&w=800',
+    stock: 'In Stock • Made to order',
+  });
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -38,8 +60,77 @@ export const MakerPortalPage: React.FC = () => {
     completed: { label: 'Completed', cls: 'bg-[#8A9A86]/20 text-[#5c6a58] border border-[#8A9A86]/40' },
   };
 
+  const handleCreateCraft = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!craftForm.title || !craftForm.price) {
+      alert('Please provide a craft title and price.');
+      return;
+    }
+
+    const newCraft: Product = {
+      id: Date.now(),
+      title: craftForm.title,
+      category: craftForm.category,
+      price: Number(craftForm.price),
+      rating: 5.0,
+      reviews: 1,
+      maker: currentUser?.name || 'Student Maker',
+      cls: currentUser?.grade || 'Class 10',
+      school: currentUser?.school || 'Fine Arts Studio',
+      image: craftForm.image || 'https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&w=800',
+      stock: craftForm.stock,
+      description: craftForm.description || 'Authentic handcrafted student piece.',
+      source: 'custom',
+    };
+
+    addNewProduct(newCraft);
+    showToast(`Your craft "${newCraft.title}" is published on the storefront!`, 'sparkles');
+    setIsAddingCraft(false);
+    setCraftForm({
+      title: '',
+      category: 'Clay Crafts',
+      price: 299,
+      description: '',
+      image: 'https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&w=800',
+      stock: 'In Stock • Made to order',
+    });
+  };
+
+  const isMakerOrAdmin = userRole === 'maker' || userRole === 'admin';
+
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 min-h-screen space-y-10">
+    <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 min-h-screen space-y-8">
+      {/* Role Alert / Permission Banner */}
+      {!isMakerOrAdmin && (
+        <div className="bg-amber-50 border border-amber-300 rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Lock className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <h3 className="font-extrabold text-amber-900 text-sm">
+                Student Maker Role Required to Publish &amp; Fulfill Crafts
+              </h3>
+              <p className="text-amber-700 text-xs mt-0.5 leading-relaxed">
+                You are currently signed in with Customer/Guest permissions. The Master Admin can grant your account Maker permissions from the <strong>Admin Portal &rarr; Users &amp; Permissions</strong> tab.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setUserRole('maker')}
+              className="bg-slate-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-slate-800 transition whitespace-nowrap cursor-pointer shadow-xs"
+            >
+              ⚡ Enable Maker Mode (Demo)
+            </button>
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="bg-white border border-amber-300 text-amber-900 text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-100 transition whitespace-nowrap cursor-pointer"
+            >
+              Sign In With Google
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#e7e0d8]">
         <div>
@@ -48,25 +139,151 @@ export const MakerPortalPage: React.FC = () => {
               Student Artisan Workspace
             </span>
             <span className="flex items-center gap-1 text-xs text-emerald-600 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Feed
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {currentUser ? `Active: ${currentUser.name}` : 'Live Feed'}
             </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-black text-[#1E293B]">
             Student Maker Portal
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Track student earnings, fulfill campus orders, and manage craft production stages.
+            Track student earnings, fulfill campus orders, and publish new handmade creations.
           </p>
         </div>
 
-        <button
-          onClick={() => setIsMakerSignupOpen(true)}
-          className="btn-terracotta text-xs md:text-sm font-semibold px-5 py-2.5 rounded-full flex items-center gap-2 self-start md:self-auto cursor-pointer shadow-sm"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>List New Craft / Update Profile</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsAddingCraft(true)}
+            disabled={!isMakerOrAdmin}
+            className="bg-[#C85A32] text-white text-xs md:text-sm font-bold px-5 py-2.5 rounded-full flex items-center gap-2 cursor-pointer shadow-sm hover:bg-[#b04a25] transition disabled:opacity-50"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add New Product to Store</span>
+          </button>
+          <button
+            onClick={() => setIsMakerSignupOpen(true)}
+            className="bg-white border border-[#e7e0d8] text-slate-700 text-xs md:text-sm font-semibold px-4 py-2.5 rounded-full flex items-center gap-1.5 cursor-pointer hover:bg-slate-50 transition"
+          >
+            <Sparkles className="w-4 h-4 text-[#C85A32]" />
+            <span>Profile</span>
+          </button>
+        </div>
       </div>
+
+      {/* Craft Submission Form Modal / Drawer */}
+      {isAddingCraft && (
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#C85A32]/30 shadow-xl space-y-6 animate-fade-in">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+            <div>
+              <span className="text-[11px] font-extrabold uppercase text-[#C85A32] tracking-wider">
+                Publishing to Storefront
+              </span>
+              <h2 className="text-2xl font-black text-slate-900">Add New Student Handcrafted Item</h2>
+            </div>
+            <button
+              onClick={() => setIsAddingCraft(false)}
+              className="text-slate-400 hover:text-slate-700 text-sm font-bold px-3 py-1 rounded-xl bg-slate-100"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <form onSubmit={handleCreateCraft} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Craft Title</label>
+                <input
+                  type="text"
+                  required
+                  value={craftForm.title}
+                  onChange={(e) => setCraftForm({ ...craftForm, title: e.target.value })}
+                  placeholder="e.g. Handmade Terracotta Floral Planter"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <select
+                    value={craftForm.category}
+                    onChange={(e) => setCraftForm({ ...craftForm, category: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"
+                  >
+                    <option value="Clay Crafts">Clay Crafts</option>
+                    <option value="Hand-painted Cards">Hand-painted Cards</option>
+                    <option value="Accessories">Accessories</option>
+                    <option value="Keychains">Keychains</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹ INR)</label>
+                  <input
+                    type="number"
+                    required
+                    min={49}
+                    value={craftForm.price}
+                    onChange={(e) => setCraftForm({ ...craftForm, price: Number(e.target.value) })}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Description &amp; Technique</label>
+                <textarea
+                  rows={3}
+                  value={craftForm.description}
+                  onChange={(e) => setCraftForm({ ...craftForm, description: e.target.value })}
+                  placeholder="Describe the materials used (e.g., natural riverbed clay, organic acrylics, varnished finish)..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Product Photo URL</label>
+                <input
+                  type="text"
+                  value={craftForm.image}
+                  onChange={(e) => setCraftForm({ ...craftForm, image: e.target.value })}
+                  placeholder="https://images.pexels.com/..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-mono mb-2"
+                />
+                <div className="h-40 w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center relative">
+                  {craftForm.image ? (
+                    <img
+                      src={craftForm.image}
+                      alt="Craft Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-xs text-slate-400">Photo Preview</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCraft(false)}
+                  className="px-5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  Discard
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25] transition shadow-sm flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Publish to Marketplace</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -103,47 +320,47 @@ export const MakerPortalPage: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8] shadow-xs">
           <div className="flex items-center justify-between">
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
-              Active Builds
+              Active in Studio
             </p>
-            <Hammer className="w-5 h-5 text-[#E6A373]" />
+            <Radio className="w-5 h-5 text-[#C85A32]" />
           </div>
-          <p id="earningsActive" className="text-3xl font-black mt-2 text-[#1E293B]">
+          <p id="activeOrdersCount" className="text-3xl font-black mt-2 text-[#C85A32]">
             {active.length}
           </p>
           <span className="text-[11px] text-slate-400 mt-1 block">
-            Currently on student workbenches
+            Orders currently being crafted
           </span>
         </div>
 
         <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8] shadow-xs">
           <div className="flex items-center justify-between">
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
-              Customer Satisfaction
+              Student Maker Split
             </p>
-            <BadgeCheck className="w-5 h-5 text-emerald-600" />
+            <Hammer className="w-5 h-5 text-[#1E293B]" />
           </div>
-          <p className="text-3xl font-black mt-2 text-[#1E293B]">
-            4.9 <span className="text-base font-normal text-amber-500">★</span>
-          </p>
+          <p className="text-3xl font-black mt-2 text-[#1E293B]">65%</p>
           <span className="text-[11px] text-slate-400 mt-1 block">
-            Based on 98 verified campus reviews
+            35% funds raw materials &amp; campus studio tools
           </span>
         </div>
       </div>
 
-      {/* Orders Management Feed */}
-      <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-[#e7e0d8]">
-          <div className="flex items-center gap-2">
-            <Radio className="w-4 h-4 text-[#C85A32] animate-pulse" />
-            <h2 className="text-xl font-bold text-[#1E293B]">Live Campus Order Queue</h2>
+      {/* Production Pipeline */}
+      <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-[#1E293B]">Live Production Pipeline</h2>
+            <p className="text-slate-500 text-xs mt-0.5">
+              Advance orders as you sculpt, paint, package, and drop off at campus lockers.
+            </p>
           </div>
-          <p className="text-xs text-slate-400">
-            Click status progression buttons to advance your build status.
-          </p>
+          <span className="text-xs font-semibold text-slate-500 bg-[#FAF9F6] border border-[#e7e0d8] px-3 py-1.5 rounded-full self-start sm:self-auto">
+            {orders.length} total orders recorded
+          </span>
         </div>
 
-        <div id="ordersFeed" className="space-y-4">
+        <div className="space-y-4">
           {orders.map((o) => {
             const meta = statusMeta[o.status] || statusMeta.new;
             const makerShare = o.amount * 0.65;
@@ -232,28 +449,6 @@ export const MakerPortalPage: React.FC = () => {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Maker Toolkit & Campus Guidelines */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8]">
-          <h3 className="font-bold text-[#1E293B] text-base mb-2">Campus Locker Drop-off</h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            Drop packaged pieces at your campus student union locker before 3:00 PM on weekdays for same-day courier pickup.
-          </p>
-        </div>
-        <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8]">
-          <h3 className="font-bold text-[#1E293B] text-base mb-2">Free Packaging Restock</h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            Order free biodegradable honeycomb wrap, paper mailers, and cardboard boxes from the campus coordinator desk anytime.
-          </p>
-        </div>
-        <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8]">
-          <h3 className="font-bold text-[#1E293B] text-base mb-2">Exam Mode Sleep Switch</h3>
-          <p className="text-slate-500 text-xs leading-relaxed">
-            Midterms coming up? Pause incoming orders with one toggle to prioritize coursework without hurting your artisan rating.
-          </p>
         </div>
       </div>
     </div>
