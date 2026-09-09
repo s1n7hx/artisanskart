@@ -320,6 +320,25 @@ export const Navbar: React.FC = () => {
             >
               <span>Contact</span>
             </NavLink>
+            <NavLink
+              to="/login"
+              onClick={() => setMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `px-4 py-3 rounded-xl text-sm font-semibold text-left transition flex items-center justify-between touch-manipulation cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-white border border-[#e7e0d8] text-slate-700 hover:border-[#C85A32] active:bg-[#FAF9F6]'
+                }`
+              }
+            >
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-[#C85A32]" />
+                <span>{currentUser ? `Account (${currentUser.name.split(' ')[0]})` : 'Sign In with Google'}</span>
+              </span>
+              <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                {userRole}
+              </span>
+            </NavLink>
             {(userRole === 'maker' || userRole === 'admin') && (
               <NavLink
                 to="/maker"

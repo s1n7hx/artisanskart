@@ -24,20 +24,27 @@ export interface UserProfile {
   full_name: string;
   avatar_url?: string;
   role: 'admin' | 'maker' | 'customer';
+  status: 'approved' | 'pending' | 'rejected';
   school?: string;
   grade_class?: string;
   bio?: string;
   payout_upi?: string;
+  created_at?: string;
 }
 
 // -------------------------------------------------------------
 // Authentication Helpers
 // -------------------------------------------------------------
-export async function signInWithGoogle() {
+export async function signInWithGoogle(redirectTo?: string) {
+  const targetRedirect = redirectTo || (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : '/auth/callback');
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: targetRedirect,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
     },
   });
   if (error) throw error;
@@ -90,6 +97,44 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
   }
 }
 
+// Upsert default profile on auth creation (customer, approved)
+export async function ensureUserProfile(
+  userId: string,
+  email: string,
+  fullName?: string,
+  avatarUrl?: string
+): Promise<UserProfile> {
+  const isMaster = email.toLowerCase() === 'ssumollah@gmail.com';
+  const defaultRole = isMaster ? 'admin' : 'customer';
+  const defaultStatus = 'approved';
+
+  const newProfile = {
+    id: userId,
+    email: email.toLowerCase(),
+    full_name: fullName || email.split('@')[0],
+    avatar_url: avatarUrl || '',
+    role: defaultRole,
+    status: defaultStatus,
+    updated_at: new Date().toISOString(),
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(newProfile, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (error) {
+      console.warn('Profile upsert warning:', error.message);
+      return newProfile as UserProfile;
+    }
+    return data as UserProfile;
+  } catch (err) {
+    return newProfile as UserProfile;
+  }
+}
+
 // -------------------------------------------------------------
 // Master Admin: User & Role Management
 // -------------------------------------------------------------
@@ -112,6 +157,30 @@ export async function updateUserRole(userId: string, role: 'admin' | 'maker' | '
   const { data, error } = await supabase
     .from('profiles')
     .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected') {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateUserRoleAndStatus(
+  userId: string,
+  role: 'admin' | 'maker' | 'customer',
+  status: 'approved' | 'pending' | 'rejected'
+) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ role, status, updated_at: new Date().toISOString() })
     .eq('id', userId);
 
   if (error) throw error;

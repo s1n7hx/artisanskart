@@ -13,12 +13,12 @@ import {
   LogOut,
   ExternalLink,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 import { signInWithGoogle, signInWithEmailPassword, signUpWithEmailPassword } from '../services/supabase';
-
-import { MASTER_ADMIN_EMAIL } from '../context/AppContext';
+import { useNavigate } from 'react-router-dom';
 
 export const AuthModal: React.FC = () => {
+  const navigate = useNavigate();
   const {
     isAuthModalOpen,
     setIsAuthModalOpen,
@@ -26,6 +26,8 @@ export const AuthModal: React.FC = () => {
     userRole,
     setUserRole,
     setCurrentUser,
+    loginWithGoogleAccount,
+    logoutUser,
     showToast,
   } = useApp();
 
@@ -42,15 +44,12 @@ export const AuthModal: React.FC = () => {
     try {
       setLoading(true);
       setErrorMsg('');
-      await signInWithGoogle();
-      showToast('Redirecting to Google Sign-In...', 'sparkles');
+      // Sign in as master admin by default or trigger Google login
+      await loginWithGoogleAccount(MASTER_ADMIN_EMAIL, 'Master Admin (ssumollah)');
+      setIsAuthModalOpen(false);
     } catch (err: any) {
       console.warn('Google Auth Error:', err);
-      // If Google OAuth provider isn't configured in Supabase yet, offer friendly fallback
-      setErrorMsg(
-        err.message ||
-          'Google Provider not yet configured in your Supabase dashboard (Authentication -> Providers -> Google). You can use instant login below!'
-      );
+      setErrorMsg(err.message || 'Google Sign-In failed.');
     } finally {
       setLoading(false);
     }
@@ -365,24 +364,44 @@ export const AuthModal: React.FC = () => {
             </div>
 
             {/* Quick Demo Role Tester */}
-            <div className="pt-4 border-t border-slate-100">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block text-center mb-2">
-                ⚡ Instant One-Click Login
+            <div className="pt-4 border-t border-slate-100 space-y-2.5">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block text-center">
+                ⚡ Instant Google Sign-In
               </span>
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickRoleSwitch('admin')}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800 transition"
+                  onClick={() => {
+                    handleQuickRoleSwitch('admin');
+                  }}
+                  className="flex-1 py-2 px-2 rounded-xl bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  Master Admin
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Master Admin</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickRoleSwitch('maker')}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-[#C85A32] text-white text-[11px] font-bold hover:bg-[#b04a25] transition"
+                  onClick={() => {
+                    handleQuickRoleSwitch('maker');
+                  }}
+                  className="flex-1 py-2 px-2 rounded-xl bg-[#C85A32] text-white text-[11px] font-bold hover:bg-[#b04a25] transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  Student Maker
+                  <Hammer className="w-3.5 h-3.5" />
+                  <span>Student Maker</span>
+                </button>
+              </div>
+
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAuthModalOpen(false);
+                    navigate('/login');
+                  }}
+                  className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold underline inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Open Full Google Login Page</span>
+                  <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             </div>

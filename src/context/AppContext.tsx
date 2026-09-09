@@ -7,6 +7,8 @@ import {
   HeroContent,
   AnimationSettings,
   UserAccount,
+  UserRole,
+  UserStatus,
 } from '../types';
 import { PRODUCTS, INITIAL_ORDERS, DEFAULT_HERO_CONTENT, DEFAULT_ANIMATION_SETTINGS } from '../data';
 import {
@@ -20,6 +22,9 @@ import {
   saveHeroCmsContent,
   fetchAllProfiles,
   updateUserRole as updateSupabaseUserRole,
+  updateUserStatus as updateSupabaseUserStatus,
+  updateUserRoleAndStatus as updateSupabaseUserRoleAndStatus,
+  ensureUserProfile,
   getProfile,
 } from '../services/supabase';
 
@@ -53,14 +58,20 @@ interface AppContextType {
   // Authentication & RBAC
   currentUser: UserAccount | null;
   setCurrentUser: (user: UserAccount | null) => void;
-  userRole: 'admin' | 'maker' | 'customer';
-  setUserRole: (role: 'admin' | 'maker' | 'customer') => void;
+  userRole: UserRole;
+  setUserRole: (role: UserRole) => void;
+  userStatus: UserStatus;
+  setUserStatus: (status: UserStatus) => void;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
   usersList: UserAccount[];
-  grantUserRole: (userId: string, newRole: 'admin' | 'maker' | 'customer') => Promise<void>;
-  addNewUserAccount: (email: string, name: string, role: 'admin' | 'maker' | 'customer', school?: string) => Promise<void>;
+  grantUserRole: (userId: string, newRole: UserRole) => Promise<void>;
+  grantUserStatus: (userId: string, newStatus: UserStatus) => Promise<void>;
+  promoteUserRole: (userId: string, newRole: UserRole, newStatus?: UserStatus) => Promise<void>;
+  addNewUserAccount: (email: string, name: string, role: UserRole, status?: UserStatus, school?: string) => Promise<void>;
   removeUserAccount: (userId: string) => Promise<void>;
+  loginWithGoogleAccount: (email: string, name?: string, avatarUrl?: string) => Promise<UserAccount>;
+  logoutUser: () => void;
 
   // Hero & Animation Customization
   heroContent: HeroContent;
@@ -100,6 +111,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'ssumollah@gmail.com',
     name: 'Master Admin (ssumollah)',
     role: 'admin',
+    status: 'approved',
     school: 'ArtisansKart Platform Headquarters',
   },
   {
@@ -107,6 +119,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'admin@artisanskart.in',
     name: 'Platform Administrator',
     role: 'admin',
+    status: 'approved',
     school: 'Operations HQ',
   },
   {
@@ -114,6 +127,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'sakib.maker@delhischool.edu',
     name: 'Sakib Ansari',
     role: 'maker',
+    status: 'approved',
     school: 'DPS RK Puram (Class 10)',
     bio: 'Sculpting terracotta planters & traditional wheel pottery.',
   },
@@ -122,6 +136,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'meera.art@punecampus.in',
     name: 'Meera Nair',
     role: 'maker',
+    status: 'approved',
     school: 'Bishop Cotton Pune (Class 12)',
     bio: 'Watercolor greeting cards and botanical paintings.',
   },
@@ -130,6 +145,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'arjun.crafts@jaipur.edu',
     name: 'Arjun Verma',
     role: 'maker',
+    status: 'approved',
     school: 'Maharaja Sawai Man Jaipur (Class 9)',
     bio: 'Handcrafted macrame bookmarks & keychains.',
   },
@@ -138,6 +154,7 @@ const INITIAL_USERS: UserAccount[] = [
     email: 'visitor@artisanskart.in',
     name: 'Customer Shopper',
     role: 'customer',
+    status: 'approved',
     school: 'Art Patron & Supporter',
   },
 ];
@@ -152,8 +169,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return INITIAL_USERS[0]; // Default to Master Admin
   });
 
-  const [userRole, setUserRoleState] = useState<'admin' | 'maker' | 'customer'>(
+  const [userRole, setUserRoleState] = useState<UserRole>(
     currentUser?.role || 'admin'
+  );
+
+  const [userStatus, setUserStatusState] = useState<UserStatus>(
+    currentUser?.status || 'approved'
   );
 
   const [usersList, setUsersList] = useState<UserAccount[]>(() => {
@@ -167,7 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   // Sync role state when current user changes
-  const setUserRole = (role: 'admin' | 'maker' | 'customer') => {
+  const setUserRole = (role: UserRole) => {
     setUserRoleState(role);
     if (currentUser) {
       const updated = { ...currentUser, role };
@@ -178,8 +199,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const setUserStatus = (status: UserStatus) => {
+    setUserStatusState(status);
+    if (currentUser) {
+      const updated = { ...currentUser, status };
+      setCurrentUser(updated);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updated));
+      } catch (e) {}
+    }
+  };
+
   // Master Admin grants/elevates user permissions
-  const grantUserRole = async (userId: string, newRole: 'admin' | 'maker' | 'customer') => {
+  const grantUserRole = async (userId: string, newRole: UserRole) => {
     setUsersList((prev) => {
       const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u));
       try {
@@ -188,7 +220,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return next;
     });
 
-    // If active user is the one being updated
     if (currentUser && currentUser.id === userId) {
       setUserRole(newRole);
     }
@@ -199,14 +230,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Supabase profile role update error:', err);
     }
 
-    showToast(`Permission updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
+    showToast(`Role updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
+  };
+
+  // Master Admin updates approval status
+  const grantUserStatus = async (userId: string, newStatus: UserStatus) => {
+    setUsersList((prev) => {
+      const next = prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u));
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    if (currentUser && currentUser.id === userId) {
+      setUserStatus(newStatus);
+    }
+
+    try {
+      await updateSupabaseUserStatus(userId, newStatus);
+    } catch (err) {
+      console.warn('Supabase status update error:', err);
+    }
+
+    showToast(`Account status set to ${newStatus.toUpperCase()}`, 'check-circle-2');
+  };
+
+  // Combined role and status update
+  const promoteUserRole = async (userId: string, newRole: UserRole, newStatus: UserStatus = 'approved') => {
+    setUsersList((prev) => {
+      const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole, status: newStatus } : u));
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    if (currentUser && currentUser.id === userId) {
+      setUserRole(newRole);
+      setUserStatus(newStatus);
+    }
+
+    try {
+      await updateSupabaseUserRoleAndStatus(userId, newRole, newStatus);
+    } catch (err) {
+      console.warn('Supabase role/status update error:', err);
+    }
+
+    showToast(`Updated to ${newRole.toUpperCase()} (${newStatus})!`, 'sparkles');
   };
 
   // Add new authorized email / user account
   const addNewUserAccount = async (
     email: string,
     name: string,
-    role: 'admin' | 'maker' | 'customer',
+    role: UserRole,
+    status: UserStatus = 'approved',
     school?: string
   ) => {
     const trimmedEmail = email.trim().toLowerCase();
@@ -217,12 +296,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       email: trimmedEmail,
       name: name.trim() || trimmedEmail.split('@')[0],
       role: role,
+      status: status,
       school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Campus Arts Club' : 'Customer Patron'),
     };
 
     let nextList: UserAccount[];
     if (existingIndex >= 0) {
-      nextList = usersList.map((u, i) => (i === existingIndex ? { ...u, role, name: newUser.name, school: newUser.school } : u));
+      nextList = usersList.map((u, i) => (i === existingIndex ? { ...u, role, status, name: newUser.name, school: newUser.school } : u));
     } else {
       nextList = [newUser, ...usersList];
     }
@@ -235,9 +315,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // If active user is the one being updated
     if (currentUser && currentUser.email.toLowerCase() === trimmedEmail) {
       setUserRole(role);
+      setUserStatus(status);
     }
 
-    showToast(`Added ${trimmedEmail} with ${role.toUpperCase()} access!`, 'check-circle-2');
+    showToast(`Added ${trimmedEmail} with ${role.toUpperCase()} (${status}) access!`, 'check-circle-2');
   };
 
   // Remove / revoke user account
@@ -255,6 +336,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
 
     showToast('User removed successfully.', 'trash-2');
+  };
+
+  // Dedicated Google Account Authentication Handler
+  const loginWithGoogleAccount = async (
+    email: string,
+    name?: string,
+    avatarUrl?: string
+  ): Promise<UserAccount> => {
+    const cleanEmail = email.trim().toLowerCase();
+    const isMaster = cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase();
+
+    // Check if user already exists in authorized users list
+    const matchedUser = usersList.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    let role: UserRole = 'customer';
+    let status: UserStatus = 'approved';
+    let userName = name?.trim() || cleanEmail.split('@')[0];
+    let school = 'Customer Patron';
+
+    if (isMaster) {
+      role = 'admin';
+      status = 'approved';
+      userName = name?.trim() || 'Master Admin (ssumollah)';
+      school = 'ArtisansKart Platform Headquarters';
+    } else if (matchedUser) {
+      role = matchedUser.role;
+      status = matchedUser.status || 'approved';
+      userName = name?.trim() || matchedUser.name;
+      school = matchedUser.school || school;
+    }
+
+    const userAccount: UserAccount = {
+      id: matchedUser?.id || `usr_g_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      email: cleanEmail,
+      name: userName,
+      role,
+      status,
+      school,
+      avatarUrl: avatarUrl,
+    };
+
+    // If not already in users list, save them
+    if (!matchedUser) {
+      const updatedUsers = [userAccount, ...usersList];
+      setUsersList(updatedUsers);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(updatedUsers));
+      } catch (e) {}
+    }
+
+    setCurrentUser(userAccount);
+    setUserRoleState(role);
+    setUserStatusState(status);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(userAccount));
+    } catch (e) {}
+
+    if (isMaster) {
+      showToast('Signed in with Google as Master Admin (ssumollah@gmail.com)!', 'shield-check');
+    } else if (role === 'maker') {
+      showToast(`Welcome back, Student Maker ${userName}!`, 'sparkles');
+    } else {
+      showToast(`Signed in with Google as ${userName}`, 'check-circle-2');
+    }
+
+    return userAccount;
+  };
+
+  const logoutUser = () => {
+    setCurrentUser(null);
+    setUserRoleState('customer');
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    } catch (e) {}
+    showToast('Signed out successfully.', 'log-out');
   };
 
   // Load products from localStorage or default PRODUCTS
@@ -601,12 +757,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentUser,
         userRole,
         setUserRole,
+        userStatus,
+        setUserStatus,
         isAuthModalOpen,
         setIsAuthModalOpen,
         usersList,
         grantUserRole,
+        grantUserStatus,
+        promoteUserRole,
         addNewUserAccount,
         removeUserAccount,
+        loginWithGoogleAccount,
+        logoutUser,
 
         // Hero & Animation Customization
         heroContent,

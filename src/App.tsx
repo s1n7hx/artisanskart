@@ -10,6 +10,8 @@ import { MarketplacePage } from './pages/MarketplacePage';
 import { MakerPortalPage } from './pages/MakerPortalPage';
 import { AdminPortalPage } from './pages/AdminPortalPage';
 import { ContactPage } from './pages/ContactPage';
+import { LoginPage } from './pages/LoginPage';
+import { PendingApprovalPage } from './pages/PendingApprovalPage';
 
 export default function App() {
   return (
@@ -25,6 +27,12 @@ export default function App() {
             <Route path="maker" element={<MakerPortalPage />} />
             <Route path="admin" element={<AdminPortalPage />} />
             <Route path="admin/cms" element={<AdminPortalPage />} />
+            <Route path="admin/users" element={<AdminPortalPage />} />
+            <Route path="pending-approval" element={<PendingApprovalPage />} />
+            <Route path="login" element={<LoginPage />} />
+            <Route path="signin" element={<LoginPage />} />
+            <Route path="auth" element={<LoginPage />} />
+            <Route path="auth/callback" element={<LoginPage />} />
             <Route path="contact" element={<ContactPage />} />
             {/* Fallback to home */}
             <Route path="*" element={<Navigate to="/" replace />} />

@@ -36,6 +36,7 @@ export const MakerPortalPage: React.FC = () => {
     setIsMakerSignupOpen,
     currentUser,
     userRole,
+    userStatus,
     addNewProduct,
     showToast,
     setIsAuthModalOpen,
@@ -100,7 +101,37 @@ export const MakerPortalPage: React.FC = () => {
     });
   };
 
-  const isMakerOrAdmin = userRole === 'maker' || userRole === 'admin';
+  const isMakerOrAdmin = (userRole === 'maker' || userRole === 'admin') && userStatus === 'approved';
+
+  // Strict Route Guard: If user is pending or unapproved maker, direct to pending approval
+  if ((userRole === 'maker' || userRole === 'admin') && userStatus !== 'approved') {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
+          <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
+        </div>
+        <div className="space-y-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-3 py-1 rounded-full">
+            Application Under Review
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            Maker Access Awaiting Approval
+          </h1>
+          <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+            Your account ({currentUser?.email}) is registered as a Student Maker, but access is pending verification by Master Admin (<strong>ssumollah@gmail.com</strong>).
+          </p>
+        </div>
+        <div className="flex justify-center gap-3">
+          <button
+            onClick={() => navigate('/pending-approval')}
+            className="bg-[#C85A32] text-white text-xs font-bold px-6 py-2.5 rounded-full cursor-pointer hover:bg-[#b04a25]"
+          >
+            View Approval Status Details
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // Strict Route Guard: If the user is a customer/visitor, display the Restricted Maker Portal banner
   if (!isMakerOrAdmin) {

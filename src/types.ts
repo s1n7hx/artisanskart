@@ -75,12 +75,16 @@ export interface AnimationSettings {
   enableScrollReveal: boolean;
 }
 
+export type UserRole = 'admin' | 'maker' | 'customer';
+export type UserStatus = 'approved' | 'pending' | 'rejected';
+
 export interface UserAccount {
   id: string;
   email: string;
   name: string;
   avatarUrl?: string;
-  role: 'admin' | 'maker' | 'customer';
+  role: UserRole;
+  status?: UserStatus;
   school?: string;
   grade?: string;
   bio?: string;
