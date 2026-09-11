@@ -25,6 +25,9 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const isMasterAdmin =
+    (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
@@ -102,18 +105,19 @@ export const LoginPage: React.FC = () => {
               <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
                 <span className="text-slate-500 font-semibold">Active Role:</span>
                 <span className="font-black uppercase px-2.5 py-0.5 rounded-full text-[10px] bg-slate-200 text-slate-800">
-                  {userRole}
+                  {isMasterAdmin ? 'Master Admin' : userRole}
                 </span>
               </div>
             </div>
 
             <div className="space-y-3">
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || isMasterAdmin) && (
                 <Link
                   to="/admin"
-                  className="w-full py-3 px-4 rounded-2xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-xs"
+                  className="w-full py-3 px-4 rounded-2xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-xs cursor-pointer"
                 >
-                  <span>Go to Admin Dashboard</span>
+                  <Shield className="w-4 h-4" />
+                  <span>Go to Master Admin Dashboard</span>
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               )}

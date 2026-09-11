@@ -68,29 +68,47 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
       console.warn('Could not fetch Supabase profile:', error.message);
       return null;
     }
+    if (data) {
+      const isMaster = (data.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+      if (isMaster && (data.role !== 'admin' || data.status !== 'approved')) {
+        data.role = 'admin';
+        data.status = 'approved';
+        (async () => {
+          try {
+            await supabase
+              .from('profiles')
+              .update({ role: 'admin', status: 'approved', updated_at: new Date().toISOString() })
+              .eq('id', userId);
+          } catch (e) {}
+        })();
+      }
+    }
     return data as UserProfile;
   } catch (err) {
     return null;
   }
 }
 
-// Upsert default profile on auth creation (customer by default; admin granted exclusively via server callback)
+// Upsert default profile on auth creation (Master Admin ssumollah@gmail.com is directly granted admin; others default to customer)
 export async function ensureUserProfile(
   userId: string,
   email: string,
   fullName?: string,
   avatarUrl?: string
 ): Promise<UserProfile> {
-  const defaultRole = 'customer';
-  const defaultStatus = 'approved';
+  const cleanEmail = email.trim().toLowerCase();
+  const isMaster = cleanEmail === 'ssumollah@gmail.com';
+  const assignedRole = isMaster ? 'admin' : 'customer';
+  const assignedStatus = 'approved';
 
   const newProfile = {
     id: userId,
-    email: email.toLowerCase(),
-    full_name: fullName || email.split('@')[0],
+    email: cleanEmail,
+    full_name: fullName || (isMaster ? 'Master Admin (ssumollah)' : cleanEmail.split('@')[0]),
     avatar_url: avatarUrl || '',
-    role: defaultRole,
-    status: defaultStatus,
+    role: assignedRole,
+    status: assignedStatus,
+    school: isMaster ? 'ArtisansKart Platform Headquarters' : '',
     updated_at: new Date().toISOString(),
   };
 

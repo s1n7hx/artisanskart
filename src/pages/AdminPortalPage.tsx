@@ -29,7 +29,7 @@ import {
   ShieldAlert,
   ArrowLeft,
 } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 import { Product, HeroContent, UserAccount } from '../types';
 import { uploadImageToBucket } from '../services/supabase';
 
@@ -213,8 +213,12 @@ export const AdminPortalPage: React.FC = () => {
   const totalSalesVolume = orders.reduce((sum, o) => sum + o.amount, 0);
   const studentSharePaid = totalSalesVolume * 0.65;
 
-  // Restrict access if the user is not an Admin or not approved
-  if (userRole !== 'admin' || userStatus !== 'approved') {
+  const isMasterAdmin =
+    (currentUser?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() ||
+    (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+
+  // Restrict access if the user is not an Admin or not approved (Master Admin is directly authorized)
+  if (!isMasterAdmin && (userRole !== 'admin' || userStatus !== 'approved')) {
     if (userRole === 'admin' && userStatus !== 'approved') {
       navigate('/pending-approval');
       return null;

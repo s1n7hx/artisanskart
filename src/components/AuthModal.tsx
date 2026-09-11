@@ -96,17 +96,31 @@ export const AuthModal: React.FC = () => {
                 <span className="font-bold text-slate-500">Permission:</span>
                 <span
                   className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                    userRole === 'admin'
+                    userRole === 'admin' || currentUser.email.toLowerCase() === 'ssumollah@gmail.com'
                       ? 'bg-slate-900 text-white'
                       : userRole === 'maker'
                       ? 'bg-[#C85A32] text-white'
                       : 'bg-emerald-100 text-emerald-800'
                   }`}
                 >
-                  {userRole}
+                  {currentUser.email.toLowerCase() === 'ssumollah@gmail.com' ? 'MASTER ADMIN' : userRole}
                 </span>
               </div>
             </div>
+
+            {(userRole === 'admin' || currentUser.email.toLowerCase() === 'ssumollah@gmail.com') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAuthModalOpen(false);
+                  navigate('/admin');
+                }}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Shield className="w-3.5 h-3.5 text-[#C85A32]" />
+                <span>Open Master Admin Portal</span>
+              </button>
+            )}
 
             {userRole === 'customer' && (
               <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2 text-center">

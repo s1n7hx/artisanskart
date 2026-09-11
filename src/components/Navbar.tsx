@@ -16,6 +16,9 @@ export const Navbar: React.FC = () => {
     setIsAuthModalOpen,
   } = useApp();
 
+  const isMaster = (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+  const hasAdminAccess = userRole === 'admin' || isMaster;
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -119,7 +122,7 @@ export const Navbar: React.FC = () => {
                 Maker Portal
               </NavLink>
             )}
-            {userRole === 'admin' && (
+            {hasAdminAccess && (
               <NavLink
                 to="/admin"
                 className={({ isActive }) =>
@@ -164,7 +167,7 @@ export const Navbar: React.FC = () => {
                 <Hammer className="w-3.5 h-3.5 text-[#C85A32]" /> Maker
               </NavLink>
             )}
-            {userRole === 'admin' && (
+            {hasAdminAccess && (
               <NavLink
                 to="/admin"
                 className={({ isActive }) =>
@@ -211,7 +214,7 @@ export const Navbar: React.FC = () => {
                   {currentUser.name.split(' ')[0]}
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full uppercase font-black bg-slate-100 text-slate-600">
-                  {userRole}
+                  {isMaster ? 'Master Admin' : userRole}
                 </span>
               </>
             ) : (
@@ -367,7 +370,7 @@ export const Navbar: React.FC = () => {
                 <span className="text-xs text-[#C85A32] font-bold">65%</span>
               </NavLink>
             )}
-            {userRole === 'admin' && (
+            {hasAdminAccess && (
               <NavLink
                 to="/admin"
                 onClick={() => setMobileMenuOpen(false)}

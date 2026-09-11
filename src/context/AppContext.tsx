@@ -110,20 +110,90 @@ const LOCAL_STORAGE_USERS_LIST_KEY = 'artisanskart_all_users_v1';
 export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Session starts completely unauthenticated - verified exclusively via Supabase OAuth
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
-  const [userRole, setUserRoleState] = useState<UserRole>('customer');
-  const [userStatus, setUserStatusState] = useState<UserStatus>('approved');
-  const [usersList, setUsersList] = useState<UserAccount[]>([]);
+  // Session starts verified from localStorage or verified via Supabase OAuth
+  const [currentUser, setCurrentUserState] = useState<UserAccount | null>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u && (u.email || u.id)) {
+          const email = (u.email || '').trim().toLowerCase();
+          const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com';
+          if (isMaster) {
+            u.role = 'admin';
+            u.status = 'approved';
+            u.school = u.school || 'ArtisansKart Platform Headquarters';
+          }
+          return u;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
 
+  const [userRole, setUserRoleState] = useState<UserRole>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
+      if (saved) {
+        const u = JSON.parse(saved);
+        const email = (u?.email || '').trim().toLowerCase();
+        if (email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com') {
+          return 'admin';
+        }
+        if (u?.role) return u.role;
+      }
+    } catch (e) {}
+    return 'customer';
+  });
+
+  const [userStatus, setUserStatusState] = useState<UserStatus>(() => {
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
+      if (saved) {
+        const u = JSON.parse(saved);
+        const email = (u?.email || '').trim().toLowerCase();
+        if (email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com') {
+          return 'approved';
+        }
+        if (u?.status) return u.status;
+      }
+    } catch (e) {}
+    return 'approved';
+  });
+
+  const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
+  const setCurrentUser = (user: UserAccount | null) => {
+    if (user) {
+      const email = (user.email || '').trim().toLowerCase();
+      const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com';
+      if (isMaster) {
+        user.role = 'admin';
+        user.status = 'approved';
+      }
+      setCurrentUserState(user);
+      setUserRoleState(user.role);
+      setUserStatusState(user.status);
+      try {
+        localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(user));
+      } catch (e) {}
+    } else {
+      setCurrentUserState(null);
+      setUserRoleState('customer');
+      setUserStatusState('approved');
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+      } catch (e) {}
+    }
+  };
 
   // Sync role state when current user changes
   const setUserRole = (role: UserRole) => {
     setUserRoleState(role);
     if (currentUser) {
       const updated = { ...currentUser, role };
-      setCurrentUser(updated);
+      setCurrentUserState(updated);
       try {
         localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -134,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUserStatusState(status);
     if (currentUser) {
       const updated = { ...currentUser, status };
-      setCurrentUser(updated);
+      setCurrentUserState(updated);
       try {
         localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -411,48 +481,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     initSupabaseData();
 
-    // 1. Initial Supabase session verification directly via getUser()
+    // 1. Initial Supabase session verification directly via getUser() and getSession()
     async function verifyInitialSession() {
       try {
-        const {
-          data: { user },
-          error: authErr,
-        } = await supabase.auth.getUser();
+        let activeUser = (await supabase.auth.getUser()).data.user;
+        if (!activeUser) {
+          activeUser = (await supabase.auth.getSession()).data.session?.user || null;
+        }
 
-        if (user && !authErr) {
-          const profile = await getProfile(user.id);
-          const email = user.email || '';
-          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-          const resolvedRole: 'admin' | 'maker' | 'customer' = isMaster
-            ? 'admin'
-            : (profile?.role || 'customer');
-          const resolvedStatus: UserStatus = (profile?.status as UserStatus) || 'approved';
+        if (activeUser) {
+          const email = (
+            activeUser.email ||
+            activeUser.user_metadata?.email ||
+            ''
+          ).trim().toLowerCase();
+
+          const isMaster =
+            email === MASTER_ADMIN_EMAIL.toLowerCase() ||
+            email === 'ssumollah@gmail.com';
+
+          // Sync with database profile
+          let profile = await getProfile(activeUser.id);
+          if (isMaster) {
+            profile = await ensureUserProfile(
+              activeUser.id,
+              'ssumollah@gmail.com',
+              activeUser.user_metadata?.full_name ||
+                activeUser.user_metadata?.name ||
+                'Master Admin (ssumollah)',
+              activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
+            );
+          } else if (!profile) {
+            profile = await ensureUserProfile(
+              activeUser.id,
+              email,
+              activeUser.user_metadata?.full_name || activeUser.user_metadata?.name,
+              activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
+            );
+          }
+
+          const resolvedRole: UserRole = isMaster ? 'admin' : (profile?.role || 'customer');
+          const resolvedStatus: UserStatus = isMaster ? 'approved' : ((profile?.status as UserStatus) || 'approved');
 
           const userAccount: UserAccount = {
-            id: user.id,
-            email: email,
+            id: activeUser.id,
+            email: isMaster ? 'ssumollah@gmail.com' : email,
             name:
               profile?.full_name ||
-              user.user_metadata?.full_name ||
-              user.user_metadata?.name ||
-              (isMaster ? 'Master Admin' : email.split('@')[0]),
+              activeUser.user_metadata?.full_name ||
+              activeUser.user_metadata?.name ||
+              (isMaster ? 'Master Admin (ssumollah)' : email.split('@')[0]),
             role: resolvedRole,
             status: resolvedStatus,
-            school: profile?.school || (isMaster ? 'ArtisansKart Platform HQ' : 'Customer Patron'),
-            avatarUrl: profile?.avatar_url || user.user_metadata?.avatar_url || '',
+            school:
+              profile?.school ||
+              (isMaster ? 'ArtisansKart Platform Headquarters' : 'Customer Patron'),
+            avatarUrl:
+              profile?.avatar_url ||
+              activeUser.user_metadata?.avatar_url ||
+              activeUser.user_metadata?.picture ||
+              '',
           };
 
           setCurrentUser(userAccount);
-          setUserRoleState(resolvedRole);
-          setUserStatusState(resolvedStatus);
-        } else {
-          setCurrentUser(null);
-          setUserRoleState('customer');
-          setUserStatusState('approved');
         }
-      } catch {
-        setCurrentUser(null);
-        setUserRoleState('customer');
+      } catch (err) {
+        console.warn('Initial session verification notice:', err);
       }
     }
     verifyInitialSession();
@@ -461,36 +555,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT' || !session?.user) {
         setCurrentUser(null);
-        setUserRoleState('customer');
-        setUserStatusState('approved');
       } else if (session?.user) {
-        const email = session.user.email || '';
-        const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+        const email = (
+          session.user.email ||
+          session.user.user_metadata?.email ||
+          ''
+        ).trim().toLowerCase();
 
-        // Check if there is an existing profile in database
-        const profile = await getProfile(session.user.id);
-        const resolvedRole: 'admin' | 'maker' | 'customer' = isMaster
-          ? 'admin'
-          : (profile?.role || 'customer');
-        const resolvedStatus: UserStatus = (profile?.status as UserStatus) || 'approved';
+        const isMaster =
+          email === MASTER_ADMIN_EMAIL.toLowerCase() ||
+          email === 'ssumollah@gmail.com';
+
+        let profile = await getProfile(session.user.id);
+        if (isMaster) {
+          profile = await ensureUserProfile(
+            session.user.id,
+            'ssumollah@gmail.com',
+            session.user.user_metadata?.full_name ||
+              session.user.user_metadata?.name ||
+              'Master Admin (ssumollah)',
+            session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture
+          );
+        } else if (!profile) {
+          profile = await ensureUserProfile(
+            session.user.id,
+            email,
+            session.user.user_metadata?.full_name || session.user.user_metadata?.name,
+            session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture
+          );
+        }
+
+        const resolvedRole: UserRole = isMaster ? 'admin' : (profile?.role || 'customer');
+        const resolvedStatus: UserStatus = isMaster ? 'approved' : ((profile?.status as UserStatus) || 'approved');
 
         const userAccount: UserAccount = {
           id: session.user.id,
-          email: email,
+          email: isMaster ? 'ssumollah@gmail.com' : email,
           name:
             profile?.full_name ||
             session.user.user_metadata?.full_name ||
             session.user.user_metadata?.name ||
-            (isMaster ? 'Master Admin' : email.split('@')[0]),
+            (isMaster ? 'Master Admin (ssumollah)' : email.split('@')[0]),
           role: resolvedRole,
           status: resolvedStatus,
-          school: profile?.school || (isMaster ? 'ArtisansKart Platform HQ' : 'Customer Patron'),
-          avatarUrl: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
+          school:
+            profile?.school ||
+            (isMaster ? 'ArtisansKart Platform Headquarters' : 'Customer Patron'),
+          avatarUrl:
+            profile?.avatar_url ||
+            session.user.user_metadata?.avatar_url ||
+            session.user.user_metadata?.picture ||
+            '',
         };
 
         setCurrentUser(userAccount);
-        setUserRoleState(resolvedRole);
-        setUserStatusState(resolvedStatus);
       }
     });
 

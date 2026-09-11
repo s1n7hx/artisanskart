@@ -11,6 +11,7 @@ import { MakerPortalPage } from './pages/MakerPortalPage';
 import { AdminPortalPage } from './pages/AdminPortalPage';
 import { ContactPage } from './pages/ContactPage';
 import { LoginPage } from './pages/LoginPage';
+import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { PendingApprovalPage } from './pages/PendingApprovalPage';
 import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 
@@ -35,7 +36,7 @@ export default function App() {
             <Route path="login" element={<LoginPage />} />
             <Route path="signin" element={<LoginPage />} />
             <Route path="auth" element={<LoginPage />} />
-            <Route path="auth/callback" element={<LoginPage />} />
+            <Route path="auth/callback" element={<AuthCallbackPage />} />
             <Route path="contact" element={<ContactPage />} />
             {/* Fallback to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
