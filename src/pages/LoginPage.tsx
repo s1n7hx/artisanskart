@@ -51,9 +51,6 @@ export const LoginPage: React.FC = () => {
   const [customGoogleEmail, setCustomGoogleEmail] = useState('');
   const [customGoogleName, setCustomGoogleName] = useState('');
   const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false);
-  const [showRoleRequestModal, setShowRoleRequestModal] = useState(false);
-  const [requestRoleTarget, setRequestRoleTarget] = useState<'maker' | 'admin'>('maker');
-  const [requestNote, setRequestNote] = useState('');
 
   // Email/Password state
   const [emailMode, setEmailMode] = useState<'login' | 'signup'>('login');
@@ -147,17 +144,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Handle role request submission
-  const handleRequestRole = async () => {
-    if (!currentUser) {
-      showToast('Please sign in with Google first.', 'alert-circle');
-      return;
-    }
-    await requestElevatedRole(requestRoleTarget, requestNote);
-    setShowRoleRequestModal(false);
-    setRequestNote('');
   };
 
   // Handle standard email password
@@ -338,28 +324,13 @@ export const LoginPage: React.FC = () => {
                     </Link>
                   )}
                   {userRole === 'customer' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRequestRoleTarget('maker');
-                        setShowRoleRequestModal(true);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold transition cursor-pointer"
+                    <Link
+                      to="/become-a-maker"
+                      className="px-3 py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold transition flex items-center gap-1.5"
                     >
-                      Apply for Maker Role
-                    </button>
-                  )}
-                  {userRole === 'customer' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRequestRoleTarget('admin');
-                        setShowRoleRequestModal(true);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold transition cursor-pointer"
-                    >
-                      Request Admin Access
-                    </button>
+                      <Hammer className="w-3.5 h-3.5 text-[#C85A32]" />
+                      <span>Apply to Become a Maker</span>
+                    </Link>
                   )}
                 </div>
 
@@ -848,67 +819,6 @@ export const LoginPage: React.FC = () => {
           </div>
         </div>
       </div>
-
-      {/* Role Request Modal */}
-      {showRoleRequestModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border border-slate-200 shadow-2xl space-y-4 animate-scale-up">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                {requestRoleTarget === 'maker' ? (
-                  <Hammer className="w-5 h-5 text-[#C85A32]" />
-                ) : (
-                  <ShieldCheck className="w-5 h-5 text-slate-900" />
-                )}
-                <h3 className="text-base font-black text-slate-900">
-                  Request {requestRoleTarget.toUpperCase()} Access
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRoleRequestModal(false)}
-                className="text-xs font-bold text-slate-400 hover:text-slate-700"
-              >
-                ✕ Close
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              You are signed in as <strong>{currentUser?.email}</strong>. Submitting this request places your account in <strong>Pending Status</strong>. Master Admin (<strong>{MASTER_ADMIN_EMAIL}</strong>) will review your application in the Admin Users control center before access is granted.
-            </p>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Note / Student Bio / Portfolio Link
-              </label>
-              <textarea
-                value={requestNote}
-                onChange={(e) => setRequestNote(e.target.value)}
-                placeholder="e.g. Student pottery artisan from Delhi Public School, Class 10. Specializing in terracotta planters."
-                rows={3}
-                className="w-full p-3 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRoleRequestModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRequestRole}
-                className="px-5 py-2 rounded-xl bg-[#C85A32] text-white font-bold text-xs hover:bg-[#b04a25] transition"
-              >
-                Submit Request for Approval
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

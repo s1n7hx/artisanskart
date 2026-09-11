@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { createBrowserClient } from '@supabase/ssr';
 import {
   Users,
@@ -18,6 +19,7 @@ import {
   AlertCircle,
   Sparkles,
   ChevronRight,
+  FileText,
 } from 'lucide-react';
 
 export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
@@ -271,6 +273,13 @@ export default function AdminUsersManagementPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/admin/applications"
+            className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer"
+          >
+            <FileText className="w-4 h-4 text-[#C85A32]" />
+            <span>Maker Applications</span>
+          </Link>
           <button
             type="button"
             onClick={loadProfiles}

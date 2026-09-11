@@ -428,9 +428,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedUser: UserAccount = {
       ...currentUser,
-      role: targetRole,
+      // Security fix: role is never mutated on the client
+      role: currentUser.role,
       status: 'pending',
-      bio: note || currentUser.bio || `Requested ${targetRole} role`,
+      bio: note || currentUser.bio || `Applied for maker verification`,
     };
 
     const exists = usersList.some((u) => u.email.toLowerCase() === currentUser.email.toLowerCase());
@@ -438,7 +439,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (exists) {
       nextList = usersList.map((u) =>
         u.email.toLowerCase() === currentUser.email.toLowerCase()
-          ? { ...u, role: targetRole, status: 'pending' as UserStatus, bio: note || u.bio }
+          ? { ...u, status: 'pending' as UserStatus, bio: note || u.bio }
           : u
       );
     } else {
@@ -447,7 +448,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setUsersList(nextList);
     setCurrentUser(updatedUser);
-    setUserRoleState(targetRole);
+    // Role remains unchanged until server-side admin approval
     setUserStatusState('pending');
 
     try {

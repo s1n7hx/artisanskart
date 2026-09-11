@@ -111,38 +111,6 @@ export const AuthModal: React.FC = () => {
     }
   };
 
-  const handleQuickRoleSwitch = (role: 'admin' | 'maker' | 'customer') => {
-    const roleProfiles = {
-      admin: {
-        id: 'usr_master_admin_ssumollah',
-        email: 'ssumollah@gmail.com',
-        name: 'Master Admin (ssumollah)',
-        role: 'admin' as const,
-        school: 'ArtisansKart HQ',
-      },
-      maker: {
-        id: 'usr_maker_sakib',
-        email: 'sakib.maker@delhischool.edu',
-        name: 'Sakib Ansari (Maker)',
-        role: 'maker' as const,
-        school: 'DPS RK Puram (Class 10)',
-      },
-      customer: {
-        id: 'usr_cust_patron',
-        email: 'visitor@artisanskart.in',
-        name: 'General Shopper',
-        role: 'customer' as const,
-        school: 'Art Patron / Buyer',
-      },
-    };
-
-    const selected = roleProfiles[role];
-    setCurrentUser(selected);
-    setUserRole(role);
-    showToast(`Switched active profile to ${selected.name} (${role.toUpperCase()})`, 'sparkles');
-    setIsAuthModalOpen(false);
-  };
-
   const handleSignOut = () => {
     setCurrentUser(null);
     setUserRole('customer');
@@ -204,43 +172,24 @@ export const AuthModal: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <span className="text-[11px] font-extrabold uppercase text-slate-400 block text-center">
-                Switch Role / Preview As
-              </span>
-              <div className="grid grid-cols-3 gap-2">
+            {userRole === 'customer' && (
+              <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2 text-center">
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Want to sell your handmade crafts on ArtisansKart?
+                </p>
                 <button
                   type="button"
-                  onClick={() => handleQuickRoleSwitch('admin')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                    userRole === 'admin' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 hover:border-slate-400 text-slate-700'
-                  }`}
+                  onClick={() => {
+                    setIsAuthModalOpen(false);
+                    navigate('/become-a-maker');
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Admin</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickRoleSwitch('maker')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                    userRole === 'maker' ? 'border-[#C85A32] bg-[#C85A32] text-white' : 'border-slate-200 hover:border-slate-400 text-slate-700'
-                  }`}
-                >
-                  <Hammer className="w-4 h-4" />
-                  <span>Maker</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickRoleSwitch('customer')}
-                  className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition ${
-                    userRole === 'customer' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-200 hover:border-slate-400 text-slate-700'
-                  }`}
-                >
-                  <User className="w-4 h-4" />
-                  <span>Customer</span>
+                  <Hammer className="w-3.5 h-3.5" />
+                  <span>Apply to Become a Maker</span>
                 </button>
               </div>
-            </div>
+            )}
 
             <button
               onClick={handleSignOut}
@@ -363,47 +312,18 @@ export const AuthModal: React.FC = () => {
               </button>
             </div>
 
-            {/* Quick Demo Role Tester */}
-            <div className="pt-4 border-t border-slate-100 space-y-2.5">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block text-center">
-                ⚡ Instant Google Sign-In
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleQuickRoleSwitch('admin');
-                  }}
-                  className="flex-1 py-2 px-2 rounded-xl bg-slate-900 text-white text-[11px] font-bold hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Master Admin</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleQuickRoleSwitch('maker');
-                  }}
-                  className="flex-1 py-2 px-2 rounded-xl bg-[#C85A32] text-white text-[11px] font-bold hover:bg-[#b04a25] transition flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Hammer className="w-3.5 h-3.5" />
-                  <span>Student Maker</span>
-                </button>
-              </div>
-
-              <div className="text-center pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAuthModalOpen(false);
-                    navigate('/login');
-                  }}
-                  className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold underline inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Open Full Google Login Page</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
+            <div className="pt-4 border-t border-slate-100 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAuthModalOpen(false);
+                  navigate('/login');
+                }}
+                className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold underline inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Open Full Google Sign-In &amp; Account Portal</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             </div>
           </div>
         )}

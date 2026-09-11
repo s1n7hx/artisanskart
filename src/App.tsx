@@ -12,6 +12,7 @@ import { AdminPortalPage } from './pages/AdminPortalPage';
 import { ContactPage } from './pages/ContactPage';
 import { LoginPage } from './pages/LoginPage';
 import { PendingApprovalPage } from './pages/PendingApprovalPage';
+import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 
 export default function App() {
   return (
@@ -25,9 +26,11 @@ export default function App() {
             <Route path="collections" element={<CollectionsPage />} />
             <Route path="marketplace" element={<MarketplacePage />} />
             <Route path="maker" element={<MakerPortalPage />} />
+            <Route path="become-a-maker" element={<BecomeAMakerPage />} />
             <Route path="admin" element={<AdminPortalPage />} />
             <Route path="admin/cms" element={<AdminPortalPage />} />
             <Route path="admin/users" element={<AdminPortalPage />} />
+            <Route path="admin/applications" element={<AdminPortalPage />} />
             <Route path="pending-approval" element={<PendingApprovalPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="signin" element={<LoginPage />} />
