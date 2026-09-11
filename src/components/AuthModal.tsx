@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   X,
   ShieldCheck,
+  Shield,
   Hammer,
-  User,
-  Sparkles,
-  Mail,
-  Lock,
-  ArrowRight,
-  CheckCircle2,
-  AlertCircle,
   LogOut,
+  AlertCircle,
   ExternalLink,
 } from 'lucide-react';
-import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { signInWithGoogle, signInWithEmailPassword, signUpWithEmailPassword } from '../services/supabase';
-import { useNavigate } from 'react-router-dom';
+import { useApp } from '../context/AppContext';
 
 export const AuthModal: React.FC = () => {
   const navigate = useNavigate();
@@ -24,17 +18,10 @@ export const AuthModal: React.FC = () => {
     setIsAuthModalOpen,
     currentUser,
     userRole,
-    setUserRole,
-    setCurrentUser,
-    loginWithGoogleAccount,
+    signInWithGoogle,
     logoutUser,
-    showToast,
   } = useApp();
 
-  const [mode, setMode] = useState<'login' | 'signup' | 'select_role'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -44,77 +31,18 @@ export const AuthModal: React.FC = () => {
     try {
       setLoading(true);
       setErrorMsg('');
-      // Sign in as master admin by default or trigger Google login
-      await loginWithGoogleAccount(MASTER_ADMIN_EMAIL, 'Master Admin (ssumollah)');
-      setIsAuthModalOpen(false);
+      await signInWithGoogle();
     } catch (err: any) {
       console.warn('Google Auth Error:', err);
       setErrorMsg(err.message || 'Google Sign-In failed.');
-    } finally {
       setLoading(false);
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email || !password) {
-      setErrorMsg('Please enter both email and password.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setErrorMsg('');
-
-      if (mode === 'signup') {
-        const res = await signUpWithEmailPassword(email, password, name || 'Student Creator');
-        const user = res.user;
-        if (user) {
-          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-          const assignedRole = isMaster ? 'admin' : 'customer';
-          setCurrentUser({
-            id: user.id,
-            email: user.email || email,
-            name: name || (isMaster ? 'Master Admin' : 'Customer Shopper'),
-            role: assignedRole,
-          });
-          setUserRole(assignedRole);
-          showToast(
-            isMaster
-              ? 'Master Admin verified!'
-              : 'Account created as Customer! Master Admin can promote you to Maker.',
-            'sparkles'
-          );
-          setIsAuthModalOpen(false);
-        }
-      } else {
-        const res = await signInWithEmailPassword(email, password);
-        const user = res.user;
-        if (user) {
-          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
-          const assignedRole = isMaster ? 'admin' : email.includes('admin') ? 'admin' : 'customer';
-          setCurrentUser({
-            id: user.id,
-            email: user.email || email,
-            name: user.user_metadata?.full_name || (isMaster ? 'Master Admin' : email.split('@')[0]),
-            role: assignedRole,
-          });
-          setUserRole(assignedRole);
-          showToast(`Welcome back, ${isMaster ? 'Master Admin' : email.split('@')[0]}!`, 'check-circle-2');
-          setIsAuthModalOpen(false);
-        }
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Authentication failed. Please verify credentials.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignOut = () => {
-    setCurrentUser(null);
-    setUserRole('customer');
-    showToast('Signed out successfully.', 'log-out');
+  const handleSignOut = async () => {
+    setLoading(true);
+    await logoutUser();
+    setLoading(false);
     setIsAuthModalOpen(false);
   };
 
@@ -135,31 +63,39 @@ export const AuthModal: React.FC = () => {
             <ShieldCheck className="w-6 h-6" />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
-            {currentUser ? 'User Profile & Role' : mode === 'signup' ? 'Create an Account' : 'Welcome to ArtisansKart'}
+            {currentUser ? 'Account & Session' : 'Sign in to ArtisansKart'}
           </h2>
           <p className="text-slate-500 text-xs mt-1">
             {currentUser
-              ? `Signed in as ${currentUser.email}`
-              : 'Sign in to access student maker tools, track orders, or manage the site.'}
+              ? `Signed in with verified Google account`
+              : 'Authenticate with Google to manage your craft portfolio, orders, or admin panel.'}
           </p>
         </div>
 
-        {/* If user is already signed in, show profile & role management */}
+        {/* Error Notification */}
+        {errorMsg && (
+          <div className="p-3 mb-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">{errorMsg}</div>
+          </div>
+        )}
+
+        {/* State: User Logged In */}
         {currentUser ? (
           <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
+            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2.5 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Active User:</span>
-                <span className="text-xs font-extrabold text-slate-900">{currentUser.name}</span>
+                <span className="font-bold text-slate-500">Name:</span>
+                <span className="font-extrabold text-slate-900">{currentUser.name}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Email:</span>
-                <span className="text-xs font-mono text-slate-700">{currentUser.email}</span>
+                <span className="font-bold text-slate-500">Google Email:</span>
+                <span className="font-mono text-slate-700">{currentUser.email}</span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-200">
-                <span className="text-xs font-bold text-slate-500">Permission Level:</span>
+                <span className="font-bold text-slate-500">Permission:</span>
                 <span
-                  className={`text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider ${
+                  className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
                     userRole === 'admin'
                       ? 'bg-slate-900 text-white'
                       : userRole === 'maker'
@@ -167,7 +103,7 @@ export const AuthModal: React.FC = () => {
                       : 'bg-emerald-100 text-emerald-800'
                   }`}
                 >
-                  {userRole === 'admin' ? '🛡️ Master Admin' : userRole === 'maker' ? '🔨 Student Maker' : '👤 Customer'}
+                  {userRole}
                 </span>
               </div>
             </div>
@@ -183,7 +119,7 @@ export const AuthModal: React.FC = () => {
                     setIsAuthModalOpen(false);
                     navigate('/become-a-maker');
                   }}
-                  className="w-full py-2 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full py-2.5 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Hammer className="w-3.5 h-3.5" />
                   <span>Apply to Become a Maker</span>
@@ -193,6 +129,7 @@ export const AuthModal: React.FC = () => {
 
             <button
               onClick={handleSignOut}
+              disabled={loading}
               className="w-full py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer mt-4"
             >
               <LogOut className="w-4 h-4" />
@@ -200,15 +137,8 @@ export const AuthModal: React.FC = () => {
             </button>
           </div>
         ) : (
+          /* State: Not Logged In - Real Google OAuth ONLY */
           <div className="space-y-4">
-            {errorMsg && (
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="leading-relaxed">{errorMsg}</div>
-              </div>
-            )}
-
-            {/* Google Sign-In Button */}
             <button
               type="button"
               onClick={handleGoogleAuth}
@@ -233,86 +163,17 @@ export const AuthModal: React.FC = () => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>Continue with Google</span>
+              <span>{loading ? 'Connecting...' : 'Sign in with Google'}</span>
             </button>
 
-            <div className="relative flex items-center justify-center my-4">
-              <div className="border-t border-slate-200 w-full" />
-              <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider absolute">
-                Or Email Sign In
-              </span>
+            <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
+              <Shield className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="leading-relaxed">
+                <strong>Verified Sign-in:</strong> Real Google OAuth is required. Administrator privileges are granted only to allowlisted accounts.
+              </div>
             </div>
 
-            {/* Email / Password Form */}
-            <form onSubmit={handleEmailAuth} className="space-y-3">
-              {mode === 'signup' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Sakib Ansari"
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Email Address</label>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@email.com"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-2xl bg-[#C85A32] text-white font-bold text-sm hover:bg-[#b04a25] transition flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-              >
-                <span>{loading ? 'Processing...' : mode === 'signup' ? 'Create Account' : 'Sign In'}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </form>
-
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode(mode === 'login' ? 'signup' : 'login');
-                  setErrorMsg('');
-                }}
-                className="text-xs text-[#C85A32] font-bold hover:underline"
-              >
-                {mode === 'login' ? "Don't have an account? Sign up" : 'Already registered? Sign in'}
-              </button>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 text-center">
+            <div className="pt-2 border-t border-slate-100 text-center">
               <button
                 type="button"
                 onClick={() => {
@@ -321,8 +182,8 @@ export const AuthModal: React.FC = () => {
                 }}
                 className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold underline inline-flex items-center gap-1 cursor-pointer"
               >
-                <span>Open Full Google Sign-In &amp; Account Portal</span>
-                <ArrowRight className="w-3 h-3" />
+                <span>Go to login page</span>
+                <ExternalLink className="w-3 h-3" />
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
+export const MASTER_ADMIN_EMAIL_DEFAULT = 'ssumollah@gmail.com';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
@@ -9,8 +9,14 @@ export async function GET(request: NextRequest) {
   const next = requestUrl.searchParams.get('next') || requestUrl.searchParams.get('redirectTo') || '/';
 
   if (code) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+    const supabaseUrl =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
+      '';
+    const supabaseAnonKey =
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      '';
 
     const cookiesToSet: { name: string; value: string; options: CookieOptions }[] = [];
 
@@ -28,51 +34,131 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Exchange the auth code for session tokens
-    const { data: { session }, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    // 1. Exchange the auth code for a verified Supabase session
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError) {
       console.error('[Auth Callback] Error exchanging code for session:', exchangeError.message);
-      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin));
+      return NextResponse.redirect(
+        new URL(`/login?error=${encodeURIComponent(exchangeError.message)}`, requestUrl.origin)
+      );
     }
 
-    if (session?.user) {
-      const user = session.user;
-      const userEmail = user.email?.toLowerCase() || '';
-      const isMasterAdmin = userEmail === MASTER_ADMIN_EMAIL.toLowerCase();
+    // 2. Fetch the verified user directly from Supabase Auth server (never client-supplied)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
 
-      // Check if user profile already exists
+    if (user && !userError) {
+      // Verified email from auth.users populated ONLY by Supabase post-Google verification
+      const verifiedEmail = user.email?.trim().toLowerCase() || '';
+
+      // 3. Query the server database allowlist (e.g. site_settings or admin_allowlist)
+      let isAllowlistedAdmin = false;
+
+      // Check site_settings table for 'master_admin_email' row
+      try {
+        const { data: settingRow } = await supabase
+          .from('site_settings')
+          .select('value')
+          .eq('key', 'master_admin_email')
+          .maybeSingle();
+
+        if (settingRow && settingRow.value) {
+          const settingVal = settingRow.value;
+          const allowedEmail =
+            typeof settingVal === 'string'
+              ? settingVal.trim().toLowerCase()
+              : (settingVal.email || '').trim().toLowerCase();
+
+          if (allowedEmail && verifiedEmail === allowedEmail) {
+            isAllowlistedAdmin = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[Auth Callback] Could not query site_settings allowlist:', err);
+      }
+
+      // Check dedicated admin_allowlist table if present
+      if (!isAllowlistedAdmin) {
+        try {
+          const { data: allowlistRows } = await supabase
+            .from('admin_allowlist')
+            .select('email')
+            .eq('email', verifiedEmail)
+            .limit(1);
+
+          if (allowlistRows && allowlistRows.length > 0) {
+            isAllowlistedAdmin = true;
+          }
+        } catch {
+          // Table may not exist yet if migration pending
+        }
+      }
+
+      // Secure hardcoded fallback safeguard
+      if (!isAllowlistedAdmin && verifiedEmail === MASTER_ADMIN_EMAIL_DEFAULT.toLowerCase()) {
+        isAllowlistedAdmin = true;
+      }
+
+      // 4. Determine authoritative role: 'admin' only if email matches allowlist, else 'customer' by default
+      const authoritativeRole: 'admin' | 'customer' = isAllowlistedAdmin ? 'admin' : 'customer';
+
+      // 5. Query existing profile from public.profiles
       const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('id, role, status')
+        .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
+
+      const now = new Date().toISOString();
+      const fullName =
+        user.user_metadata?.full_name ||
+        user.user_metadata?.name ||
+        verifiedEmail.split('@')[0];
+      const avatarUrl =
+        user.user_metadata?.avatar_url ||
+        user.user_metadata?.picture ||
+        '';
 
       if (!existingProfile) {
-        // Requirement 1: When a new user logs in, automatically create a row in the profiles table with default role = 'customer' and status = 'approved'
-        const initialRole = isMasterAdmin ? 'admin' : 'customer';
-        const initialStatus = 'approved';
-
-        const { error: insertError } = await supabase.from('profiles').insert({
+        // New user: default to 'customer', or 'admin' if verified allowlisted email
+        const baseInsert: Record<string, any> = {
           id: user.id,
-          email: userEmail,
-          full_name: user.user_metadata?.full_name || user.user_metadata?.name || userEmail.split('@')[0],
-          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
-          role: initialRole,
-          status: initialStatus,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+          email: verifiedEmail,
+          full_name: fullName,
+          avatar_url: avatarUrl,
+          role: authoritativeRole,
+          created_at: now,
+          updated_at: now,
+        };
+
+        // Try inserting with status if column exists
+        let { error: insertError } = await supabase
+          .from('profiles')
+          .insert({ ...baseInsert, status: 'approved' });
+
+        if (insertError && insertError.message?.includes('status')) {
+          // Retry without status column if DB migration hasn't added status yet
+          const { error: retryError } = await supabase
+            .from('profiles')
+            .insert(baseInsert);
+          insertError = retryError;
+        }
 
         if (insertError) {
-          console.error('[Auth Callback] Failed to insert initial profile:', insertError.message);
+          console.error('[Auth Callback] Failed to insert profile:', insertError.message);
         }
-      } else if (isMasterAdmin && (existingProfile.role !== 'admin' || existingProfile.status !== 'approved')) {
-        // Ensure Master Admin always has active admin role & approved status
-        await supabase
-          .from('profiles')
-          .update({ role: 'admin', status: 'approved', updated_at: new Date().toISOString() })
-          .eq('id', user.id);
+      } else {
+        // Existing user:
+        // If user is allowlisted admin and not yet 'admin', elevate to 'admin'
+        if (isAllowlistedAdmin && existingProfile.role !== 'admin') {
+          await supabase
+            .from('profiles')
+            .update({ role: 'admin', updated_at: now })
+            .eq('id', user.id);
+        }
       }
     }
 

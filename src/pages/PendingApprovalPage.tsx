@@ -5,7 +5,7 @@ import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 
 export const PendingApprovalPage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, userRole, userStatus, logoutUser, loginWithGoogleAccount } = useApp();
+  const { currentUser, userRole, userStatus, logoutUser } = useApp();
 
   return (
     <div className="min-h-[80vh] py-12 px-4 sm:px-6 lg:px-8 max-w-2xl mx-auto flex flex-col justify-center items-center text-center">

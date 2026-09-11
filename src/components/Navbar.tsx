@@ -205,12 +205,18 @@ export const Navbar: React.FC = () => {
             ) : (
               <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
             )}
-            <span className="hidden sm:inline">
-              {currentUser ? currentUser.name.split(' ')[0] : 'Sign In'}
-            </span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full uppercase font-black bg-slate-100 text-slate-600">
-              {userRole}
-            </span>
+            {currentUser ? (
+              <>
+                <span className="hidden sm:inline">
+                  {currentUser.name.split(' ')[0]}
+                </span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full uppercase font-black bg-slate-100 text-slate-600">
+                  {userRole}
+                </span>
+              </>
+            ) : (
+              <span className="inline">Sign In</span>
+            )}
           </button>
 
           {/* Cart Button */}

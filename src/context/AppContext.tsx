@@ -18,6 +18,8 @@ import {
 } from '../services/wordpress';
 import {
   supabase,
+  signInWithGoogle as supabaseSignInWithGoogle,
+  signOutUser,
   fetchHeroCmsContent,
   saveHeroCmsContent,
   fetchAllProfiles,
@@ -70,8 +72,9 @@ interface AppContextType {
   promoteUserRole: (userId: string, newRole: UserRole, newStatus?: UserStatus) => Promise<void>;
   addNewUserAccount: (email: string, name: string, role: UserRole, status?: UserStatus, school?: string) => Promise<void>;
   removeUserAccount: (userId: string) => Promise<void>;
-  loginWithGoogleAccount: (email: string, name?: string, avatarUrl?: string) => Promise<UserAccount>;
-  logoutUser: () => void;
+  signInWithGoogle: (redirectTo?: string) => Promise<void>;
+  loginWithGoogleAccount: (email?: string, name?: string, avatarUrl?: string) => Promise<UserAccount>;
+  logoutUser: () => Promise<void>;
   requestElevatedRole: (role: 'admin' | 'maker', note?: string) => Promise<void>;
 
   // Hero & Animation Customization
@@ -106,85 +109,12 @@ const LOCAL_STORAGE_USERS_LIST_KEY = 'artisanskart_all_users_v1';
 
 export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
 
-const INITIAL_USERS: UserAccount[] = [
-  {
-    id: 'usr_master_admin_ssumollah',
-    email: 'ssumollah@gmail.com',
-    name: 'Master Admin (ssumollah)',
-    role: 'admin',
-    status: 'approved',
-    school: 'ArtisansKart Platform Headquarters',
-  },
-  {
-    id: 'usr_admin_default',
-    email: 'admin@artisanskart.in',
-    name: 'Platform Administrator',
-    role: 'admin',
-    status: 'approved',
-    school: 'Operations HQ',
-  },
-  {
-    id: 'usr_maker_sakib',
-    email: 'sakib.maker@delhischool.edu',
-    name: 'Sakib Ansari',
-    role: 'maker',
-    status: 'approved',
-    school: 'DPS RK Puram (Class 10)',
-    bio: 'Sculpting terracotta planters & traditional wheel pottery.',
-  },
-  {
-    id: 'usr_maker_meera',
-    email: 'meera.art@punecampus.in',
-    name: 'Meera Nair',
-    role: 'maker',
-    status: 'approved',
-    school: 'Bishop Cotton Pune (Class 12)',
-    bio: 'Watercolor greeting cards and botanical paintings.',
-  },
-  {
-    id: 'usr_maker_arjun',
-    email: 'arjun.crafts@jaipur.edu',
-    name: 'Arjun Verma',
-    role: 'maker',
-    status: 'approved',
-    school: 'Maharaja Sawai Man Jaipur (Class 9)',
-    bio: 'Handcrafted macrame bookmarks & keychains.',
-  },
-  {
-    id: 'usr_cust_patron',
-    email: 'visitor@artisanskart.in',
-    name: 'Customer Shopper',
-    role: 'customer',
-    status: 'approved',
-    school: 'Art Patron & Supporter',
-  },
-];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load user profile from localStorage or default to Master Admin for easy management
-  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_USER_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_USERS[0]; // Default to Master Admin
-  });
-
-  const [userRole, setUserRoleState] = useState<UserRole>(
-    currentUser?.role || 'admin'
-  );
-
-  const [userStatus, setUserStatusState] = useState<UserStatus>(
-    currentUser?.status || 'approved'
-  );
-
-  const [usersList, setUsersList] = useState<UserAccount[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_USERS_LIST_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return INITIAL_USERS;
-  });
+  // Session starts completely unauthenticated - verified exclusively via Supabase OAuth
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
+  const [userRole, setUserRoleState] = useState<UserRole>('customer');
+  const [userStatus, setUserStatusState] = useState<UserStatus>('approved');
+  const [usersList, setUsersList] = useState<UserAccount[]>([]);
 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
@@ -339,75 +269,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('User removed successfully.', 'trash-2');
   };
 
-  // Dedicated Google Account Authentication Handler
+  // Real Google OAuth Authentication Handler - No mock path
+  const signInWithGoogleAction = async (redirectTo?: string) => {
+    await supabaseSignInWithGoogle(redirectTo);
+  };
+
   const loginWithGoogleAccount = async (
-    email: string,
+    email?: string,
     name?: string,
     avatarUrl?: string
   ): Promise<UserAccount> => {
-    const cleanEmail = email.trim().toLowerCase();
-    const isMaster = cleanEmail === MASTER_ADMIN_EMAIL.toLowerCase();
-
-    // Check if user already exists in authorized users list
-    const matchedUser = usersList.find((u) => u.email.toLowerCase() === cleanEmail);
-
-    let role: UserRole = 'customer';
-    let status: UserStatus = 'approved';
-    let userName = name?.trim() || cleanEmail.split('@')[0];
-    let school = 'Customer Patron';
-
-    if (isMaster) {
-      role = 'admin';
-      status = 'approved';
-      userName = name?.trim() || 'Master Admin (ssumollah)';
-      school = 'ArtisansKart Platform Headquarters';
-    } else if (matchedUser) {
-      role = matchedUser.role;
-      status = matchedUser.status || 'approved';
-      userName = name?.trim() || matchedUser.name;
-      school = matchedUser.school || school;
-    }
-
-    const userAccount: UserAccount = {
-      id: matchedUser?.id || `usr_g_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      email: cleanEmail,
-      name: userName,
-      role,
-      status,
-      school,
-      avatarUrl: avatarUrl,
-    };
-
-    // If not already in users list, save them
-    if (!matchedUser) {
-      const updatedUsers = [userAccount, ...usersList];
-      setUsersList(updatedUsers);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(updatedUsers));
-      } catch (e) {}
-    }
-
-    setCurrentUser(userAccount);
-    setUserRoleState(role);
-    setUserStatusState(status);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(userAccount));
-    } catch (e) {}
-
-    if (isMaster) {
-      showToast('Signed in with Google as Master Admin (ssumollah@gmail.com)!', 'shield-check');
-    } else if (role === 'maker') {
-      showToast(`Welcome back, Student Maker ${userName}!`, 'sparkles');
-    } else {
-      showToast(`Signed in with Google as ${userName}`, 'check-circle-2');
-    }
-
-    return userAccount;
+    await supabaseSignInWithGoogle();
+    throw new Error('Redirecting to Google OAuth...');
   };
 
-  const logoutUser = () => {
+  const logoutUser = async () => {
+    try {
+      await signOutUser();
+    } catch (e) {
+      console.warn('Sign out notice:', e);
+    }
     setCurrentUser(null);
     setUserRoleState('customer');
+    setUserStatusState('approved');
     try {
       localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
     } catch (e) {}
@@ -527,46 +411,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     initSupabaseData();
 
-    // Supabase Auth State Change Listener
+    // 1. Initial Supabase session verification directly via getUser()
+    async function verifyInitialSession() {
+      try {
+        const {
+          data: { user },
+          error: authErr,
+        } = await supabase.auth.getUser();
+
+        if (user && !authErr) {
+          const profile = await getProfile(user.id);
+          const email = user.email || '';
+          const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
+          const resolvedRole: 'admin' | 'maker' | 'customer' = isMaster
+            ? 'admin'
+            : (profile?.role || 'customer');
+          const resolvedStatus: UserStatus = (profile?.status as UserStatus) || 'approved';
+
+          const userAccount: UserAccount = {
+            id: user.id,
+            email: email,
+            name:
+              profile?.full_name ||
+              user.user_metadata?.full_name ||
+              user.user_metadata?.name ||
+              (isMaster ? 'Master Admin' : email.split('@')[0]),
+            role: resolvedRole,
+            status: resolvedStatus,
+            school: profile?.school || (isMaster ? 'ArtisansKart Platform HQ' : 'Customer Patron'),
+            avatarUrl: profile?.avatar_url || user.user_metadata?.avatar_url || '',
+          };
+
+          setCurrentUser(userAccount);
+          setUserRoleState(resolvedRole);
+          setUserStatusState(resolvedStatus);
+        } else {
+          setCurrentUser(null);
+          setUserRoleState('customer');
+          setUserStatusState('approved');
+        }
+      } catch {
+        setCurrentUser(null);
+        setUserRoleState('customer');
+      }
+    }
+    verifyInitialSession();
+
+    // 2. Supabase Auth State Change Listener
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        setCurrentUser(null);
+        setUserRoleState('customer');
+        setUserStatusState('approved');
+      } else if (session?.user) {
         const email = session.user.email || '';
         const isMaster = email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase();
 
-        // Check if there is an existing profile or granted role
+        // Check if there is an existing profile in database
         const profile = await getProfile(session.user.id);
         const resolvedRole: 'admin' | 'maker' | 'customer' = isMaster
           ? 'admin'
-          : profile?.role || (email.includes('admin') ? 'admin' : 'customer');
+          : (profile?.role || 'customer');
+        const resolvedStatus: UserStatus = (profile?.status as UserStatus) || 'approved';
 
         const userAccount: UserAccount = {
           id: session.user.id,
           email: email,
           name:
+            profile?.full_name ||
             session.user.user_metadata?.full_name ||
             session.user.user_metadata?.name ||
             (isMaster ? 'Master Admin' : email.split('@')[0]),
           role: resolvedRole,
-          school: profile?.school || (isMaster ? 'Platform Headquarters' : 'Artisans Patron'),
+          status: resolvedStatus,
+          school: profile?.school || (isMaster ? 'ArtisansKart Platform HQ' : 'Customer Patron'),
+          avatarUrl: profile?.avatar_url || session.user.user_metadata?.avatar_url || '',
         };
 
         setCurrentUser(userAccount);
         setUserRoleState(resolvedRole);
-        try {
-          localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(userAccount));
-        } catch (e) {}
-
-        // Add to users list if not present
-        setUsersList((prev) => {
-          if (!prev.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-            const next = [userAccount, ...prev];
-            try {
-              localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
-            } catch (e) {}
-            return next;
-          }
-          return prev.map((u) => (u.email.toLowerCase() === email.toLowerCase() ? { ...u, ...userAccount } : u));
-        });
+        setUserStatusState(resolvedStatus);
       }
     });
 
@@ -816,6 +740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         promoteUserRole,
         addNewUserAccount,
         removeUserAccount,
+        signInWithGoogle: signInWithGoogleAction,
         loginWithGoogleAccount,
         logoutUser,
         requestElevatedRole,

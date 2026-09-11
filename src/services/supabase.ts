@@ -51,29 +51,6 @@ export async function signInWithGoogle(redirectTo?: string) {
   return data;
 }
 
-export async function signInWithEmailPassword(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
-}
-
-export async function signUpWithEmailPassword(email: string, password: string, fullName: string) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        full_name: fullName,
-      },
-    },
-  });
-  if (error) throw error;
-  return data;
-}
-
 export async function signOutUser() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
@@ -85,7 +62,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.warn('Could not fetch Supabase profile:', error.message);
@@ -97,15 +74,14 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
   }
 }
 
-// Upsert default profile on auth creation (customer, approved)
+// Upsert default profile on auth creation (customer by default; admin granted exclusively via server callback)
 export async function ensureUserProfile(
   userId: string,
   email: string,
   fullName?: string,
   avatarUrl?: string
 ): Promise<UserProfile> {
-  const isMaster = email.toLowerCase() === 'ssumollah@gmail.com';
-  const defaultRole = isMaster ? 'admin' : 'customer';
+  const defaultRole = 'customer';
   const defaultStatus = 'approved';
 
   const newProfile = {

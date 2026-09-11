@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
-export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
+export const MASTER_ADMIN_EMAIL_FALLBACK = 'ssumollah@gmail.com';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -14,13 +14,12 @@ export async function middleware(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
 
-  // Gracefully handle missing environment variables in preview/test environments
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('[ArtisansKart Middleware] Missing Supabase environment variables. Bypassing edge session check.');
+    console.warn('[ArtisansKart Middleware] Missing Supabase environment variables.');
     return response;
   }
 
-  // Initialize Supabase client for SSR edge runtime
+  // Initialize Supabase client for SSR edge runtime with verified cookies
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       get(name: string) {
@@ -46,7 +45,7 @@ export async function middleware(request: NextRequest) {
       remove(name: string, options: CookieOptions) {
         request.cookies.set({
           name,
-          value: '',
+          value,
           ...options,
         });
         response = NextResponse.next({
@@ -56,70 +55,65 @@ export async function middleware(request: NextRequest) {
         });
         response.cookies.set({
           name,
-          value: '',
+          value,
           ...options,
         });
       },
     },
   });
 
-  // Fetch the current session safely
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
   const isAdminRoute = pathname.startsWith('/admin');
   const isMakerRoute = pathname.startsWith('/maker');
 
   // Protect Admin and Maker routes
   if (isAdminRoute || isMakerRoute) {
-    // 1. If not authenticated, redirect to login page with return url
-    if (!session) {
+    // 1. Re-verify session on every request via auth.getUser() (not cached getSession)
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    // If not authenticated with a valid Supabase session, redirect to /login
+    if (authError || !user) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('redirectTo', pathname);
       return NextResponse.redirect(loginUrl);
     }
 
-    const userEmail = session.user.email?.toLowerCase() || '';
-
-    // Master Admin override: Always granted instant access
-    if (userEmail === MASTER_ADMIN_EMAIL.toLowerCase()) {
-      return response;
-    }
-
-    // 2. Fetch user role and status from the profiles table
-    const { data: profile, error } = await supabase
+    // 2. Fetch authoritative role from public.profiles table
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, status')
-      .eq('id', session.user.id)
-      .single();
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
 
-    if (error || !profile) {
-      console.warn(`[ArtisansKart Middleware] Profile query failed for user ${session.user.id}:`, error?.message);
-      // If profile record is not found yet, redirect to pending-approval
-      const pendingUrl = new URL('/pending-approval', request.url);
-      return NextResponse.redirect(pendingUrl);
+    if (profileError || !profile) {
+      // If profile does not exist yet or query fails, deny access and redirect to login
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirectTo', pathname);
+      return NextResponse.redirect(loginUrl);
     }
 
-    const role = profile.role || 'customer';
-    const status = profile.status || 'pending';
+    const role = profile.role;
 
-    // 3. Admin Route RBAC Check
+    // 3. Admin Route RBAC Check: Only profiles.role = 'admin' is allowed
     if (isAdminRoute) {
-      if (role !== 'admin' || status !== 'approved') {
-        const pendingUrl = new URL('/pending-approval', request.url);
-        pendingUrl.searchParams.set('required', 'admin');
-        return NextResponse.redirect(pendingUrl);
+      if (role !== 'admin') {
+        const redirectUrl = new URL('/login', request.url);
+        redirectUrl.searchParams.set('redirectTo', pathname);
+        redirectUrl.searchParams.set('error', 'Admin role required to access this workspace.');
+        return NextResponse.redirect(redirectUrl);
       }
     }
 
-    // 4. Maker Route RBAC Check
+    // 4. Maker Route RBAC Check: Only profiles.role = 'maker' or 'admin' is allowed
     if (isMakerRoute) {
-      const isAllowedRole = role === 'maker' || role === 'admin';
-      if (!isAllowedRole || status !== 'approved') {
-        const pendingUrl = new URL('/pending-approval', request.url);
-        pendingUrl.searchParams.set('required', 'maker');
-        return NextResponse.redirect(pendingUrl);
+      const isAllowed = role === 'maker' || role === 'admin';
+      if (!isAllowed) {
+        const redirectUrl = new URL('/login', request.url);
+        redirectUrl.searchParams.set('redirectTo', pathname);
+        redirectUrl.searchParams.set('error', 'Maker role required to access this workspace.');
+        return NextResponse.redirect(redirectUrl);
       }
     }
   }
@@ -131,6 +125,5 @@ export const config = {
   matcher: [
     '/admin/:path*',
     '/maker/:path*',
-    '/pending-approval',
   ],
 };

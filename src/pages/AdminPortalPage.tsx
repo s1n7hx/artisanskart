@@ -256,10 +256,10 @@ export const AdminPortalPage: React.FC = () => {
             <ArrowLeft className="w-4 h-4" /> Return to Storefront
           </button>
           <button
-            onClick={() => navigate('/login')}
+            onClick={() => navigate('/login?redirect=/admin')}
             className="w-full sm:w-auto px-5 py-2.5 rounded-full btn-terracotta text-white font-semibold text-sm shadow-sm transition flex items-center justify-center gap-2 cursor-pointer"
           >
-            <Lock className="w-4 h-4" /> Sign In as Master Admin (ssumollah@gmail.com)
+            <Lock className="w-4 h-4" /> Sign In with Google
           </button>
         </div>
       </div>
