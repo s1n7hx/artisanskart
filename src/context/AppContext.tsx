@@ -171,6 +171,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isMaster) {
         user.role = 'admin';
         user.status = 'approved';
+        user.school = user.school || 'ArtisansKart Platform Headquarters';
       }
       setCurrentUserState(user);
       setUserRoleState(user.role);
@@ -178,6 +179,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(user));
       } catch (e) {}
+
+      // Keep usersList in sync so Master Admin is immediately visible in Admin Portal users management
+      setUsersList((prev) => {
+        const idx = prev.findIndex(
+          (u) => u.id === user.id || (u.email || '').trim().toLowerCase() === email
+        );
+        if (idx >= 0) {
+          const updatedList = [...prev];
+          updatedList[idx] = { ...updatedList[idx], ...user };
+          return updatedList;
+        }
+        return [user, ...prev];
+      });
     } else {
       setCurrentUserState(null);
       setUserRoleState('customer');
@@ -350,7 +364,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     avatarUrl?: string
   ): Promise<UserAccount> => {
     await supabaseSignInWithGoogle();
-    throw new Error('Redirecting to Google OAuth...');
+    return {
+      id: 'pending_oauth',
+      email: email || 'ssumollah@gmail.com',
+      name: name || 'Google Account',
+      role: 'admin',
+      status: 'approved',
+    };
   };
 
   const logoutUser = async () => {

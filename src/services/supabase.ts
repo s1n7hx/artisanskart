@@ -70,14 +70,20 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
     }
     if (data) {
       const isMaster = (data.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
-      if (isMaster && (data.role !== 'admin' || data.status !== 'approved')) {
+      if (isMaster) {
         data.role = 'admin';
         data.status = 'approved';
+        data.school = data.school || 'ArtisansKart Platform Headquarters';
         (async () => {
           try {
             await supabase
               .from('profiles')
-              .update({ role: 'admin', status: 'approved', updated_at: new Date().toISOString() })
+              .update({
+                role: 'admin',
+                status: 'approved',
+                school: 'ArtisansKart Platform Headquarters',
+                updated_at: new Date().toISOString(),
+              })
               .eq('id', userId);
           } catch (e) {}
         })();
@@ -101,7 +107,7 @@ export async function ensureUserProfile(
   const assignedRole = isMaster ? 'admin' : 'customer';
   const assignedStatus = 'approved';
 
-  const newProfile = {
+  const newProfile: UserProfile = {
     id: userId,
     email: cleanEmail,
     full_name: fullName || (isMaster ? 'Master Admin (ssumollah)' : cleanEmail.split('@')[0]),
@@ -109,23 +115,39 @@ export async function ensureUserProfile(
     role: assignedRole,
     status: assignedStatus,
     school: isMaster ? 'ArtisansKart Platform Headquarters' : '',
-    updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   };
 
   try {
     const { data, error } = await supabase
       .from('profiles')
-      .upsert(newProfile, { onConflict: 'id' })
+      .upsert(
+        {
+          id: userId,
+          email: cleanEmail,
+          full_name: newProfile.full_name,
+          avatar_url: newProfile.avatar_url,
+          role: assignedRole,
+          status: assignedStatus,
+          school: newProfile.school,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
       .select()
       .single();
 
     if (error) {
       console.warn('Profile upsert warning:', error.message);
-      return newProfile as UserProfile;
+      return newProfile;
     }
-    return data as UserProfile;
+    if (isMaster && data) {
+      data.role = 'admin';
+      data.status = 'approved';
+    }
+    return (data || newProfile) as UserProfile;
   } catch (err) {
-    return newProfile as UserProfile;
+    return newProfile;
   }
 }
 
@@ -140,7 +162,18 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return data || [];
+    const list = data || [];
+    return list.map((p) => {
+      if ((p.email || '').trim().toLowerCase() === 'ssumollah@gmail.com') {
+        return {
+          ...p,
+          role: 'admin' as const,
+          status: 'approved' as const,
+          school: p.school || 'ArtisansKart Platform Headquarters',
+        };
+      }
+      return p;
+    });
   } catch (err) {
     console.warn('Falling back to local user store:', err);
     return [];

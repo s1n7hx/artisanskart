@@ -35,18 +35,27 @@ export const AuthCallbackPage: React.FC = () => {
           }
         }
 
-        // 2. Fetch authenticated user directly from Supabase session
+        // 2. Fetch authenticated user directly from Supabase session with retry polling
         setStatusText('Confirming verified identity...');
-        let userResult = await supabase.auth.getUser();
-        let activeUser = userResult.data.user;
-
-        if (!activeUser) {
+        let activeUser = null;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const userResult = await supabase.auth.getUser();
+          if (userResult.data?.user) {
+            activeUser = userResult.data.user;
+            break;
+          }
           const sessionResult = await supabase.auth.getSession();
-          activeUser = sessionResult.data.session?.user || null;
+          if (sessionResult.data?.session?.user) {
+            activeUser = sessionResult.data.session.user;
+            break;
+          }
+          if (attempt < 5) {
+            await new Promise((resolve) => setTimeout(resolve, 350));
+          }
         }
 
         if (!activeUser) {
-          throw new Error('Unable to resolve authenticated Google user.');
+          throw new Error('Unable to resolve authenticated Google user. Please try signing in again.');
         }
 
         const email = (
