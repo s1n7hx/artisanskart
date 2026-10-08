@@ -123,7 +123,7 @@ export const Footer: React.FC = () => {
                 <Sparkles className="w-3.5 h-3.5" /> Sell Your Crafts
               </button>
             </li>
-            {(userRole === 'maker' || userRole === 'admin') && (
+            {(userRole === 'maker' || userRole === 'admin' || userRole === 'master_admin') && (
               <li>
                 <Link to="/maker" className="hover:text-white transition">
                   Maker Portal Dashboard
@@ -159,7 +159,7 @@ export const Footer: React.FC = () => {
                 Contact &amp; Support
               </Link>
             </li>
-            {userRole === 'admin' && (
+            {(userRole === 'admin' || userRole === 'master_admin') && (
               <li>
                 <Link
                   to="/admin"

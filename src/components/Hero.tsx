@@ -164,7 +164,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             >
               <PencilRuler className="w-4 h-4" /> Become a Maker
             </button>
-            {userRole === 'admin' && (
+            {(userRole === 'admin' || userRole === 'master_admin') && (
               <button
                 onClick={() => setIsWpModalOpen(true)}
                 title="Customize photos, text and animations"

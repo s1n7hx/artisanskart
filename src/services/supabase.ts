@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { HeroContent, Product, Order } from '../types';
+import { HeroContent, Product, Order, UserRole, UserStatus } from '../types';
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL ||
@@ -23,8 +23,8 @@ export interface UserProfile {
   email: string;
   full_name: string;
   avatar_url?: string;
-  role: 'admin' | 'maker' | 'customer';
-  status: 'approved' | 'pending' | 'rejected';
+  role: UserRole;
+  status: UserStatus;
   school?: string;
   grade_class?: string;
   bio?: string;
@@ -71,7 +71,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
     if (data) {
       const isMaster = (data.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
       if (isMaster) {
-        data.role = 'admin';
+        data.role = 'master_admin';
         data.status = 'approved';
         data.school = data.school || 'ArtisansKart Platform Headquarters';
         (async () => {
@@ -79,7 +79,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
             await supabase
               .from('profiles')
               .update({
-                role: 'admin',
+                role: 'master_admin',
                 status: 'approved',
                 school: 'ArtisansKart Platform Headquarters',
                 updated_at: new Date().toISOString(),
@@ -104,13 +104,13 @@ export async function ensureUserProfile(
 ): Promise<UserProfile> {
   const cleanEmail = email.trim().toLowerCase();
   const isMaster = cleanEmail === 'ssumollah@gmail.com';
-  const assignedRole = isMaster ? 'admin' : 'customer';
+  const assignedRole: UserRole = isMaster ? 'master_admin' : 'customer';
   const assignedStatus = 'approved';
 
   const newProfile: UserProfile = {
     id: userId,
     email: cleanEmail,
-    full_name: fullName || (isMaster ? 'Master Admin (ssumollah)' : cleanEmail.split('@')[0]),
+    full_name: fullName || (isMaster ? 'Master Author (ssumollah)' : cleanEmail.split('@')[0]),
     avatar_url: avatarUrl || '',
     role: assignedRole,
     status: assignedStatus,
@@ -142,7 +142,7 @@ export async function ensureUserProfile(
       return newProfile;
     }
     if (isMaster && data) {
-      data.role = 'admin';
+      data.role = 'master_admin';
       data.status = 'approved';
     }
     return (data || newProfile) as UserProfile;
@@ -152,7 +152,7 @@ export async function ensureUserProfile(
 }
 
 // -------------------------------------------------------------
-// Master Admin: User & Role Management
+// Master Author / Admin: User & Role Management
 // -------------------------------------------------------------
 export async function fetchAllProfiles(): Promise<UserProfile[]> {
   try {
@@ -167,7 +167,7 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
       if ((p.email || '').trim().toLowerCase() === 'ssumollah@gmail.com') {
         return {
           ...p,
-          role: 'admin' as const,
+          role: 'master_admin' as const,
           status: 'approved' as const,
           school: p.school || 'ArtisansKart Platform Headquarters',
         };
@@ -180,7 +180,7 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
   }
 }
 
-export async function updateUserRole(userId: string, role: 'admin' | 'maker' | 'customer') {
+export async function updateUserRole(userId: string, role: UserRole) {
   const { data, error } = await supabase
     .from('profiles')
     .update({ role, updated_at: new Date().toISOString() })
@@ -202,7 +202,7 @@ export async function updateUserStatus(userId: string, status: 'approved' | 'pen
 
 export async function updateUserRoleAndStatus(
   userId: string,
-  role: 'admin' | 'maker' | 'customer',
+  role: UserRole,
   status: 'approved' | 'pending' | 'rejected'
 ) {
   const { data, error } = await supabase

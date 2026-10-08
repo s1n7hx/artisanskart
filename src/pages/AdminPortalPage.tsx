@@ -30,7 +30,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { Product, HeroContent, UserAccount } from '../types';
+import { Product, HeroContent, UserAccount, UserRole } from '../types';
 import { uploadImageToBucket } from '../services/supabase';
 
 export const AdminPortalPage: React.FC = () => {
@@ -97,8 +97,9 @@ export const AdminPortalPage: React.FC = () => {
 
   // User search & filter state
   const [userSearch, setUserSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'maker' | 'customer'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'master_admin' | 'admin' | 'maker' | 'customer'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, UserRole>>({});
 
   const handleSaveCms = (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,10 +216,11 @@ export const AdminPortalPage: React.FC = () => {
 
   const isMasterAdmin =
     (currentUser?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() ||
-    (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+    (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com' ||
+    userRole === 'master_admin';
 
   // Restrict access if the user is not an Admin or not approved (Master Admin is directly authorized)
-  if (!isMasterAdmin && (userRole !== 'admin' || userStatus !== 'approved')) {
+  if (!isMasterAdmin && ((userRole !== 'admin' && userRole !== 'master_admin') || userStatus !== 'approved')) {
     if (userRole === 'admin' && userStatus !== 'approved') {
       navigate('/pending-approval');
       return null;
@@ -815,9 +817,10 @@ export const AdminPortalPage: React.FC = () => {
           {/* User Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filteredUsers.map((u) => {
-              const isAdmin = u.role === 'admin';
-              const isMaker = u.role === 'maker';
-              const isMasterAdmin = u.email.toLowerCase() === 'ssumollah@gmail.com';
+              const isTargetMaster =
+                u.email.toLowerCase() === 'ssumollah@gmail.com' || u.role === 'master_admin';
+              const isTargetAdmin = u.role === 'admin';
+              const isTargetMaker = u.role === 'maker';
               const userStat = u.status || 'approved';
               const isApproved = userStat === 'approved';
               const isPending = userStat === 'pending';
@@ -834,14 +837,16 @@ export const AdminPortalPage: React.FC = () => {
                         <h4 className="font-extrabold text-slate-900 text-sm">{u.name}</h4>
                         <span
                           className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                            isAdmin
+                            isTargetMaster
+                              ? 'bg-amber-400 text-amber-950 font-black'
+                              : isTargetAdmin
                               ? 'bg-slate-900 text-white'
-                              : isMaker
+                              : isTargetMaker
                               ? 'bg-[#C85A32] text-white'
                               : 'bg-emerald-100 text-emerald-800'
                           }`}
                         >
-                          {u.role}
+                          {isTargetMaster ? 'Master Author' : u.role}
                         </span>
 
                         {/* Status Badge */}
@@ -857,9 +862,9 @@ export const AdminPortalPage: React.FC = () => {
                           {userStat}
                         </span>
 
-                        {isMasterAdmin && (
+                        {isTargetMaster && (
                           <span className="text-[10px] bg-amber-400 text-amber-950 font-black px-2 py-0.5 rounded-full">
-                            ★ Master
+                            ★ Master Author
                           </span>
                         )}
                       </div>
@@ -869,7 +874,7 @@ export const AdminPortalPage: React.FC = () => {
                       )}
                     </div>
 
-                    {!isMasterAdmin && (
+                    {!isTargetMaster && isMasterAdmin && (
                       <button
                         type="button"
                         onClick={() => removeUserAccount(u.id)}
@@ -881,90 +886,103 @@ export const AdminPortalPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Master Admin Actions */}
+                  {/* Role & Status Management */}
                   <div className="pt-3 border-t border-[#e7e0d8] space-y-2">
-                    {/* Role quick actions */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Role:</span>
+                    {isTargetMaster ? (
+                      <div className="flex items-center gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
+                        <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Permanent Master Author &bull; Protected from demotion or role changes</span>
+                      </div>
+                    ) : isMasterAdmin ? (
+                      <div className="space-y-2.5">
+                        {/* Interactive Role Assignment (Dropdown + Save) */}
+                        <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-semibold text-slate-500">Current role:</span>
+                            <span className="font-black uppercase text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-800">
+                              {u.role}
+                            </span>
+                          </div>
 
-                      {/* Promote to Admin / Demote to Customer */}
-                      {isAdmin ? (
-                        <button
-                          type="button"
-                          onClick={() => promoteUserRole(u.id, 'customer', 'approved')}
-                          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] transition cursor-pointer"
-                        >
-                          Demote to Customer
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => promoteUserRole(u.id, 'admin', 'approved')}
-                          className="px-2.5 py-1 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-[11px] transition cursor-pointer"
-                        >
-                          Promote to Admin
-                        </button>
-                      )}
+                          <div className="flex items-center gap-2 flex-wrap pt-1">
+                            <span className="text-xs font-bold text-slate-700">Change role:</span>
+                            <select
+                              value={roleDrafts[u.id] || u.role}
+                              onChange={(e) =>
+                                setRoleDrafts((prev) => ({
+                                  ...prev,
+                                  [u.id]: e.target.value as UserRole,
+                                }))
+                              }
+                              className="text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-slate-800 focus:outline-hidden focus:border-[#C85A32] cursor-pointer"
+                            >
+                              <option value="customer">Customer</option>
+                              <option value="maker">Maker</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const targetRole = roleDrafts[u.id] || u.role;
+                                promoteUserRole(u.id, targetRole, 'approved');
+                                setRoleDrafts((prev) => {
+                                  const copy = { ...prev };
+                                  delete copy[u.id];
+                                  return copy;
+                                });
+                              }}
+                              disabled={!roleDrafts[u.id] || roleDrafts[u.id] === u.role}
+                              className="px-3.5 py-1.5 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] disabled:opacity-40 disabled:hover:bg-[#C85A32] text-white text-xs font-bold transition cursor-pointer"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
 
-                      {/* Approve Maker / Revoke Maker Access */}
-                      {isMaker ? (
-                        <button
-                          type="button"
-                          onClick={() => promoteUserRole(u.id, 'customer', 'approved')}
-                          className="px-2.5 py-1 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] transition cursor-pointer border border-red-200"
-                        >
-                          Revoke Maker Access
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => promoteUserRole(u.id, 'maker', 'approved')}
-                          className="px-2.5 py-1 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-[11px] transition cursor-pointer"
-                        >
-                          Approve Maker
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Status quick actions */}
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status:</span>
-
-                      {isPending ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => grantUserStatus(u.id, 'approved')}
-                            className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition cursor-pointer"
-                          >
-                            ✓ Approve Access
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => grantUserStatus(u.id, 'rejected')}
-                            className="px-2.5 py-1 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] transition cursor-pointer border border-red-200"
-                          >
-                            ✗ Reject
-                          </button>
-                        </>
-                      ) : isRejected ? (
-                        <button
-                          type="button"
-                          onClick={() => grantUserStatus(u.id, 'approved')}
-                          className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition cursor-pointer"
-                        >
-                          ✓ Re-Approve
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => grantUserStatus(u.id, 'pending')}
-                          className="px-2.5 py-1 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] transition cursor-pointer"
-                        >
-                          Set to Pending
-                        </button>
-                      )}
-                    </div>
+                        {/* Status quick actions */}
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status:</span>
+                          {isPending ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => grantUserStatus(u.id, 'approved')}
+                                className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition cursor-pointer"
+                              >
+                                ✓ Approve Access
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => grantUserStatus(u.id, 'rejected')}
+                                className="px-2.5 py-1 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] transition cursor-pointer border border-red-200"
+                              >
+                                ✗ Reject
+                              </button>
+                            </>
+                          ) : isRejected ? (
+                            <button
+                              type="button"
+                              onClick={() => grantUserStatus(u.id, 'approved')}
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] transition cursor-pointer"
+                            >
+                              ✓ Re-Approve
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => grantUserStatus(u.id, 'pending')}
+                              className="px-2.5 py-1 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-[11px] transition cursor-pointer"
+                            >
+                              Set to Pending
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs italic">
+                        Role assignments and permissions are strictly managed by the Master Author.
+                      </div>
+                    )}
                   </div>
                 </div>
               );

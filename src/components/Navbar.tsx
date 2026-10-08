@@ -16,8 +16,8 @@ export const Navbar: React.FC = () => {
     setIsAuthModalOpen,
   } = useApp();
 
-  const isMaster = (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
-  const hasAdminAccess = userRole === 'admin' || isMaster;
+  const isMaster = (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com' || userRole === 'master_admin';
+  const hasAdminAccess = userRole === 'admin' || userRole === 'master_admin' || isMaster;
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -107,7 +107,7 @@ export const Navbar: React.FC = () => {
             <NavLink to="/login" className={navLinkClass}>
               Sign In
             </NavLink>
-            {(userRole === 'maker' || userRole === 'admin') && (
+            {(userRole === 'maker' || userRole === 'admin' || userRole === 'master_admin') && (
               <NavLink
                 to="/maker"
                 className={({ isActive }) =>
@@ -201,7 +201,9 @@ export const Navbar: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-[#e7e0d8] hover:border-[#C85A32] transition cursor-pointer shadow-xs touch-manipulation text-xs font-bold text-slate-700"
             title="User Account & Google Sign In"
           >
-            {userRole === 'admin' ? (
+            {userRole === 'master_admin' || isMaster ? (
+              <span className="w-2 h-2 rounded-full bg-amber-500 ring-2 ring-amber-200" />
+            ) : userRole === 'admin' ? (
               <span className="w-2 h-2 rounded-full bg-slate-900 ring-2 ring-slate-300" />
             ) : userRole === 'maker' ? (
               <span className="w-2 h-2 rounded-full bg-[#C85A32] ring-2 ring-orange-200" />
@@ -214,7 +216,7 @@ export const Navbar: React.FC = () => {
                   {currentUser.name.split(' ')[0]}
                 </span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full uppercase font-black bg-slate-100 text-slate-600">
-                  {isMaster ? 'Master Admin' : userRole}
+                  {isMaster ? 'Master Author' : (userRole === 'master_admin' ? 'Master Author' : userRole)}
                 </span>
               </>
             ) : (
@@ -348,10 +350,10 @@ export const Navbar: React.FC = () => {
                 <span>{currentUser ? `Account (${currentUser.name.split(' ')[0]})` : 'Sign In with Google'}</span>
               </span>
               <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                {userRole}
+                {isMaster ? 'Master Author' : (userRole === 'master_admin' ? 'Master Author' : userRole)}
               </span>
             </NavLink>
-            {(userRole === 'maker' || userRole === 'admin') && (
+            {(userRole === 'maker' || userRole === 'admin' || userRole === 'master_admin') && (
               <NavLink
                 to="/maker"
                 onClick={() => setMobileMenuOpen(false)}

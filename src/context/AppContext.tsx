@@ -138,7 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const u = JSON.parse(saved);
         const email = (u?.email || '').trim().toLowerCase();
         if (email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com') {
-          return 'admin';
+          return 'master_admin';
         }
         if (u?.role) return u.role;
       }
@@ -169,7 +169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const email = (user.email || '').trim().toLowerCase();
       const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com';
       if (isMaster) {
-        user.role = 'admin';
+        user.role = 'master_admin';
         user.status = 'approved';
         user.school = user.school || 'ArtisansKart Platform Headquarters';
       }
@@ -528,7 +528,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               'ssumollah@gmail.com',
               activeUser.user_metadata?.full_name ||
                 activeUser.user_metadata?.name ||
-                'Master Admin (ssumollah)',
+                'Master Author (ssumollah)',
               activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
             );
           } else if (!profile) {
@@ -540,7 +540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             );
           }
 
-          const resolvedRole: UserRole = isMaster ? 'admin' : (profile?.role || 'customer');
+          const resolvedRole: UserRole = isMaster ? 'master_admin' : (profile?.role || 'customer');
           const resolvedStatus: UserStatus = isMaster ? 'approved' : ((profile?.status as UserStatus) || 'approved');
 
           const userAccount: UserAccount = {
@@ -550,7 +550,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               profile?.full_name ||
               activeUser.user_metadata?.full_name ||
               activeUser.user_metadata?.name ||
-              (isMaster ? 'Master Admin (ssumollah)' : email.split('@')[0]),
+              (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
             role: resolvedRole,
             status: resolvedStatus,
             school:
@@ -593,7 +593,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             'ssumollah@gmail.com',
             session.user.user_metadata?.full_name ||
               session.user.user_metadata?.name ||
-              'Master Admin (ssumollah)',
+              'Master Author (ssumollah)',
             session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture
           );
         } else if (!profile) {
@@ -605,7 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           );
         }
 
-        const resolvedRole: UserRole = isMaster ? 'admin' : (profile?.role || 'customer');
+        const resolvedRole: UserRole = isMaster ? 'master_admin' : (profile?.role || 'customer');
         const resolvedStatus: UserStatus = isMaster ? 'approved' : ((profile?.status as UserStatus) || 'approved');
 
         const userAccount: UserAccount = {
@@ -615,7 +615,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             profile?.full_name ||
             session.user.user_metadata?.full_name ||
             session.user.user_metadata?.name ||
-            (isMaster ? 'Master Admin (ssumollah)' : email.split('@')[0]),
+            (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
           role: resolvedRole,
           status: resolvedStatus,
           school:

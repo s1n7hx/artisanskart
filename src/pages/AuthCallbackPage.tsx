@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
 import { supabase, ensureUserProfile } from '../services/supabase';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { UserAccount } from '../types';
+import { UserAccount, UserRole, UserStatus } from '../types';
 
 export const AuthCallbackPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,10 +21,6 @@ export const AuthCallbackPage: React.FC = () => {
         const next = searchParams.get('next') || searchParams.get('redirectTo') || '';
         const error = searchParams.get('error');
         const errorDescription = searchParams.get('error_description');
-
-        if (error) {
-          throw new Error(errorDescription || error || 'Authentication failed');
-        }
 
         // 1. If PKCE auth code is present, exchange it for session
         if (code) {
@@ -55,6 +51,14 @@ export const AuthCallbackPage: React.FC = () => {
         }
 
         if (!activeUser) {
+          if (error) {
+            const cleanErr = errorDescription || error || 'Database error saving new user';
+            throw new Error(
+              cleanErr.includes('Database error')
+                ? 'Supabase database sync issue during sign in. The fix migration has been applied. Please click Return to Sign In and sign in again.'
+                : cleanErr
+            );
+          }
           throw new Error('Unable to resolve authenticated Google user. Please try signing in again.');
         }
 
@@ -80,8 +84,8 @@ export const AuthCallbackPage: React.FC = () => {
           activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
         );
 
-        const assignedRole = isMaster ? 'admin' : profile.role || 'customer';
-        const assignedStatus = isMaster ? 'approved' : profile.status || 'approved';
+        const assignedRole: UserRole = isMaster ? 'master_admin' : (profile.role || 'customer');
+        const assignedStatus: UserStatus = isMaster ? 'approved' : (profile.status || 'approved');
 
         const userAccount: UserAccount = {
           id: activeUser.id,
@@ -90,7 +94,7 @@ export const AuthCallbackPage: React.FC = () => {
             profile.full_name ||
             activeUser.user_metadata?.full_name ||
             activeUser.user_metadata?.name ||
-            (isMaster ? 'Master Admin (ssumollah)' : email.split('@')[0]),
+            (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
           role: assignedRole,
           status: assignedStatus,
           school:
@@ -111,8 +115,8 @@ export const AuthCallbackPage: React.FC = () => {
             localStorage.setItem('artisanskart_current_user_v1', JSON.stringify(userAccount));
           } catch (e) {}
 
-          if (isMaster) {
-            showToast('Master Admin verified! Welcome ssumollah@gmail.com.', 'shield-check');
+          if (isMaster || assignedRole === 'master_admin' || assignedRole === 'admin') {
+            showToast('Master Author verified! Welcome ssumollah@gmail.com.', 'shield-check');
             navigate('/admin', { replace: true });
           } else if (assignedRole === 'maker') {
             showToast(`Welcome back, Student Maker ${userAccount.name}!`, 'sparkles');
