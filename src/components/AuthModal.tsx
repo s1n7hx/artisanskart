@@ -10,6 +10,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { maskEmail } from '../types';
 
 export const AuthModal: React.FC = () => {
   const navigate = useNavigate();
@@ -90,7 +91,7 @@ export const AuthModal: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-500">Google Email:</span>
-                <span className="font-mono text-slate-700">{currentUser.email}</span>
+                <span className="font-mono text-slate-700">{maskEmail(currentUser.email)}</span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                 <span className="font-bold text-slate-500">Permission:</span>

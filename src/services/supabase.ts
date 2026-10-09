@@ -95,7 +95,11 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
   }
 }
 
-// Upsert default profile on auth creation (Master Admin ssumollah@gmail.com is directly granted admin; others default to customer)
+// Upsert default profile on auth creation
+// Rules:
+// 1. Master Admin ssumollah@gmail.com -> automatically receives 'master_admin' (or 'admin' if enum not yet migrated) & 'approved'.
+// 2. Existing profile role is NEVER silently overwritten with 'customer' if already maker/admin/master_admin.
+// 3. Pre-authorized emails stored by the Master Author are honored when the user logs in for the first time.
 export async function ensureUserProfile(
   userId: string,
   email: string,
@@ -104,41 +108,127 @@ export async function ensureUserProfile(
 ): Promise<UserProfile> {
   const cleanEmail = email.trim().toLowerCase();
   const isMaster = cleanEmail === 'ssumollah@gmail.com';
-  const assignedRole: UserRole = isMaster ? 'master_admin' : 'customer';
-  const assignedStatus = 'approved';
+
+  // Check if profile already exists in Supabase
+  let existingProfile: UserProfile | null = null;
+  try {
+    const { data: existingData } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (existingData) {
+      existingProfile = existingData as UserProfile;
+    } else {
+      // Also try finding by email in case of pre-seeded/authorized profile
+      const { data: byEmail } = await supabase
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+      if (byEmail) {
+        existingProfile = byEmail as UserProfile;
+      }
+    }
+  } catch (e) {}
+
+  // Check if there was a pre-authorized role in local store
+  let preAuthorizedRole: UserRole | undefined;
+  let preAuthorizedStatus: UserStatus | undefined;
+  let preAuthorizedSchool: string | undefined;
+  try {
+    const storedUsers = localStorage.getItem('artisanskart_all_users_v1');
+    if (storedUsers) {
+      const list = JSON.parse(storedUsers);
+      const match = list.find((u: any) => (u.email || '').trim().toLowerCase() === cleanEmail);
+      if (match) {
+        preAuthorizedRole = match.role;
+        preAuthorizedStatus = match.status;
+        preAuthorizedSchool = match.school;
+      }
+    }
+  } catch (e) {}
+
+  // Determine final role:
+  // - Master always gets master_admin
+  // - If user already had a maker or admin role, PRESERVE IT
+  // - If user was pre-authorized by Master Admin in portal, ASSIGN IT
+  // - Otherwise, default to customer
+  let assignedRole: UserRole = 'customer';
+  let assignedStatus: UserStatus = 'approved';
+  let assignedSchool = '';
+
+  if (isMaster) {
+    assignedRole = 'master_admin';
+    assignedStatus = 'approved';
+    assignedSchool = 'ArtisansKart Platform Headquarters';
+  } else if (existingProfile && existingProfile.role && existingProfile.role !== 'customer') {
+    // Preserve existing role! Never overwrite with customer
+    assignedRole = existingProfile.role;
+    assignedStatus = existingProfile.status || 'approved';
+    assignedSchool = existingProfile.school || '';
+  } else if (preAuthorizedRole && preAuthorizedRole !== 'customer') {
+    assignedRole = preAuthorizedRole;
+    assignedStatus = preAuthorizedStatus || 'approved';
+    assignedSchool = preAuthorizedSchool || '';
+  }
 
   const newProfile: UserProfile = {
     id: userId,
     email: cleanEmail,
-    full_name: fullName || (isMaster ? 'Master Author (ssumollah)' : cleanEmail.split('@')[0]),
-    avatar_url: avatarUrl || '',
+    full_name: fullName || existingProfile?.full_name || (isMaster ? 'Master Author' : cleanEmail.split('@')[0]),
+    avatar_url: avatarUrl || existingProfile?.avatar_url || '',
     role: assignedRole,
     status: assignedStatus,
-    school: isMaster ? 'ArtisansKart Platform Headquarters' : '',
-    created_at: new Date().toISOString(),
+    school: assignedSchool || existingProfile?.school || (isMaster ? 'ArtisansKart Platform Headquarters' : ''),
+    created_at: existingProfile?.created_at || new Date().toISOString(),
   };
 
   try {
-    const { data, error } = await supabase
+    const payload: any = {
+      id: userId,
+      email: cleanEmail,
+      full_name: newProfile.full_name,
+      avatar_url: newProfile.avatar_url,
+      role: assignedRole === 'master_admin' ? (isMaster ? 'master_admin' : 'admin') : assignedRole,
+      status: assignedStatus,
+      school: newProfile.school,
+      updated_at: new Date().toISOString(),
+    };
+
+    let { data, error } = await supabase
       .from('profiles')
-      .upsert(
-        {
-          id: userId,
-          email: cleanEmail,
-          full_name: newProfile.full_name,
-          avatar_url: newProfile.avatar_url,
-          role: assignedRole,
-          status: assignedStatus,
-          school: newProfile.school,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'id' }
-      )
+      .upsert(payload, { onConflict: 'id' })
       .select()
       .single();
 
+    // If 'status' column doesn't exist yet, retry without 'status'
+    if (error && error.message?.includes('status')) {
+      delete payload.status;
+      const retryResult = await supabase
+        .from('profiles')
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .single();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+
+    // If 'master_admin' is not yet accepted by the enum in database, fallback to 'admin'
+    if (error && error.message?.includes('enum user_role')) {
+      payload.role = isMaster ? 'admin' : assignedRole === 'maker' ? 'maker' : 'customer';
+      const retryResult = await supabase
+        .from('profiles')
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .single();
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+
     if (error) {
-      console.warn('Profile upsert warning:', error.message);
+      console.warn('Profile upsert notice:', error.message);
       return newProfile;
     }
     if (isMaster && data) {
@@ -181,23 +271,44 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
 }
 
 export async function updateUserRole(userId: string, role: UserRole) {
-  const { data, error } = await supabase
+  // Defensive update: handle DB enum constraint and status column resilience
+  const payload: any = { role, updated_at: new Date().toISOString() };
+  let { data, error } = await supabase
     .from('profiles')
-    .update({ role, updated_at: new Date().toISOString() })
+    .update(payload)
     .eq('id', userId);
 
-  if (error) throw error;
+  // If role is master_admin and enum doesn't support it yet, fallback to admin in database
+  if (error && error.message?.includes('enum user_role') && role === 'master_admin') {
+    const retryResult = await supabase
+      .from('profiles')
+      .update({ role: 'admin', updated_at: new Date().toISOString() })
+      .eq('id', userId);
+    data = retryResult.data;
+    error = retryResult.error;
+  }
+
+  if (error) {
+    console.warn('Supabase profile role update notice:', error.message);
+  }
   return data;
 }
 
 export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected') {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq('id', userId);
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', userId);
 
-  if (error) throw error;
-  return data;
+    if (error) {
+      console.warn('Supabase status update notice (status column may be pending migration):', error.message);
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('updateUserStatus caught:', err.message);
+    return null;
+  }
 }
 
 export async function updateUserRoleAndStatus(
@@ -205,13 +316,96 @@ export async function updateUserRoleAndStatus(
   role: UserRole,
   status: 'approved' | 'pending' | 'rejected'
 ) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ role, status, updated_at: new Date().toISOString() })
-    .eq('id', userId);
+  try {
+    const payload: any = {
+      role: role === 'master_admin' ? 'admin' : role, // DB enum safety
+      status,
+      updated_at: new Date().toISOString(),
+    };
 
-  if (error) throw error;
-  return data;
+    let { data, error } = await supabase
+      .from('profiles')
+      .update(payload)
+      .eq('id', userId);
+
+    // If status column doesn't exist yet, retry updating just role
+    if (error && error.message?.includes('status')) {
+      const retryResult = await supabase
+        .from('profiles')
+        .update({ role: payload.role, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+      data = retryResult.data;
+      error = retryResult.error;
+    }
+
+    if (error) {
+      console.warn('Supabase role/status update notice:', error.message);
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('updateUserRoleAndStatus caught:', err.message);
+    return null;
+  }
+}
+
+// Maker Applications Management
+export interface MakerApplicationItem {
+  id: string;
+  user_id: string;
+  school: string;
+  grade_class: string;
+  message: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  applicant_name?: string;
+  applicant_email?: string;
+}
+
+export async function fetchAllMakerApplications(): Promise<MakerApplicationItem[]> {
+  try {
+    const { data, error } = await supabase
+      .from('maker_applications')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Table may not exist yet if migration has not been run
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    return [];
+  }
+}
+
+export async function reviewMakerApplication(
+  appId: string,
+  targetUserId: string,
+  newStatus: 'approved' | 'rejected'
+) {
+  try {
+    // 1. Update maker application record
+    const { error: appErr } = await supabase
+      .from('maker_applications')
+      .update({
+        status: newStatus,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', appId);
+
+    if (appErr) {
+      console.warn('Notice updating maker_applications:', appErr.message);
+    }
+
+    // 2. If approved, upgrade user's profile to 'maker' and 'approved'
+    if (newStatus === 'approved') {
+      await updateUserRoleAndStatus(targetUserId, 'maker', 'approved');
+    }
+  } catch (err: any) {
+    console.warn('reviewMakerApplication caught:', err.message);
+  }
 }
 
 // -------------------------------------------------------------

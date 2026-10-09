@@ -92,3 +92,39 @@ export interface UserAccount {
   createdAt?: string;
 }
 
+/**
+ * Privacy helper: masks email addresses so personal and user emails are never exposed.
+ * If the email belongs to Master Admin, it masks as 'Master Admin (Protected)' or masked identifier.
+ */
+export function maskEmail(email?: string | null, isMaster?: boolean): string {
+  if (!email || typeof email !== 'string') return '';
+  const trimmed = email.trim();
+  if (isMaster || trimmed.toLowerCase() === 'ssumollah@gmail.com') {
+    return 'Master Admin (Protected)';
+  }
+  const atIndex = trimmed.indexOf('@');
+  if (atIndex <= 0) return '••••••••';
+  const namePart = trimmed.slice(0, atIndex);
+  const domainPart = trimmed.slice(atIndex + 1);
+
+  let maskedName: string;
+  if (namePart.length <= 2) {
+    maskedName = namePart[0] + '•'.repeat(Math.max(1, namePart.length - 1));
+  } else {
+    maskedName = namePart[0] + '•'.repeat(Math.min(5, namePart.length - 2)) + namePart[namePart.length - 1];
+  }
+
+  const dotIndex = domainPart.lastIndexOf('.');
+  let maskedDomain: string;
+  if (dotIndex > 0) {
+    const dName = domainPart.slice(0, dotIndex);
+    const dExt = domainPart.slice(dotIndex);
+    const mD = dName.length <= 2 ? dName[0] + '•' : dName[0] + '•••' + dName[dName.length - 1];
+    maskedDomain = `${mD}${dExt}`;
+  } else {
+    maskedDomain = '••••.com';
+  }
+
+  return `${maskedName}@${maskedDomain}`;
+}
+

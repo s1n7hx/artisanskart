@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Clock, ShieldAlert, ArrowLeft, Mail, LogOut, Sparkles, CheckCircle2 } from 'lucide-react';
-import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
+import { useApp } from '../context/AppContext';
+import { maskEmail } from '../types';
 
 export const PendingApprovalPage: React.FC = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ export const PendingApprovalPage: React.FC = () => {
           <p className="text-sm text-slate-600 leading-relaxed max-w-md mx-auto">
             {userStatus === 'rejected'
               ? `Your application for the ${userRole.toUpperCase()} role was not approved. You can still browse and purchase from the public marketplace as a Customer.`
-              : `Your account (${currentUser?.email || 'user'}) is registered as a ${userRole.toUpperCase()}, but elevated administrative or artisan permissions require verification by the Master Admin.`}
+              : `Your account (${currentUser?.name || 'user'}) is registered as a ${userRole.toUpperCase()}, but elevated administrative or artisan permissions require verification by the Master Admin.`}
           </p>
         </div>
 
@@ -40,7 +41,9 @@ export const PendingApprovalPage: React.FC = () => {
         <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-left text-xs space-y-2">
           <div className="flex justify-between items-center">
             <span className="text-slate-500 font-bold">Logged In As:</span>
-            <span className="font-extrabold text-slate-800">{currentUser?.email || 'Guest User'}</span>
+            <span className="font-extrabold text-slate-800">
+              {currentUser ? `${currentUser.name} (${maskEmail(currentUser.email)})` : 'Guest User'}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-slate-500 font-bold">Requested Role:</span>
@@ -67,7 +70,7 @@ export const PendingApprovalPage: React.FC = () => {
             <span>Master Admin Review Process</span>
           </div>
           <p className="text-slate-300 text-[11px] leading-relaxed">
-            The platform Master Admin (<strong>{MASTER_ADMIN_EMAIL}</strong>) reviews maker portfolio submissions and co-admin privileges in the <strong>Admin &rarr; Users</strong> control dashboard.
+            The platform Master Admin reviews maker portfolio submissions and co-admin privileges in the <strong>Admin &rarr; Users</strong> control dashboard.
           </p>
         </div>
 

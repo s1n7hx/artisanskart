@@ -293,12 +293,15 @@ BEGIN
         ELSE profiles.avatar_url 
       END,
       role = CASE 
-        WHEN EXCLUDED.role = 'master_admin'::public.user_role THEN 'master_admin'::public.user_role 
+        WHEN is_master THEN 'master_admin'::public.user_role
+        -- NEVER downgrade an existing maker, admin, or master_admin to customer upon login
+        WHEN profiles.role IS NOT NULL AND profiles.role <> 'customer'::public.user_role THEN profiles.role
         ELSE profiles.role 
       END,
       status = CASE 
-        WHEN EXCLUDED.role = 'master_admin'::public.user_role THEN 'approved' 
-        ELSE profiles.status 
+        WHEN is_master THEN 'approved'
+        WHEN profiles.status IS NOT NULL THEN profiles.status
+        ELSE 'approved'
       END,
       school = CASE 
         WHEN EXCLUDED.school <> '' THEN EXCLUDED.school 
@@ -396,3 +399,67 @@ CREATE POLICY "Master author has full access to profiles"
     public.get_auth_role() IN ('master_admin', 'admin')
     OR LOWER(TRIM(COALESCE(auth.jwt() ->> 'email', ''))) = 'ssumollah@gmail.com'
   );
+
+-- ------------------------------------------------------------------------------
+-- STEP 9: Ensure maker_applications table and RLS policies exist
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.maker_applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  school TEXT NOT NULL,
+  grade_class TEXT NOT NULL,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  reviewed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_maker_applications_user_id ON public.maker_applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_maker_applications_status ON public.maker_applications(status);
+
+ALTER TABLE public.maker_applications ENABLE ROW LEVEL SECURITY;
+
+GRANT ALL ON TABLE public.maker_applications TO postgres, service_role;
+GRANT SELECT, INSERT ON TABLE public.maker_applications TO authenticated;
+GRANT UPDATE ON TABLE public.maker_applications TO authenticated;
+
+DROP POLICY IF EXISTS "Users can insert own application" ON public.maker_applications;
+DROP POLICY IF EXISTS "Users can view own application" ON public.maker_applications;
+DROP POLICY IF EXISTS "Admins can view all applications" ON public.maker_applications;
+DROP POLICY IF EXISTS "Admins can update all applications" ON public.maker_applications;
+
+CREATE POLICY "Users can insert own application"
+  ON public.maker_applications
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view own application"
+  ON public.maker_applications
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view all applications"
+  ON public.maker_applications
+  FOR SELECT
+  TO authenticated
+  USING (
+    public.get_auth_role() IN ('master_admin', 'admin')
+    OR LOWER(TRIM(COALESCE(auth.jwt() ->> 'email', ''))) = 'ssumollah@gmail.com'
+  );
+
+CREATE POLICY "Admins can update all applications"
+  ON public.maker_applications
+  FOR UPDATE
+  TO authenticated
+  USING (
+    public.get_auth_role() IN ('master_admin', 'admin')
+    OR LOWER(TRIM(COALESCE(auth.jwt() ->> 'email', ''))) = 'ssumollah@gmail.com'
+  )
+  WITH CHECK (
+    public.get_auth_role() IN ('master_admin', 'admin')
+    OR LOWER(TRIM(COALESCE(auth.jwt() ->> 'email', ''))) = 'ssumollah@gmail.com'
+  );
+

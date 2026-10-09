@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../services/supabase';
+import { maskEmail } from '../types';
 import {
   Hammer,
   Sparkles,
@@ -249,8 +250,8 @@ export const BecomeAMakerPage: React.FC = () => {
 
             <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-2 text-xs">
               <div className="flex justify-between border-b border-[#e7e0d8] pb-2">
-                <span className="text-slate-500">Applicant Email:</span>
-                <span className="font-bold text-slate-800">{currentUser.email}</span>
+                <span className="text-slate-500">Applicant:</span>
+                <span className="font-bold text-slate-800">{currentUser.name} ({maskEmail(currentUser.email)})</span>
               </div>
               <div className="flex justify-between border-b border-[#e7e0d8] pb-2">
                 <span className="text-slate-500">School / College:</span>
@@ -273,7 +274,7 @@ export const BecomeAMakerPage: React.FC = () => {
             <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 text-xs text-blue-900 flex items-center gap-2.5">
               <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
-                You do not need to submit again. Once approved by Master Admin (ssumollah@gmail.com), you will automatically gain access to <strong>/maker</strong>.
+                You do not need to submit again. Once approved by the Master Admin, you will automatically gain access to <strong>/maker</strong>.
               </span>
             </div>
           </div>
@@ -286,7 +287,7 @@ export const BecomeAMakerPage: React.FC = () => {
                 <span>Submit Maker Application</span>
               </h2>
               <p className="text-xs text-slate-500">
-                Applying as <strong className="text-slate-700">{currentUser.email}</strong>. Please provide accurate details.
+                Applying as <strong className="text-slate-700">{currentUser.name}</strong> ({maskEmail(currentUser.email)}). Please provide accurate details.
               </p>
             </div>
 

@@ -307,9 +307,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const existingIndex = usersList.findIndex((u) => u.email.toLowerCase() === trimmedEmail);
 
     const newUser: UserAccount = {
-      id: `usr_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: existingIndex >= 0 ? usersList[existingIndex].id : `usr_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       email: trimmedEmail,
-      name: name.trim() || trimmedEmail.split('@')[0],
+      name: name.trim() || (existingIndex >= 0 ? usersList[existingIndex].name : trimmedEmail.split('@')[0]),
       role: role,
       status: status,
       school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Campus Arts Club' : 'Customer Patron'),
@@ -325,6 +325,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setUsersList(nextList);
     try {
       localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
+    } catch (e) {}
+
+    // Try finding matching profile in Supabase to sync real database
+    try {
+      const { data: matched } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('email', trimmedEmail)
+        .maybeSingle();
+
+      if (matched?.id) {
+        newUser.id = matched.id;
+        await updateSupabaseUserRoleAndStatus(matched.id, role, status);
+      }
     } catch (e) {}
 
     // If active user is the one being updated
@@ -431,7 +445,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
 
     showToast(
-      `Request submitted for ${targetRole.toUpperCase()}! Master Admin (ssumollah@gmail.com) must approve before access is granted.`,
+      `Request submitted for ${targetRole.toUpperCase()}! Master Admin must approve before access is granted.`,
       'sparkles'
     );
   };
@@ -528,7 +542,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               'ssumollah@gmail.com',
               activeUser.user_metadata?.full_name ||
                 activeUser.user_metadata?.name ||
-                'Master Author (ssumollah)',
+                'Master Author',
               activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
             );
           } else if (!profile) {
@@ -550,7 +564,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               profile?.full_name ||
               activeUser.user_metadata?.full_name ||
               activeUser.user_metadata?.name ||
-              (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
+              (isMaster ? 'Master Author' : email.split('@')[0]),
             role: resolvedRole,
             status: resolvedStatus,
             school:
@@ -593,7 +607,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             'ssumollah@gmail.com',
             session.user.user_metadata?.full_name ||
               session.user.user_metadata?.name ||
-              'Master Author (ssumollah)',
+              'Master Author',
             session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture
           );
         } else if (!profile) {
@@ -615,7 +629,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             profile?.full_name ||
             session.user.user_metadata?.full_name ||
             session.user.user_metadata?.name ||
-            (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
+            (isMaster ? 'Master Author' : email.split('@')[0]),
           role: resolvedRole,
           status: resolvedStatus,
           school:

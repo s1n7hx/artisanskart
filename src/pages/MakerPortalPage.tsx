@@ -24,7 +24,7 @@ import {
   User,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Product } from '../types';
+import { Product, maskEmail } from '../types';
 
 export const MakerPortalPage: React.FC = () => {
   const navigate = useNavigate();
@@ -118,7 +118,7 @@ export const MakerPortalPage: React.FC = () => {
             Maker Access Awaiting Approval
           </h1>
           <p className="text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
-            Your account ({currentUser?.email}) is registered as a Student Maker, but access is pending verification by Master Admin (<strong>ssumollah@gmail.com</strong>).
+            Your account ({maskEmail(currentUser?.email) || currentUser?.name || 'User'}) is registered as a Student Maker, but access is pending verification by the Master Admin.
           </p>
         </div>
         <div className="flex justify-center gap-3">
@@ -160,10 +160,10 @@ export const MakerPortalPage: React.FC = () => {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-400 font-medium">Logged in User:</span>
-            <span className="font-semibold text-slate-700">{currentUser?.email || 'Guest / Not Signed In'}</span>
+            <span className="font-semibold text-slate-700">{currentUser ? currentUser.name : 'Guest / Not Signed In'}</span>
           </div>
           <div className="pt-2 border-t border-slate-100 text-slate-500 text-[11px] leading-relaxed">
-            💡 <strong>Need Maker Access?</strong> Sign in with your registered Google account, or have the Master Admin (<strong>ssumollah@gmail.com</strong>) grant you Maker permission from the Admin Portal.
+            💡 <strong>Need Maker Access?</strong> Sign in with your registered Google account, or have the Master Admin grant you Maker permission from the Admin Portal.
           </div>
         </div>
 

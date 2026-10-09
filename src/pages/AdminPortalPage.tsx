@@ -30,8 +30,13 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { Product, HeroContent, UserAccount, UserRole } from '../types';
-import { uploadImageToBucket } from '../services/supabase';
+import { Product, HeroContent, UserAccount, UserRole, maskEmail } from '../types';
+import {
+  uploadImageToBucket,
+  fetchAllMakerApplications,
+  reviewMakerApplication,
+  MakerApplicationItem,
+} from '../services/supabase';
 
 export const AdminPortalPage: React.FC = () => {
   const {
@@ -60,12 +65,16 @@ export const AdminPortalPage: React.FC = () => {
 
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'cms' | 'users' | 'products' | 'orders' | 'supabase'>(() => {
-    if (typeof window !== 'undefined' && window.location.pathname.includes('/users')) {
-      return 'users';
+  const [activeTab, setActiveTab] = useState<'cms' | 'users' | 'applications' | 'products' | 'orders' | 'supabase'>(() => {
+    if (typeof window !== 'undefined') {
+      if (window.location.pathname.includes('/applications')) return 'applications';
+      if (window.location.pathname.includes('/users')) return 'users';
     }
-    return 'cms';
+    return 'users';
   });
+
+  const [makerApps, setMakerApps] = useState<MakerApplicationItem[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
 
   // New authorized user state
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -100,6 +109,22 @@ export const AdminPortalPage: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<'all' | 'master_admin' | 'admin' | 'maker' | 'customer'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all');
   const [roleDrafts, setRoleDrafts] = useState<Record<string, UserRole>>({});
+
+  // Load maker applications on mount and tab switch
+  React.useEffect(() => {
+    async function loadApps() {
+      setLoadingApps(true);
+      try {
+        const apps = await fetchAllMakerApplications();
+        setMakerApps(apps);
+      } catch (err) {
+        console.warn('Error loading maker applications:', err);
+      } finally {
+        setLoadingApps(false);
+      }
+    }
+    loadApps();
+  }, [activeTab]);
 
   const handleSaveCms = (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,7 +275,7 @@ export const AdminPortalPage: React.FC = () => {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-400 font-medium">Logged in User:</span>
-            <span className="font-semibold text-slate-700">{currentUser?.email || 'Guest User'}</span>
+            <span className="font-semibold text-slate-700">{currentUser ? currentUser.name : 'Guest User'}</span>
           </div>
         </div>
 
@@ -329,7 +354,19 @@ export const AdminPortalPage: React.FC = () => {
           }`}
         >
           <Users className="w-4 h-4" />
-          <span>Users &amp; Permission Grants ({usersList.length})</span>
+          <span>User Role Management ({usersList.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('applications')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
+            activeTab === 'applications'
+              ? 'bg-[#C85A32] text-white shadow-sm'
+              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
+          }`}
+        >
+          <Hammer className="w-4 h-4" />
+          <span>Maker Applications ({makerApps.filter((a) => a.status === 'pending').length} Pending)</span>
         </button>
 
         <button
@@ -868,7 +905,15 @@ export const AdminPortalPage: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">{u.email}</p>
+                      <p className="text-xs font-mono mt-0.5">
+                        {isTargetMaster ? (
+                          <span className="text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                            Master Admin (Protected Email)
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">{maskEmail(u.email)}</span>
+                        )}
+                      </p>
                       {u.school && (
                         <p className="text-xs text-slate-600 font-medium mt-1">🏫 {u.school}</p>
                       )}
@@ -918,7 +963,7 @@ export const AdminPortalPage: React.FC = () => {
                             >
                               <option value="customer">Customer</option>
                               <option value="maker">Maker</option>
-                              <option value="admin">Admin</option>
+                              <option value="admin">Admin (Co-Admin)</option>
                             </select>
                             <button
                               type="button"
@@ -978,6 +1023,60 @@ export const AdminPortalPage: React.FC = () => {
                           )}
                         </div>
                       </div>
+                    ) : userRole === 'admin' ? (
+                      /* Co-admin management capabilities: Can manage makers and approval statuses, but CANNOT modify admin privileges */
+                      <div className="space-y-2">
+                        {u.role === 'admin' ? (
+                          <div className="p-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs flex items-center gap-1.5 font-medium">
+                            <Lock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Administrator account &bull; Modification restricted to Master Author</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-slate-700">Artisan access:</span>
+                              {u.role === 'customer' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => promoteUserRole(u.id, 'maker', 'approved')}
+                                  className="px-3 py-1 rounded-xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25] transition cursor-pointer"
+                                >
+                                  Grant Maker Role
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => promoteUserRole(u.id, 'customer', 'approved')}
+                                  className="px-3 py-1 rounded-xl bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition cursor-pointer"
+                                >
+                                  Revoke Maker
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-xs">
+                              {isPending && (
+                                <button
+                                  type="button"
+                                  onClick={() => grantUserStatus(u.id, 'approved')}
+                                  className="px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-bold text-[11px] transition cursor-pointer"
+                                >
+                                  ✓ Approve
+                                </button>
+                              )}
+                              {isApproved && u.role === 'maker' && (
+                                <button
+                                  type="button"
+                                  onClick={() => grantUserStatus(u.id, 'rejected')}
+                                  className="px-2.5 py-1 rounded-xl bg-red-50 text-red-700 border border-red-200 font-bold text-[11px] transition cursor-pointer"
+                                >
+                                  Suspend Maker
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <div className="p-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs italic">
                         Role assignments and permissions are strictly managed by the Master Author.
@@ -988,6 +1087,174 @@ export const AdminPortalPage: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------
+          TAB: MAKER APPLICATIONS (REVIEW & APPROVAL)
+      ------------------------------------------------------------- */}
+      {activeTab === 'applications' && (
+        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#e7e0d8]">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-black text-slate-900">
+                  Maker Applications &amp; Student Portfolios
+                </h2>
+                <span className="text-xs bg-[#C85A32]/10 text-[#C85A32] font-black px-2.5 py-0.5 rounded-full">
+                  {makerApps.length} total applications
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Review student creator applications. Approving an application automatically upgrades the user's role to <strong>Maker</strong> in the database.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setLoadingApps(true);
+                try {
+                  const apps = await fetchAllMakerApplications();
+                  setMakerApps(apps);
+                  showToast('Maker applications refreshed.', 'rotate-ccw');
+                } finally {
+                  setLoadingApps(false);
+                }
+              }}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer self-start sm:self-auto flex items-center gap-1.5 text-xs font-bold"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          {makerApps.length === 0 ? (
+            <div className="p-10 text-center rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
+              <Hammer className="w-10 h-10 text-slate-400 mx-auto" />
+              <h3 className="text-base font-bold text-slate-800">No Maker Applications Found</h3>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                When customers apply through <strong>"Become a Maker"</strong> or the <strong>"Sell Crafts"</strong> portal, their submissions appear here for review.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {makerApps.map((app) => {
+                const userMatch = usersList.find((u) => u.id === app.user_id);
+                const applicantEmail = app.applicant_email || userMatch?.email || 'Student Creator';
+                const applicantName = app.applicant_name || userMatch?.name || 'Applicant';
+                const isPending = app.status === 'pending';
+                const isApproved = app.status === 'approved';
+                const isRejected = app.status === 'rejected';
+
+                return (
+                  <div
+                    key={app.id}
+                    className="p-5 rounded-2xl border border-[#e7e0d8] bg-[#FAF9F6] hover:bg-white hover:border-[#C85A32]/40 transition space-y-3"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-extrabold text-slate-900 text-sm">{applicantName}</h4>
+                          <span
+                            className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isPending
+                                ? 'bg-amber-100 text-amber-800 animate-pulse'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {app.status}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">{maskEmail(applicantEmail)}</p>
+                        <p className="text-xs text-slate-700 font-medium mt-1">
+                          🏫 <strong>{app.school}</strong> • Class: <strong>{app.grade_class}</strong>
+                        </p>
+                      </div>
+
+                      <span className="text-[11px] text-slate-400">
+                        {new Date(app.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    {app.message && (
+                      <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                          Artist Statement / Proposal:
+                        </span>
+                        {app.message}
+                      </div>
+                    )}
+
+                    <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#e7e0d8]">
+                      <div className="text-xs text-slate-500">
+                        Current role: <strong className="text-slate-800 uppercase">{userMatch?.role || 'Customer'}</strong>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {isPending ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await reviewMakerApplication(app.id, app.user_id, 'approved');
+                                setMakerApps((prev) =>
+                                  prev.map((a) => (a.id === app.id ? { ...a, status: 'approved' } : a))
+                                );
+                                if (userMatch) {
+                                  promoteUserRole(userMatch.id, 'maker', 'approved');
+                                }
+                                showToast(`Approved maker application for ${applicantName}!`, 'check-circle-2');
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                            >
+                              ✓ Approve Maker
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await reviewMakerApplication(app.id, app.user_id, 'rejected');
+                                setMakerApps((prev) =>
+                                  prev.map((a) => (a.id === app.id ? { ...a, status: 'rejected' } : a))
+                                );
+                                showToast(`Rejected application for ${applicantName}.`, 'alert-circle');
+                              }}
+                              className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs transition cursor-pointer"
+                            >
+                              ✗ Reject
+                            </button>
+                          </>
+                        ) : isRejected ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await reviewMakerApplication(app.id, app.user_id, 'approved');
+                              setMakerApps((prev) =>
+                                prev.map((a) => (a.id === app.id ? { ...a, status: 'approved' } : a))
+                              );
+                              if (userMatch) {
+                                promoteUserRole(userMatch.id, 'maker', 'approved');
+                              }
+                              showToast(`Re-approved maker application for ${applicantName}!`, 'check-circle-2');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer"
+                          >
+                            ✓ Re-Approve
+                          </button>
+                        ) : (
+                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 className="w-4 h-4" /> Approved Student Maker
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

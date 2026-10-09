@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { signInWithGoogle as supabaseSignInWithGoogle } from '../services/supabase';
+import { maskEmail } from '../types';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -99,7 +100,7 @@ export const LoginPage: React.FC = () => {
                 )}
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm leading-tight">{currentUser.name}</h3>
-                  <p className="text-xs text-slate-500">{currentUser.email}</p>
+                  <p className="text-xs text-slate-500 font-mono">{maskEmail(currentUser.email)}</p>
                 </div>
               </div>
 

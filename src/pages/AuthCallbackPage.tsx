@@ -55,7 +55,7 @@ export const AuthCallbackPage: React.FC = () => {
             const cleanErr = errorDescription || error || 'Database error saving new user';
             throw new Error(
               cleanErr.includes('Database error')
-                ? 'Supabase database sync issue during sign in. The fix migration has been applied. Please click Return to Sign In and sign in again.'
+                ? `Supabase database error during sign in (${cleanErr}). The trigger function (handle_new_user) encountered a missing type or search_path issue. Please run the migration script in your Supabase SQL Editor.`
                 : cleanErr
             );
           }
@@ -80,7 +80,7 @@ export const AuthCallbackPage: React.FC = () => {
           isMaster ? 'ssumollah@gmail.com' : email,
           activeUser.user_metadata?.full_name ||
             activeUser.user_metadata?.name ||
-            (isMaster ? 'Master Admin (ssumollah)' : undefined),
+            (isMaster ? 'Master Admin' : undefined),
           activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture
         );
 
@@ -94,7 +94,7 @@ export const AuthCallbackPage: React.FC = () => {
             profile.full_name ||
             activeUser.user_metadata?.full_name ||
             activeUser.user_metadata?.name ||
-            (isMaster ? 'Master Author (ssumollah)' : email.split('@')[0]),
+            (isMaster ? 'Master Author' : email.split('@')[0]),
           role: assignedRole,
           status: assignedStatus,
           school:
@@ -116,7 +116,7 @@ export const AuthCallbackPage: React.FC = () => {
           } catch (e) {}
 
           if (isMaster || assignedRole === 'master_admin' || assignedRole === 'admin') {
-            showToast('Master Author verified! Welcome ssumollah@gmail.com.', 'shield-check');
+            showToast('Master Author verified! Welcome to the Admin Portal.', 'shield-check');
             navigate('/admin', { replace: true });
           } else if (assignedRole === 'maker') {
             showToast(`Welcome back, Student Maker ${userAccount.name}!`, 'sparkles');
