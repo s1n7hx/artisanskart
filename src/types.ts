@@ -1,3 +1,10 @@
+export interface ProductImage {
+  url: string;
+  alt?: string;
+  is_primary?: boolean;
+  order?: number;
+}
+
 export interface Product {
   id: number;
   title: string;
@@ -8,27 +15,91 @@ export interface Product {
   maker: string;
   cls: string;
   school: string;
-  image: string;
+  image: string; // Designated primary image URL
+  images?: string[]; // Array of additional/all gallery image URLs
+  gallery?: ProductImage[]; // Detailed gallery records
   stock: string;
   description?: string;
   wpId?: number | string;
   source?: 'wordpress' | 'custom' | 'default';
   updatedAt?: string;
+
+  // Professional specifications
+  originalPrice?: number;
+  materials?: string;
+  dimensions?: string;
+  weight?: string;
+  careInstructions?: string;
+  inStockCount?: number;
+  slug?: string;
+  makerId?: string;
+  featured?: boolean;
 }
+
+export interface CustomerAddress {
+  id: string;
+  userId?: string;
+  fullName: string;
+  phone: string;
+  pincode: string;
+  buildingHouse: string;
+  streetAddress: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  country: string;
+  isDefault?: boolean;
+}
+
+export interface OrderItemSnapshot {
+  productId: number;
+  title: string;
+  imageUrl: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  makerName: string;
+  makerId?: string;
+  makerEarningPercent?: number;
+  makerShareAmount?: number;
+  productionStatus?: 'pending' | 'in_production' | 'ready_for_pickup' | 'completed';
+}
+
+export type OrderStatus = 'new' | 'in_production' | 'ready' | 'shipped' | 'completed' | 'cancelled';
+export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'cod';
+export type PaymentMethod = 'razorpay' | 'upi' | 'card' | 'netbanking' | 'cod' | 'test_gateway';
 
 export interface Order {
   id: number;
+  orderNumber?: string;
   city: string;
-  product: string;
+  product: string; // comma-separated or primary title for backward compat
   qty: number;
   deadline: string;
-  status: 'new' | 'in_production' | 'ready' | 'completed';
+  status: OrderStatus;
   amount: number;
+  items?: OrderItemSnapshot[];
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  shippingAddress?: CustomerAddress;
+  paymentStatus?: PaymentStatus;
+  paymentMethod?: PaymentMethod;
+  trackingAwb?: string;
+  courierName?: string;
+  shipmentId?: string;
+  estimatedDelivery?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  itemsTotal?: number;
+  shippingFee?: number;
+  discountAmount?: number;
 }
 
 export interface CartItem {
   id: number;
   qty: number;
+  selectedOptions?: Record<string, string>;
 }
 
 export interface CollectionItem {
@@ -126,5 +197,18 @@ export function maskEmail(email?: string | null, isMaster?: boolean): string {
   }
 
   return `${maskedName}@${maskedDomain}`;
+}
+
+export function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
+export function getProductSlug(product: { id: number; title: string; slug?: string }): string {
+  if (product.slug) return product.slug;
+  return `${slugify(product.title)}-${product.id}`;
 }
 
