@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product, maskEmail } from '../types';
+import { ImageUploader } from '../components/ImageUploader';
 
 export const MakerPortalPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,9 +41,11 @@ export const MakerPortalPage: React.FC = () => {
     addNewProduct,
     showToast,
     setIsAuthModalOpen,
+    makerEarningPercent,
   } = useApp();
 
   const [isAddingCraft, setIsAddingCraft] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
   const [craftForm, setCraftForm] = useState({
     title: '',
     category: 'Clay Crafts',
@@ -56,7 +59,7 @@ export const MakerPortalPage: React.FC = () => {
 
   const completed = orders.filter((o) => o.status === 'completed');
   const active = orders.filter((o) => o.status !== 'completed');
-  const totalEarnings = completed.reduce((s, o) => s + o.amount * 0.65, 0);
+  const totalEarnings = completed.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
 
   const statusMeta = {
     new: { label: 'New Order', cls: 'badge-sage' },
@@ -72,10 +75,15 @@ export const MakerPortalPage: React.FC = () => {
       return;
     }
 
+    const resolvedCategory =
+      craftForm.category === 'Other'
+        ? customCategory.trim() || 'Other Crafts'
+        : craftForm.category;
+
     const newCraft: Product = {
       id: Date.now(),
       title: craftForm.title,
-      category: craftForm.category,
+      category: resolvedCategory,
       price: Number(craftForm.price),
       rating: 5.0,
       reviews: 1,
@@ -89,8 +97,9 @@ export const MakerPortalPage: React.FC = () => {
     };
 
     addNewProduct(newCraft);
-    showToast(`Your craft "${newCraft.title}" is published on the storefront!`, 'sparkles');
+    showToast(`Your craft "${newCraft.title}" (${resolvedCategory}) is published on the storefront!`, 'sparkles');
     setIsAddingCraft(false);
+    setCustomCategory('');
     setCraftForm({
       title: '',
       category: 'Clay Crafts',
@@ -264,32 +273,121 @@ export const MakerPortalPage: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
-                  <select
-                    value={craftForm.category}
-                    onChange={(e) => setCraftForm({ ...craftForm, category: e.target.value })}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white"
-                  >
-                    <option value="Clay Crafts">Clay Crafts</option>
-                    <option value="Hand-painted Cards">Hand-painted Cards</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Keychains">Keychains</option>
-                  </select>
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Product Type / Category
+                    </label>
+                    <select
+                      value={craftForm.category}
+                      onChange={(e) => setCraftForm({ ...craftForm, category: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-hidden focus:border-[#C85A32] font-medium"
+                    >
+                      <option value="Paintings">Paintings &amp; Canvas Art</option>
+                      <option value="Clay Crafts">Clay Crafts &amp; Pottery</option>
+                      <option value="Hand-painted Cards">Hand-painted Cards</option>
+                      <option value="Accessories">Accessories &amp; Beads</option>
+                      <option value="Keychains">Keychains &amp; Charms</option>
+                      <option value="Pottery & Ceramics">Pottery &amp; Ceramics</option>
+                      <option value="Resin & Glass Art">Resin &amp; Glass Art</option>
+                      <option value="Textiles & Macramé">Textiles &amp; Macramé</option>
+                      <option value="Other">Other (Custom Craft Type...)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹ INR)</label>
+                    <input
+                      type="number"
+                      required
+                      min={49}
+                      value={craftForm.price}
+                      onChange={(e) => setCraftForm({ ...craftForm, price: Number(e.target.value) })}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32] focus:outline-hidden focus:border-[#C85A32]"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹ INR)</label>
-                  <input
-                    type="number"
-                    required
-                    min={49}
-                    value={craftForm.price}
-                    onChange={(e) => setCraftForm({ ...craftForm, price: Number(e.target.value) })}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32]"
-                  />
+
+                {/* Quick Category Selection Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {[
+                    { id: 'Paintings', label: '🎨 Paintings & Art' },
+                    { id: 'Clay Crafts', label: '🏺 Clay Crafts' },
+                    { id: 'Hand-painted Cards', label: '💌 Hand-painted Cards' },
+                    { id: 'Accessories', label: '📿 Accessories' },
+                    { id: 'Keychains', label: '🔑 Keychains' },
+                    { id: 'Other', label: '✨ Other (Custom Type)' },
+                  ].map((chip) => (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => setCraftForm({ ...craftForm, category: chip.id })}
+                      className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition cursor-pointer ${
+                        craftForm.category === chip.id
+                          ? 'bg-[#C85A32] text-white border-[#C85A32] shadow-2xs'
+                          : 'bg-white text-slate-600 border-slate-200 hover:border-[#C85A32] hover:bg-orange-50/50'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              {craftForm.category === 'Other' && (
+                <div className="p-4 bg-orange-50/80 border border-orange-200 rounded-2xl space-y-2.5 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-black text-[#C85A32]">
+                      Specify Custom Craft / Product Type *
+                    </label>
+                    <span className="text-[10px] text-orange-700 font-bold bg-orange-200/60 px-2 py-0.5 rounded-full">
+                      Custom Category
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    placeholder="e.g. Acrylic Painting, Woodcarving, Resin Coasters, Scented Candle..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-orange-300 text-sm bg-white focus:outline-hidden focus:border-[#C85A32] font-medium shadow-2xs"
+                  />
+                  <div>
+                    <span className="text-[11px] text-slate-500 font-semibold block mb-1">
+                      Quick suggestions (tap to fill):
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'Paintings',
+                        'Watercolor Canvas',
+                        'Resin Coasters',
+                        'Handmade Candles',
+                        'Crochet Stuffed Toy',
+                        'Woodcarving',
+                        'Paper Origami',
+                        'Beaded Jewelry',
+                        'Embroidery Art',
+                      ].map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setCustomCategory(item)}
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition cursor-pointer ${
+                            customCategory === item
+                              ? 'bg-[#C85A32] text-white border-[#C85A32]'
+                              : 'bg-white text-slate-700 border-orange-200 hover:bg-orange-100/70'
+                          }`}
+                        >
+                          + {item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    This custom craft type will appear on storefront cards and become an active marketplace filter.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Description &amp; Technique</label>
@@ -298,33 +396,20 @@ export const MakerPortalPage: React.FC = () => {
                   value={craftForm.description}
                   onChange={(e) => setCraftForm({ ...craftForm, description: e.target.value })}
                   placeholder="Describe the materials used (e.g., natural riverbed clay, organic acrylics, varnished finish)..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-hidden focus:border-[#C85A32]"
                 />
               </div>
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Product Photo URL</label>
-                <input
-                  type="text"
-                  value={craftForm.image}
-                  onChange={(e) => setCraftForm({ ...craftForm, image: e.target.value })}
-                  placeholder="https://images.pexels.com/..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 text-xs font-mono mb-2"
-                />
-                <div className="h-40 w-full rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center relative">
-                  {craftForm.image ? (
-                    <img
-                      src={craftForm.image}
-                      alt="Craft Preview"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-xs text-slate-400">Photo Preview</span>
-                  )}
-                </div>
-              </div>
+              <ImageUploader
+                value={craftForm.image}
+                onChange={(url) => setCraftForm({ ...craftForm, image: url })}
+                label="Product Photography"
+                helperText="Upload photo from device or paste link"
+                placeholder="https://images.pexels.com/..."
+                previewHeight="h-44"
+              />
 
               <div className="pt-2 flex justify-end gap-3">
                 <button
@@ -352,7 +437,7 @@ export const MakerPortalPage: React.FC = () => {
         <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8] shadow-xs">
           <div className="flex items-center justify-between">
             <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
-              Total Earnings (65%)
+              Total Earnings ({makerEarningPercent}%)
             </p>
             <Wallet className="w-5 h-5 text-[#C85A32]" />
           </div>
@@ -401,9 +486,9 @@ export const MakerPortalPage: React.FC = () => {
             </p>
             <Hammer className="w-5 h-5 text-[#1E293B]" />
           </div>
-          <p className="text-3xl font-black mt-2 text-[#1E293B]">65%</p>
+          <p className="text-3xl font-black mt-2 text-[#1E293B]">{makerEarningPercent}%</p>
           <span className="text-[11px] text-slate-400 mt-1 block">
-            35% funds raw materials &amp; campus studio tools
+            {100 - makerEarningPercent}% funds platform logistics &amp; campus studio tools
           </span>
         </div>
       </div>
@@ -425,7 +510,7 @@ export const MakerPortalPage: React.FC = () => {
         <div className="space-y-4">
           {orders.map((o) => {
             const meta = statusMeta[o.status] || statusMeta.new;
-            const makerShare = o.amount * 0.65;
+            const makerShare = o.amount * (makerEarningPercent / 100);
 
             return (
               <div
@@ -464,7 +549,7 @@ export const MakerPortalPage: React.FC = () => {
                       </span>
                       <span>•</span>
                       <span>
-                        Your 65% Split: <strong className="text-[#C85A32] font-bold">{formatINR(makerShare)}</strong>
+                        Your {makerEarningPercent}% Split: <strong className="text-[#C85A32] font-bold">{formatINR(makerShare)}</strong>
                       </span>
                     </div>
                   </div>

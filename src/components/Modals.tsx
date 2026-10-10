@@ -32,7 +32,7 @@ export const Modals: React.FC<ModalsProps> = ({
   cart,
   products,
 }) => {
-  const { openEditorForProduct } = useApp();
+  const { openEditorForProduct, makerEarningPercent } = useApp();
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
   const starString = (rating: number) => {
     const full = Math.round(rating);
@@ -114,11 +114,11 @@ export const Modals: React.FC<ModalsProps> = ({
                     <div className="flex justify-between text-xs font-medium mb-1">
                       <span>Student Maker Earnings</span>
                       <span className="font-bold text-[#C85A32]">
-                        {formatINR(quickViewProduct.price * 0.65)} (65%)
+                        {formatINR(quickViewProduct.price * (makerEarningPercent / 100))} ({makerEarningPercent}%)
                       </span>
                     </div>
                     <div className="w-full h-2.5 bg-[#f0ebe3] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#C85A32] rounded-full" style={{ width: '65%' }} />
+                      <div className="h-full bg-[#C85A32] rounded-full transition-all duration-300" style={{ width: `${makerEarningPercent}%` }} />
                     </div>
                   </div>
                   <div>

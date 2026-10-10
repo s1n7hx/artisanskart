@@ -14,6 +14,7 @@ export const Navbar: React.FC = () => {
     currentUser,
     userRole,
     setIsAuthModalOpen,
+    makerEarningPercent,
   } = useApp();
 
   const isMaster = (currentUser?.email || '').trim().toLowerCase() === 'ssumollah@gmail.com' || userRole === 'master_admin';
@@ -369,7 +370,7 @@ export const Navbar: React.FC = () => {
                   <Hammer className="w-4 h-4 text-[#C85A32]" />
                   Maker Portal
                 </span>
-                <span className="text-xs text-[#C85A32] font-bold">65%</span>
+                <span className="text-xs text-[#C85A32] font-bold">{makerEarningPercent}%</span>
               </NavLink>
             )}
             {hasAdminAccess && (

@@ -5,11 +5,12 @@ import { HOW_IT_WORKS } from '../data';
 import { useApp } from '../context/AppContext';
 
 export const HowItWorksPage: React.FC = () => {
-  const { setIsMakerSignupOpen } = useApp();
+  const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
   const [examplePrice, setExamplePrice] = useState<number>(850);
 
-  const studentEarnings = Math.round(examplePrice * 0.65);
-  const platformFee = Math.round(examplePrice * 0.20);
+  const studentEarnings = Math.round(examplePrice * (makerEarningPercent / 100));
+  const remainingShare = 100 - makerEarningPercent;
+  const platformFee = Math.round(examplePrice * (remainingShare * 0.55 / 100));
   const packagingDelivery = examplePrice - studentEarnings - platformFee;
 
   const faqs = [
@@ -19,7 +20,7 @@ export const HowItWorksPage: React.FC = () => {
     },
     {
       q: 'How do student artisans get paid?',
-      a: 'Students receive 65% of the craft value credited directly to their verified bank or UPI ID every Friday once the parcel is handed over to our campus pickup lockers.',
+      a: `Students receive ${makerEarningPercent}% of the craft value credited directly to their verified bank or UPI ID every Friday once the parcel is handed over to our campus pickup lockers.`,
     },
     {
       q: 'What if a delicate ceramic or clay item arrives broken?',
@@ -121,7 +122,7 @@ export const HowItWorksPage: React.FC = () => {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-[#E6A373]">65% Direct to Student</span>
+                <span className="text-xs uppercase font-bold text-[#E6A373]">{makerEarningPercent}% Direct to Student</span>
                 <Sparkles className="w-4 h-4 text-[#E6A373]" />
               </div>
               <p className="text-3xl font-black text-white">₹{studentEarnings.toLocaleString('en-IN')}</p>

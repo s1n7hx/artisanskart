@@ -1,6 +1,7 @@
 import React from 'react';
 import { Wallet, CheckCircle2, Hammer, Radio, MapPin, CalendarClock, Package, Check, BadgeCheck } from 'lucide-react';
 import { Order } from '../types';
+import { useApp } from '../context/AppContext';
 
 interface MakerPortalProps {
   orders: Order[];
@@ -15,11 +16,12 @@ export const MakerPortal: React.FC<MakerPortalProps> = ({
   onMarkReady,
   onMarkCompleted,
 }) => {
+  const { makerEarningPercent } = useApp();
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
   const completed = orders.filter((o) => o.status === 'completed');
   const active = orders.filter((o) => o.status !== 'completed');
-  const totalEarnings = completed.reduce((s, o) => s + o.amount * 0.65, 0);
+  const totalEarnings = completed.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
 
   const statusMeta = {
     new: { label: 'New Order', cls: 'badge-sage' },
@@ -39,7 +41,7 @@ export const MakerPortal: React.FC<MakerPortalProps> = ({
       <div className="grid md:grid-cols-3 gap-5 mb-10">
         <div className="glass-panel bg-white rounded-2xl p-6 card-hover">
           <div className="flex items-center justify-between">
-            <p className="text-slate-500 text-sm font-medium">Total Earnings (65% share)</p>
+            <p className="text-slate-500 text-sm font-medium">Total Earnings ({makerEarningPercent}% share)</p>
             <Wallet className="w-5 h-5 text-[#C85A32]" />
           </div>
           <p id="earningsTotal" className="text-3xl font-black mt-2 text-[#C85A32]">

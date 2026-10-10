@@ -21,7 +21,7 @@ import {
 
 export const BecomeAMakerPage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, userRole, isApproved, showToast } = useApp();
+  const { currentUser, userRole, isApproved, showToast, makerEarningPercent } = useApp();
 
   const [existingApplication, setExistingApplication] = useState<any>(null);
   const [loadingApp, setLoadingApp] = useState(false);
@@ -164,7 +164,7 @@ export const BecomeAMakerPage: React.FC = () => {
             <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
               <Coins className="w-4 h-4" />
             </div>
-            <h3 className="text-xs font-bold text-slate-900">80% Fair-Trade Payout</h3>
+            <h3 className="text-xs font-bold text-slate-900">{makerEarningPercent}% Fair-Trade Payout</h3>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Fast, direct deposits to your bank or UPI ID upon delivery confirmation.
             </p>

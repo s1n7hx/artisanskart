@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 import { Product, HeroContent, UserAccount, UserRole, maskEmail } from '../types';
+import { ImageUploader } from '../components/ImageUploader';
 import {
   uploadImageToBucket,
   fetchAllMakerApplications,
@@ -61,14 +62,17 @@ export const AdminPortalPage: React.FC = () => {
     userStatus,
     isAuthModalOpen,
     setIsAuthModalOpen,
+    makerEarningPercent,
+    updateMakerEarningPercent,
   } = useApp();
 
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'cms' | 'users' | 'applications' | 'products' | 'orders' | 'supabase'>(() => {
+  const [activeTab, setActiveTab] = useState<'cms' | 'commission' | 'users' | 'applications' | 'products' | 'orders' | 'supabase'>(() => {
     if (typeof window !== 'undefined') {
       if (window.location.pathname.includes('/applications')) return 'applications';
       if (window.location.pathname.includes('/users')) return 'users';
+      if (window.location.pathname.includes('/commission') || window.location.pathname.includes('/policy')) return 'commission';
     }
     return 'users';
   });
@@ -92,6 +96,12 @@ export const AdminPortalPage: React.FC = () => {
   // New Product state
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [customPercentInput, setCustomPercentInput] = useState<number>(makerEarningPercent);
+  const [isSavingPercent, setIsSavingPercent] = useState(false);
+
+  React.useEffect(() => {
+    setCustomPercentInput(makerEarningPercent);
+  }, [makerEarningPercent]);
   const [newProductForm, setNewProductForm] = useState<Partial<Product>>({
     title: '',
     category: 'Clay Crafts',
@@ -237,7 +247,7 @@ export const AdminPortalPage: React.FC = () => {
   });
 
   const totalSalesVolume = orders.reduce((sum, o) => sum + o.amount, 0);
-  const studentSharePaid = totalSalesVolume * 0.65;
+  const studentSharePaid = totalSalesVolume * (makerEarningPercent / 100);
 
   const isMasterAdmin =
     (currentUser?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() ||
@@ -324,15 +334,37 @@ export const AdminPortalPage: React.FC = () => {
             <span className="text-2xl font-black text-white">₹{Math.round(totalSalesVolume).toLocaleString('en-IN')}</span>
           </div>
           <div className="h-8 w-px bg-slate-700" />
-          <div>
-            <span className="text-[11px] text-[#C85A32] block font-semibold">65% Student Fund</span>
-            <span className="text-2xl font-black text-[#C85A32]">₹{Math.round(studentSharePaid).toLocaleString('en-IN')}</span>
+          <div className="flex items-center gap-2">
+            <div>
+              <span className="text-[11px] text-[#C85A32] block font-semibold">{makerEarningPercent}% Student Fund</span>
+              <span className="text-2xl font-black text-[#C85A32]">₹{Math.round(studentSharePaid).toLocaleString('en-IN')}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('commission')}
+              className="text-[10px] font-bold px-2.5 py-1.5 bg-[#C85A32]/25 hover:bg-[#C85A32]/40 text-[#E6A373] hover:text-white rounded-xl transition cursor-pointer flex items-center gap-1 border border-[#C85A32]/40"
+              title="Customize Maker Earning Split"
+            >
+              <span>Edit %</span>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Portal Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[#e7e0d8] pb-3">
+        <button
+          onClick={() => setActiveTab('commission')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
+            activeTab === 'commission'
+              ? 'bg-[#C85A32] text-white shadow-sm'
+              : 'bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-[#C85A32]" />
+          <span>Maker Earning % Policy ({makerEarningPercent}%)</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('cms')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer ${
@@ -405,6 +437,183 @@ export const AdminPortalPage: React.FC = () => {
           <span>Database &amp; Supabase Status</span>
         </button>
       </div>
+
+      {/* -------------------------------------------------------------
+          TAB: MAKER COMMISSION & EARNINGS SPLIT POLICY (CUSTOMIZABLE)
+      ------------------------------------------------------------- */}
+      {activeTab === 'commission' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#e7e0d8] gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center shrink-0">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-900">
+                    Maker Commission &amp; Earnings Split Policy
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Customizable administrative setting: configure the percentage of order amounts credited directly to student creators.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <span className="text-xs font-black px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  Active Platform Split: {makerEarningPercent}% Student / {100 - makerEarningPercent}% Platform
+                </span>
+              </div>
+            </div>
+
+            {/* Main Adjustment Slider and Presets */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <div>
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
+                    <span>Adjust Direct Student Creator Share:</span>
+                    <span className="text-2xl font-black text-[#C85A32]">{customPercentInput}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={10}
+                    max={95}
+                    step={1}
+                    value={customPercentInput}
+                    onChange={(e) => setCustomPercentInput(Number(e.target.value))}
+                    className="w-full accent-[#C85A32] cursor-pointer h-2.5 bg-slate-200 rounded-lg"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-bold mt-1.5">
+                    <span>10% (Low)</span>
+                    <span>50% (Standard)</span>
+                    <span>65% (ArtisansKart Default)</span>
+                    <span>80% (High Fund)</span>
+                    <span>95% (Max Payout)</span>
+                  </div>
+                </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-2">
+                    Quick Preset Rates:
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { val: 50, label: '50% (Equal Split)' },
+                      { val: 65, label: '65% (ArtisansKart Default)' },
+                      { val: 70, label: '70% (Fair-Trade Tier)' },
+                      { val: 75, label: '75% (Student Focused)' },
+                      { val: 80, label: '80% (High Support)' },
+                      { val: 90, label: '90% (Scholarship Tier)' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.val}
+                        type="button"
+                        onClick={() => setCustomPercentInput(preset.val)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer border ${
+                          customPercentInput === preset.val
+                            ? 'bg-[#C85A32] text-white border-[#C85A32] shadow-2xs'
+                            : 'bg-[#FAF9F6] text-slate-700 border-[#e7e0d8] hover:border-[#C85A32]'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Order Simulation Matrix */}
+                <div className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-600">
+                    Live Order Value Simulation (Based on {customPercentInput}% Student Payout)
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    {[350, 850, 1500, 3000].map((amt) => {
+                      const studentCut = Math.round(amt * (customPercentInput / 100));
+                      const platformCut = amt - studentCut;
+                      return (
+                        <div key={amt} className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                          <span className="font-extrabold text-slate-900 block text-xs">₹{amt} Order</span>
+                          <div className="text-[11px]">
+                            <span className="text-slate-400 block">Student receives:</span>
+                            <span className="font-black text-[#C85A32]">₹{studentCut}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            <span>Platform: ₹{platformCut}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Box */}
+              <div className="space-y-4 p-6 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col justify-between">
+                <div className="space-y-3 text-center">
+                  <label className="block text-xs font-bold text-slate-700">Set Percentage (%)</label>
+                  <div className="flex items-center justify-center gap-1">
+                    <input
+                      type="number"
+                      min={10}
+                      max={95}
+                      value={customPercentInput}
+                      onChange={(e) => setCustomPercentInput(Math.max(10, Math.min(95, Number(e.target.value))))}
+                      className="w-24 text-center font-black text-3xl px-3 py-2 rounded-xl border border-slate-300 text-[#C85A32] bg-white shadow-2xs"
+                    />
+                    <span className="text-xl font-black text-slate-600">%</span>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    Platform retains <strong>{100 - customPercentInput}%</strong> for parcel packaging, campus delivery lockers, and logistics.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled={isSavingPercent}
+                    onClick={async () => {
+                      setIsSavingPercent(true);
+                      await updateMakerEarningPercent(customPercentInput);
+                      setIsSavingPercent(false);
+                    }}
+                    className="w-full py-3 px-4 bg-[#C85A32] hover:bg-[#b04a25] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingPercent ? 'Saving Policy...' : `Save ${customPercentInput}% Policy`}</span>
+                  </button>
+                  <p className="text-[10px] text-center text-slate-400">
+                    Saved to cloud settings &amp; automatically applied across all student maker workspaces.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Platform Surfaces Checklist */}
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-600 space-y-2">
+              <span className="font-bold text-slate-800 block">Where this customized rate is actively reflected:</span>
+              <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-500">
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span><strong>Student Maker Workspace:</strong> Total earnings metric &amp; order payout splits</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span><strong>Marketplace Header:</strong> Real-time student creator split badge</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span><strong>How It Works Page:</strong> Dynamic interactive order breakdown simulator</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span><strong>Campus Order Fulfillment:</strong> UPI transfer calculations upon delivery</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* -------------------------------------------------------------
           TAB 1: LIVE STOREFRONT CMS & PICTURES
@@ -515,119 +724,78 @@ export const AdminPortalPage: React.FC = () => {
                 </h3>
 
                 {/* Main Hero Center Banner */}
-                <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">1. Main Center Photography Banner</span>
-                    <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploading === 'mainImage' ? 'Uploading...' : 'Upload Image'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => handleFileUpload(e, 'mainImage')}
-                      />
-                    </label>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <input
-                      type="text"
-                      value={cmsForm.mainImage}
-                      onChange={(e) => setCmsForm({ ...cmsForm, mainImage: e.target.value })}
-                      placeholder="Photo URL (https://...)"
-                      className="sm:col-span-2 px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
-                    />
+                <div className="bg-[#FAF9F6] p-5 rounded-2xl border border-[#e7e0d8] space-y-3">
+                  <span className="text-xs font-black uppercase text-slate-700 block">
+                    1. Main Center Photography Banner
+                  </span>
+                  <ImageUploader
+                    value={cmsForm.mainImage}
+                    onChange={(url) => setCmsForm({ ...cmsForm, mainImage: url })}
+                    label="Center Banner Image"
+                    helperText="Direct device upload or image link"
+                    placeholder="https://images.pexels.com/..."
+                    previewHeight="h-36"
+                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Tag Label</label>
                     <input
                       type="text"
                       value={cmsForm.mainTag}
                       onChange={(e) => setCmsForm({ ...cmsForm, mainTag: e.target.value })}
                       placeholder="Tag label (e.g. Live Wheel Pottery)"
-                      className="px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
                     />
                   </div>
-                  {cmsForm.mainImage && (
-                    <img
-                      src={cmsForm.mainImage}
-                      alt="Center Banner"
-                      className="h-28 w-full object-cover rounded-xl border border-slate-200"
-                    />
-                  )}
                 </div>
 
                 {/* Left & Right Banners */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Left Banner */}
-                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700">2. Left Feature Banner</span>
-                      <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Upload
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleFileUpload(e, 'leftImage')}
-                        />
-                      </label>
-                    </div>
-                    <input
-                      type="text"
+                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-3">
+                    <span className="text-xs font-black uppercase text-slate-700 block">
+                      2. Left Feature Banner
+                    </span>
+                    <ImageUploader
                       value={cmsForm.leftImage}
-                      onChange={(e) => setCmsForm({ ...cmsForm, leftImage: e.target.value })}
-                      placeholder="Image URL"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
+                      onChange={(url) => setCmsForm({ ...cmsForm, leftImage: url })}
+                      label="Left Banner Image"
+                      helperText="Device upload or link"
+                      previewHeight="h-28"
                     />
-                    <input
-                      type="text"
-                      value={cmsForm.leftTag}
-                      onChange={(e) => setCmsForm({ ...cmsForm, leftTag: e.target.value })}
-                      placeholder="Tag (e.g. Fine Art Cards)"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
-                    />
-                    {cmsForm.leftImage && (
-                      <img
-                        src={cmsForm.leftImage}
-                        alt="Left Banner"
-                        className="h-20 w-full object-cover rounded-xl border border-slate-200"
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Left Tag</label>
+                      <input
+                        type="text"
+                        value={cmsForm.leftTag}
+                        onChange={(e) => setCmsForm({ ...cmsForm, leftTag: e.target.value })}
+                        placeholder="Tag (e.g. Fine Art Cards)"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
                       />
-                    )}
+                    </div>
                   </div>
 
                   {/* Right Banner */}
-                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700">3. Right Feature Banner</span>
-                      <label className="cursor-pointer text-xs font-bold text-[#C85A32] hover:underline flex items-center gap-1">
-                        <Upload className="w-3 h-3" /> Upload
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleFileUpload(e, 'rightImage')}
-                        />
-                      </label>
-                    </div>
-                    <input
-                      type="text"
+                  <div className="bg-[#FAF9F6] p-4 rounded-2xl border border-[#e7e0d8] space-y-3">
+                    <span className="text-xs font-black uppercase text-slate-700 block">
+                      3. Right Feature Banner
+                    </span>
+                    <ImageUploader
                       value={cmsForm.rightImage}
-                      onChange={(e) => setCmsForm({ ...cmsForm, rightImage: e.target.value })}
-                      placeholder="Image URL"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-mono"
+                      onChange={(url) => setCmsForm({ ...cmsForm, rightImage: url })}
+                      label="Right Banner Image"
+                      helperText="Device upload or link"
+                      previewHeight="h-28"
                     />
-                    <input
-                      type="text"
-                      value={cmsForm.rightTag}
-                      onChange={(e) => setCmsForm({ ...cmsForm, rightTag: e.target.value })}
-                      placeholder="Tag (e.g. Beaded Accessories)"
-                      className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs"
-                    />
-                    {cmsForm.rightImage && (
-                      <img
-                        src={cmsForm.rightImage}
-                        alt="Right Banner"
-                        className="h-20 w-full object-cover rounded-xl border border-slate-200"
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">Right Tag</label>
+                      <input
+                        type="text"
+                        value={cmsForm.rightTag}
+                        onChange={(e) => setCmsForm({ ...cmsForm, rightTag: e.target.value })}
+                        placeholder="Tag (e.g. Beaded Accessories)"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
                       />
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -642,6 +810,104 @@ export const AdminPortalPage: React.FC = () => {
                 </button>
               </div>
             </form>
+
+            {/* Maker Commission & Earnings Split Policy Settings */}
+            <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[#e7e0d8] gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center shrink-0">
+                    <DollarSign className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-slate-900">
+                      Maker Commission &amp; Earnings Split Policy
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Customizable platform setting: configure the percentage of order amounts given directly to student makers.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 self-start sm:self-auto">
+                  Active Rate: {makerEarningPercent}%
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                <div className="md:col-span-2 space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
+                      <span>Adjust Student Creator Share:</span>
+                      <span className="text-xl font-black text-[#C85A32]">{customPercentInput}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={95}
+                      step={1}
+                      value={customPercentInput}
+                      onChange={(e) => setCustomPercentInput(Number(e.target.value))}
+                      className="w-full accent-[#C85A32] cursor-pointer h-2 bg-slate-200 rounded-lg"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 font-bold mt-1">
+                      <span>10% (Low)</span>
+                      <span>50% (Standard)</span>
+                      <span>65% (Default)</span>
+                      <span>80% (High Fund)</span>
+                      <span>95% (Max Payout)</span>
+                    </div>
+                  </div>
+
+                  {/* Real-time Order Breakdown Visualizer */}
+                  <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] grid grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-1">
+                      <span className="text-slate-500 font-bold block">Student Maker Receives:</span>
+                      <span className="text-lg font-black text-[#C85A32]">{customPercentInput}%</span>
+                      <span className="text-[11px] text-slate-400 block">
+                        ₹{Math.round(1000 * (customPercentInput / 100))} on a ₹1,000 order
+                      </span>
+                    </div>
+                    <div className="space-y-1 border-l border-slate-200 pl-4">
+                      <span className="text-slate-500 font-bold block">Platform Logistics Fund:</span>
+                      <span className="text-lg font-black text-slate-800">{100 - customPercentInput}%</span>
+                      <span className="text-[11px] text-slate-400 block">
+                        ₹{Math.round(1000 * ((100 - customPercentInput) / 100))} on a ₹1,000 order
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center">
+                  <label className="block text-xs font-bold text-slate-700">Set Percentage (%)</label>
+                  <div className="flex items-center justify-center gap-1">
+                    <input
+                      type="number"
+                      min={10}
+                      max={95}
+                      value={customPercentInput}
+                      onChange={(e) => setCustomPercentInput(Math.max(10, Math.min(95, Number(e.target.value))))}
+                      className="w-24 text-center font-black text-2xl px-3 py-2 rounded-xl border border-slate-300 text-[#C85A32] bg-white"
+                    />
+                    <span className="text-lg font-black text-slate-600">%</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSavingPercent}
+                    onClick={async () => {
+                      setIsSavingPercent(true);
+                      await updateMakerEarningPercent(customPercentInput);
+                      setIsSavingPercent(false);
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#C85A32] hover:bg-[#b04a25] text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{isSavingPercent ? 'Saving Policy...' : 'Save Payout Percentage'}</span>
+                  </button>
+                  <p className="text-[10px] text-slate-400">
+                    Applies immediately to all maker portals and storefront metrics.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Live Preview Column */}
@@ -1129,6 +1395,30 @@ export const AdminPortalPage: React.FC = () => {
             </button>
           </div>
 
+          {/* Active Payout Policy Banner */}
+          <div className="p-4 bg-orange-50/70 rounded-2xl border border-orange-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#C85A32] text-white flex items-center justify-center font-black shrink-0 text-sm">
+                %
+              </div>
+              <div>
+                <p className="font-bold text-slate-900">
+                  Student Fair-Trade Split: <span className="text-[#C85A32] font-black">{makerEarningPercent}%</span>
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Approved student makers receive {makerEarningPercent}% directly via UPI upon order completion (₹{Math.round(1000 * (makerEarningPercent / 100))} per ₹1,000 order).
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab('commission')}
+              className="px-3.5 py-1.5 bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold rounded-xl transition text-[11px] shrink-0 self-start sm:self-auto cursor-pointer"
+            >
+              Customize Split Policy
+            </button>
+          </div>
+
           {makerApps.length === 0 ? (
             <div className="p-10 text-center rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
               <Hammer className="w-10 h-10 text-slate-400 mx-auto" />
@@ -1314,10 +1604,15 @@ export const AdminPortalPage: React.FC = () => {
                     onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
                   >
-                    <option value="Clay Crafts">Clay Crafts</option>
+                    <option value="Paintings">Paintings &amp; Canvas Art</option>
+                    <option value="Clay Crafts">Clay Crafts &amp; Pottery</option>
                     <option value="Hand-painted Cards">Hand-painted Cards</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Keychains">Keychains</option>
+                    <option value="Accessories">Accessories &amp; Beads</option>
+                    <option value="Keychains">Keychains &amp; Charms</option>
+                    <option value="Pottery & Ceramics">Pottery &amp; Ceramics</option>
+                    <option value="Resin & Glass Art">Resin &amp; Glass Art</option>
+                    <option value="Textiles & Macramé">Textiles &amp; Macramé</option>
+                    <option value="Other Crafts">Other Crafts (Custom Type)</option>
                   </select>
                 </div>
                 <div>
@@ -1332,7 +1627,7 @@ export const AdminPortalPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Student Maker Name</label>
                   <input
@@ -1352,15 +1647,17 @@ export const AdminPortalPage: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
-                  <input
-                    type="text"
-                    value={newProductForm.image}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, image: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <ImageUploader
+                  value={newProductForm.image || ''}
+                  onChange={(url) => setNewProductForm({ ...newProductForm, image: url })}
+                  label="Product Photography"
+                  helperText="Upload picture from device or paste image link"
+                  placeholder="https://images.pexels.com/... or browse file"
+                  previewHeight="h-32"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
@@ -1393,8 +1690,8 @@ export const AdminPortalPage: React.FC = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-slate-700 mb-1">Title</label>
                   <input
                     type="text"
@@ -1402,6 +1699,40 @@ export const AdminPortalPage: React.FC = () => {
                     onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <select
+                    value={editingProduct.category}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                  >
+                    <option value="Paintings">Paintings &amp; Canvas Art</option>
+                    <option value="Clay Crafts">Clay Crafts &amp; Pottery</option>
+                    <option value="Hand-painted Cards">Hand-painted Cards</option>
+                    <option value="Accessories">Accessories &amp; Beads</option>
+                    <option value="Keychains">Keychains &amp; Charms</option>
+                    <option value="Pottery & Ceramics">Pottery &amp; Ceramics</option>
+                    <option value="Resin & Glass Art">Resin &amp; Glass Art</option>
+                    <option value="Textiles & Macramé">Textiles &amp; Macramé</option>
+                    <option value="Other Crafts">Other Crafts</option>
+                    {editingProduct.category &&
+                      ![
+                        'Paintings',
+                        'Clay Crafts',
+                        'Hand-painted Cards',
+                        'Accessories',
+                        'Keychains',
+                        'Pottery & Ceramics',
+                        'Resin & Glass Art',
+                        'Textiles & Macramé',
+                        'Other Crafts',
+                      ].includes(editingProduct.category) && (
+                        <option value={editingProduct.category}>
+                          Custom: {editingProduct.category}
+                        </option>
+                      )}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
@@ -1412,24 +1743,16 @@ export const AdminPortalPage: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32] bg-white"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Stock Status</label>
-                  <input
-                    type="text"
-                    value={editingProduct.stock}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
-                  />
-                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Image URL</label>
-                <input
-                  type="text"
-                  value={editingProduct.image}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, image: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono bg-white"
+                <ImageUploader
+                  value={editingProduct.image || ''}
+                  onChange={(url) => setEditingProduct({ ...editingProduct, image: url })}
+                  label="Product Photo"
+                  helperText="Upload new photo from device or update link"
+                  placeholder="https://images.pexels.com/... or choose file"
+                  previewHeight="h-32"
                 />
               </div>
 
@@ -1546,9 +1869,9 @@ export const AdminPortalPage: React.FC = () => {
 
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <span className="text-xs text-slate-400 block">Total / 65% Split</span>
+                    <span className="text-xs text-slate-400 block">Total / {makerEarningPercent}% Split</span>
                     <span className="text-sm font-black text-slate-900">
-                      ₹{o.amount} <span className="text-[#C85A32]">(₹{o.amount * 0.65})</span>
+                      ₹{o.amount} <span className="text-[#C85A32]">(₹{Math.round(o.amount * (makerEarningPercent / 100))})</span>
                     </span>
                   </div>
                 </div>

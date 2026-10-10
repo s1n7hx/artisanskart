@@ -7,7 +7,7 @@ import { useApp } from '../context/AppContext';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { products, addToCart, setQuickViewId, setIsMakerSignupOpen } = useApp();
+  const { products, addToCart, setQuickViewId, setIsMakerSignupOpen, makerEarningPercent } = useApp();
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
   const starString = (rating: number) => {
@@ -47,9 +47,9 @@ export const HomePage: React.FC = () => {
             <div className="w-12 h-12 rounded-2xl bg-[#C85A32]/10 flex items-center justify-center text-[#C85A32] mb-5">
               <Heart className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[#1E293B] mb-2">65% Student-First Earnings</h3>
+            <h3 className="text-xl font-bold text-[#1E293B] mb-2">{makerEarningPercent}% Student-First Earnings</h3>
             <p className="text-slate-500 text-sm leading-relaxed">
-              Unlike generic e-commerce taking 40-50% cuts, our student creators receive 65% of every sale directly to their student accounts.
+              Unlike generic e-commerce taking 40-50% cuts, our student creators receive {makerEarningPercent}% of every sale directly to their student accounts.
             </p>
           </div>
 

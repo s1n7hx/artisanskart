@@ -8,7 +8,7 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSignup }) => {
-  const { heroContent, animationSettings, setIsWpModalOpen, userRole } = useApp();
+  const { heroContent, animationSettings, setIsWpModalOpen, userRole, makerEarningPercent } = useApp();
   const stageRef = useRef<HTMLDivElement>(null);
   const mainElRef = useRef<HTMLDivElement>(null);
   const leftElRef = useRef<HTMLDivElement>(null);
@@ -82,12 +82,13 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
           if (entry.isIntersecting && !animated) {
             animated = true;
 
-            // Direct Maker Share count up to 65%
+            // Direct Maker Share count up to makerEarningPercent
             let curEarnings = 0;
+            const target = makerEarningPercent || 65;
             const iv1 = setInterval(() => {
               curEarnings += 2;
-              if (curEarnings >= 65) {
-                curEarnings = 65;
+              if (curEarnings >= target) {
+                curEarnings = target;
                 clearInterval(iv1);
               }
               setStatEarnings(curEarnings);
@@ -277,7 +278,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             style={{ transitionDelay: '720ms' }}
           >
             <p className="text-[11px] text-slate-500 leading-none">Fair-Trade Split</p>
-            <p className="font-bold text-sm text-[#C85A32] mt-0.5">65% Direct to Student</p>
+            <p className="font-bold text-sm text-[#C85A32] mt-0.5">{makerEarningPercent}% Direct to Student</p>
           </div>
         </div>
       </div>

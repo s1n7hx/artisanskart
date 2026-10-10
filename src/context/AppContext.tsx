@@ -22,6 +22,8 @@ import {
   signOutUser,
   fetchHeroCmsContent,
   saveHeroCmsContent,
+  fetchPlatformSettings,
+  savePlatformSettings,
   fetchAllProfiles,
   updateUserRole as updateSupabaseUserRole,
   updateUserStatus as updateSupabaseUserStatus,
@@ -33,6 +35,8 @@ import {
 interface AppContextType {
   products: Product[];
   orders: Order[];
+  makerEarningPercent: number;
+  updateMakerEarningPercent: (percent: number) => Promise<void>;
   cart: CartItem[];
   cartCount: number;
   activeCategory: string;
@@ -478,6 +482,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_HERO_CONTENT;
   });
 
+  const [makerEarningPercent, setMakerEarningPercent] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('artisanskart_maker_earning_percent_v1');
+      if (saved) return Number(saved) || 65;
+    } catch (e) {}
+    return 65;
+  });
+
+  const updateMakerEarningPercent = async (percent: number) => {
+    const clamped = Math.max(5, Math.min(95, Math.round(percent)));
+    setMakerEarningPercent(clamped);
+    try {
+      localStorage.setItem('artisanskart_maker_earning_percent_v1', String(clamped));
+    } catch (e) {}
+    await savePlatformSettings({ makerEarningPercent: clamped });
+    showToast(`Maker earning share updated to ${clamped}%!`, 'sparkles');
+  };
+
   // On mount, pull live CMS settings from Supabase and listen for Supabase auth events
   useEffect(() => {
     async function initSupabaseData() {
@@ -485,6 +507,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const remoteHero = await fetchHeroCmsContent();
         if (remoteHero) {
           setHeroContent(remoteHero);
+        }
+        const remotePlatform = await fetchPlatformSettings();
+        if (remotePlatform?.makerEarningPercent) {
+          setMakerEarningPercent(remotePlatform.makerEarningPercent);
+          try {
+            localStorage.setItem('artisanskart_maker_earning_percent_v1', String(remotePlatform.makerEarningPercent));
+          } catch (e) {}
         }
         const remoteProfiles = await fetchAllProfiles();
         if (remoteProfiles && remoteProfiles.length > 0) {
@@ -835,7 +864,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'completed' } : o))
     );
-    showToast('Order completed. 65% Student Fund updated!', 'wallet');
+    showToast(`Order completed. ${makerEarningPercent}% Student Fund updated!`, 'wallet');
   };
 
   const confirmCheckout = () => {
@@ -853,6 +882,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       value={{
         products,
         orders,
+        makerEarningPercent,
+        updateMakerEarningPercent,
         cart,
         cartCount,
         activeCategory,

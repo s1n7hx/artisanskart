@@ -1,6 +1,14 @@
 import { Product, Order, CollectionItem, HowItWorksItem, HeroContent, AnimationSettings } from './types';
 
-export const CATEGORIES = ["All", "Clay Crafts", "Hand-painted Cards", "Accessories", "Keychains"];
+export const CATEGORIES = [
+  "All",
+  "Clay Crafts",
+  "Hand-painted Cards",
+  "Paintings",
+  "Accessories",
+  "Keychains",
+  "Other Crafts"
+];
 
 export const PRODUCTS: Product[] = [
   {

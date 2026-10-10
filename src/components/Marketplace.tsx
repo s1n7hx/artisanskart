@@ -22,12 +22,27 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
   onAddToCart,
 }) => {
   const { wpConfig, setIsWpModalOpen, openEditorForProduct } = useApp();
+
+  const allCategories = React.useMemo(() => {
+    const base = ['All', 'Clay Crafts', 'Hand-painted Cards', 'Paintings', 'Accessories', 'Keychains', 'Other Crafts'];
+    const dynamicTypes = products.map((p) => p.category).filter(Boolean);
+    return Array.from(new Set([...base, ...dynamicTypes]));
+  }, [products]);
+
   const term = searchTerm.trim().toLowerCase();
   const filtered = products.filter((p) => {
-    const catOk = activeCategory === 'All' || p.category === activeCategory;
+    const catOk =
+      activeCategory === 'All' ||
+      p.category === activeCategory ||
+      (activeCategory === 'Paintings' &&
+        (p.category.toLowerCase().includes('paint') || p.category.toLowerCase().includes('canvas'))) ||
+      (activeCategory === 'Other Crafts' &&
+        !['Clay Crafts', 'Hand-painted Cards', 'Paintings', 'Accessories', 'Keychains'].includes(p.category));
+
     const searchOk =
       !term ||
       p.title.toLowerCase().includes(term) ||
+      p.category.toLowerCase().includes(term) ||
       (p.description && p.description.toLowerCase().includes(term)) ||
       p.maker.toLowerCase().includes(term) ||
       p.school.toLowerCase().includes(term);
@@ -73,7 +88,7 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
 
       {/* Category Pills */}
       <div id="categoryPills" className="flex flex-wrap justify-center gap-2 mb-10">
-        {CATEGORIES.map((c) => (
+        {allCategories.map((c) => (
           <button
             key={c}
             onClick={() => setActiveCategory(c)}

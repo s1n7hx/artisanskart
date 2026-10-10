@@ -487,6 +487,107 @@ export async function uploadImageToBucket(file: File, bucket = 'cms-assets'): Pr
   return data.publicUrl;
 }
 
+/**
+ * Universal image processor for device uploads:
+ * 1. Tries Supabase Storage bucket first.
+ * 2. If storage bucket is not configured or throws an error, compresses the file
+ *    using HTML5 Canvas into a lightweight, high-fidelity base64 Data URL so
+ *    the picture persists seamlessly across browser reloads and sessions.
+ */
+export async function processAndUploadImage(file: File, bucket = 'cms-assets'): Promise<string> {
+  try {
+    const publicUrl = await uploadImageToBucket(file, bucket);
+    if (publicUrl && publicUrl.startsWith('http')) {
+      return publicUrl;
+    }
+  } catch (err) {
+    // Graceful fallback to client-side compressed base64
+  }
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (!result) {
+        return reject(new Error('Empty file content'));
+      }
+
+      const img = new Image();
+      img.onerror = () => resolve(result); // Fallback to raw data url
+      img.onload = () => {
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          return resolve(result);
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        // High quality JPEG compression (keeps size ~80-160KB)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.84);
+        resolve(compressedDataUrl);
+      };
+      img.src = result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// -------------------------------------------------------------
+// Platform Settings (Customizable Earning Percent)
+// -------------------------------------------------------------
+export async function fetchPlatformSettings(): Promise<{ makerEarningPercent?: number } | null> {
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'platform_settings')
+      .single();
+
+    if (error || !data) return null;
+    return data.value;
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function savePlatformSettings(settings: { makerEarningPercent: number }): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from('site_settings')
+      .upsert(
+        {
+          key: 'platform_settings',
+          value: settings,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      );
+
+    if (error) {
+      console.warn('Notice saving platform_settings to Supabase:', error.message);
+    }
+  } catch (err: any) {
+    console.warn('savePlatformSettings error:', err.message);
+  }
+}
+
 // -------------------------------------------------------------
 // Product Catalog Operations
 // -------------------------------------------------------------

@@ -4,7 +4,7 @@ import { Instagram, Facebook, Youtube, Heart, Sparkles, ShieldCheck } from 'luci
 import { useApp } from '../context/AppContext';
 
 export const Footer: React.FC = () => {
-  const { setActiveCategory, setIsMakerSignupOpen, userRole } = useApp();
+  const { setActiveCategory, setIsMakerSignupOpen, userRole, makerEarningPercent } = useApp();
 
   const handleCategoryClick = (category: string) => {
     setActiveCategory(category);
@@ -24,7 +24,7 @@ export const Footer: React.FC = () => {
             </p>
           </Link>
           <p className="text-sm mt-3 text-white/60 max-w-sm leading-relaxed">
-            A conscious marketplace empowering high school & university craft makers with a fair 65% earnings model, eco-friendly delivery, and campus recognition.
+            A conscious marketplace empowering high school & university craft makers with a fair {makerEarningPercent}% earnings model, eco-friendly delivery, and campus recognition.
           </p>
           <div className="flex gap-3 mt-5 text-white/70">
             <a

@@ -14,14 +14,29 @@ export const MarketplacePage: React.FC = () => {
     addToCart,
     cartCount,
     setIsCartOpen,
+    makerEarningPercent,
   } = useApp();
+
+  const allCategories = React.useMemo(() => {
+    const base = ['All', 'Clay Crafts', 'Hand-painted Cards', 'Paintings', 'Accessories', 'Keychains', 'Other Crafts'];
+    const dynamicTypes = products.map((p) => p.category).filter(Boolean);
+    return Array.from(new Set([...base, ...dynamicTypes]));
+  }, [products]);
 
   const term = searchTerm.trim().toLowerCase();
   const filtered = products.filter((p) => {
-    const catOk = activeCategory === 'All' || p.category === activeCategory;
+    const catOk =
+      activeCategory === 'All' ||
+      p.category === activeCategory ||
+      (activeCategory === 'Paintings' &&
+        (p.category.toLowerCase().includes('paint') || p.category.toLowerCase().includes('canvas'))) ||
+      (activeCategory === 'Other Crafts' &&
+        !['Clay Crafts', 'Hand-painted Cards', 'Paintings', 'Accessories', 'Keychains'].includes(p.category));
+
     const searchOk =
       !term ||
       p.title.toLowerCase().includes(term) ||
+      p.category.toLowerCase().includes(term) ||
       p.maker.toLowerCase().includes(term) ||
       p.school.toLowerCase().includes(term);
     return catOk && searchOk;
@@ -44,7 +59,7 @@ export const MarketplacePage: React.FC = () => {
           The Marketplace
         </h1>
         <p className="text-slate-500 text-sm md:text-base mt-2 leading-relaxed">
-          Every piece below is crafted on-demand with 65% of your purchase credited directly to the student maker.
+          Every piece below is crafted on-demand with {makerEarningPercent}% of your purchase credited directly to the student maker.
         </p>
       </div>
 
@@ -52,7 +67,7 @@ export const MarketplacePage: React.FC = () => {
       <div className="space-y-4">
         {/* Category Pills */}
         <div id="categoryPills" className="flex flex-wrap justify-center gap-2">
-          {CATEGORIES.map((c) => (
+          {allCategories.map((c) => (
             <button
               key={c}
               onClick={() => setActiveCategory(c)}

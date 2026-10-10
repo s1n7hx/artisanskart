@@ -5,7 +5,7 @@ import { ABOUT_TEXT } from '../data';
 import { useApp } from '../context/AppContext';
 
 export const AboutPage: React.FC = () => {
-  const { setIsMakerSignupOpen } = useApp();
+  const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
   const pRef = useRef<HTMLParagraphElement>(null);
   const chars = ABOUT_TEXT.split('');
 
@@ -121,9 +121,9 @@ export const AboutPage: React.FC = () => {
             <div className="w-14 h-14 rounded-2xl bg-[#C85A32]/10 flex items-center justify-center text-[#C85A32] mb-6">
               <Heart className="w-7 h-7" />
             </div>
-            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">65% Direct Split</h3>
+            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">{makerEarningPercent}% Direct Split</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Students receive 65% of the total order value. The remaining 35% covers sustainable carton packaging, courier logistics, and verified campus drop-off hubs.
+              Students receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and verified campus drop-off hubs.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
               Direct UPI transfer every Friday upon delivery confirmation.
