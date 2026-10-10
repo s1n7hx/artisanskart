@@ -3,6 +3,7 @@ import { X, User, ShoppingCart, PackageCheck, Edit3, Globe, Sparkles, CreditCard
 import { Product, CartItem } from '../types';
 import { useApp } from '../context/AppContext';
 import { initiateRazorpayPayment } from '../services/razorpay';
+import { QuickViewModal } from './QuickViewModal';
 
 interface ModalsProps {
   quickViewProduct: Product | null;
@@ -97,115 +98,12 @@ export const Modals: React.FC<ModalsProps> = ({
 
   return (
     <>
-      {/* QUICK VIEW MODAL */}
-      {quickViewProduct && (
-        <div
-          id="quickViewOverlay"
-          onClick={onCloseQuickView}
-          className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center px-4 animate-[fadeIn_0.25s_ease-out]"
-        >
-          <div
-            id="quickViewPanel"
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-3xl w-full mx-auto p-6 md:p-8 max-h-[90vh] overflow-y-auto shadow-2xl animate-[scaleUp_0.3s_cubic-bezier(.25,.1,.25,1)]"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h3 className="text-2xl font-bold text-[#1E293B]">Quick View &amp; Cost Breakdown</h3>
-              <button
-                onClick={onCloseQuickView}
-                className="w-9 h-9 rounded-full hover:bg-black/5 flex items-center justify-center cursor-pointer transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div id="quickViewContent" className="grid md:grid-cols-2 gap-8">
-              <div>
-                <img
-                  src={quickViewProduct.image}
-                  alt={quickViewProduct.title}
-                  className="w-full h-64 md:h-full object-cover rounded-2xl"
-                />
-              </div>
-              <div>
-                <p className="inline-flex items-center gap-1 text-xs font-semibold text-[#C85A32] bg-[#C85A32]/10 px-2.5 py-1 rounded-full mb-2">
-                  <User className="w-3 h-3" /> Made by {quickViewProduct.maker} • {quickViewProduct.cls},{' '}
-                  {quickViewProduct.school}
-                </p>
-                <h3 className="text-2xl font-bold mb-1 text-[#1E293B]">{quickViewProduct.title}</h3>
-                <div className="flex items-center gap-1 mb-3">
-                  <span className="stars text-sm">{starString(quickViewProduct.rating)}</span>
-                  <span className="text-xs text-slate-400">
-                    {quickViewProduct.rating} ({quickViewProduct.reviews} reviews)
-                  </span>
-                  <span className="text-slate-300 mx-1">•</span>
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    {quickViewProduct.stock}
-                  </span>
-                </div>
-
-                {/* Craft Description */}
-                {quickViewProduct.description && (
-                  <div className="my-3 p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-xs leading-relaxed text-slate-700">
-                    <div className="flex items-center justify-between mb-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      <span>Artisan Craft Description</span>
-                      <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full">
-                        Verified Student Work
-                      </span>
-                    </div>
-                    <p>{quickViewProduct.description}</p>
-                  </div>
-                )}
-
-                <p className="text-3xl font-black mb-4 text-[#1E293B]">{formatINR(quickViewProduct.price)}</p>
-
-                <p className="font-semibold text-sm mb-3 text-[#1E293B]">Transparent Price Split</p>
-                <div className="space-y-3 mb-4">
-                  <div>
-                    <div className="flex justify-between text-xs font-medium mb-1">
-                      <span>Student Maker Earnings</span>
-                      <span className="font-bold text-[#C85A32]">
-                        {formatINR(quickViewProduct.price * (makerEarningPercent / 100))} ({makerEarningPercent}%)
-                      </span>
-                    </div>
-                    <div className="w-full h-2.5 bg-[#f0ebe3] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#C85A32] rounded-full transition-all duration-300" style={{ width: `${makerEarningPercent}%` }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-medium mb-1">
-                      <span>ArtisansKart Platform &amp; Server Fee</span>
-                      <span>{formatINR(quickViewProduct.price * 0.2)} (20%)</span>
-                    </div>
-                    <div className="w-full h-2.5 bg-[#f0ebe3] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#1E293B] rounded-full" style={{ width: '20%' }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-medium mb-1">
-                      <span>Eco Packaging &amp; Delivery</span>
-                      <span>{formatINR(quickViewProduct.price * 0.15)} (15%)</span>
-                    </div>
-                    <div className="w-full h-2.5 bg-[#f0ebe3] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#8A9A86] rounded-full" style={{ width: '15%' }} />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    onAddToCart(quickViewProduct.id);
-                    onCloseQuickView();
-                  }}
-                  className="mt-2 w-full btn-terracotta font-semibold py-3 rounded-full flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <ShoppingCart className="w-4 h-4" /> Add to Cart
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* QUICK VIEW & COST BREAKDOWN MODAL */}
+      <QuickViewModal
+        product={quickViewProduct}
+        onClose={onCloseQuickView}
+        onAddToCart={onAddToCart}
+      />
 
       {/* MAKER SIGNUP MODAL */}
       {isMakerSignupOpen && (

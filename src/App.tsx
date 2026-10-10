@@ -14,6 +14,8 @@ import { LoginPage } from './pages/LoginPage';
 import { AuthCallbackPage } from './pages/AuthCallbackPage';
 import { PendingApprovalPage } from './pages/PendingApprovalPage';
 import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
+import { ProductDetailPage } from './pages/ProductDetailPage';
+import { CheckoutPage } from './pages/CheckoutPage';
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
             <Route path="how-it-works" element={<HowItWorksPage />} />
             <Route path="collections" element={<CollectionsPage />} />
             <Route path="marketplace" element={<MarketplacePage />} />
+            <Route path="product/:slug" element={<ProductDetailPage />} />
+            <Route path="checkout" element={<CheckoutPage />} />
             <Route path="maker" element={<MakerPortalPage />} />
             <Route path="become-a-maker" element={<BecomeAMakerPage />} />
             <Route path="admin" element={<AdminPortalPage />} />

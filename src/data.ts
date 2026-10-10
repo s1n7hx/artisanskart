@@ -22,12 +22,12 @@ export const PRODUCTS: Product[] = [
     maker: "Sakib Ansari",
     cls: "Class 10",
     school: "Delhi Public School, RK Puram",
-    image: "https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    image: "https://images.unsplash.com/photo-1603555501671-8f96b3fce8e4?auto=format&fit=crop&w=1200&q=80",
     images: [
-      "https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "https://images.pexels.com/photos/18646120/pexels-photo-18646120.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "https://images.pexels.com/photos/6611173/pexels-photo-6611173.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "https://images.pexels.com/photos/27837210/pexels-photo-27837210.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800"
+      "https://images.unsplash.com/photo-1603555501671-8f96b3fce8e4?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1574343635791-0e481f3bc925?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80",
+      "https://images.unsplash.com/photo-1605651202774-7d573fd3f12d?auto=format&fit=crop&w=1200&q=80"
     ],
     stock: "In Stock • Made on Demand",
     inStockCount: 18,

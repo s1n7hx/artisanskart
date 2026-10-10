@@ -132,6 +132,33 @@ html, body {
   animation-play-state: paused;
 }
 
+@keyframes marqueeUp {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes marqueeDown {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}
+
+.animate-marquee-up {
+  display: flex;
+  flex-direction: column;
+  animation: marqueeUp 42s linear infinite;
+}
+
+.animate-marquee-down {
+  display: flex;
+  flex-direction: column;
+  animation: marqueeDown 42s linear infinite;
+}
+
+.animate-marquee-up:hover,
+.animate-marquee-down:hover {
+  animation-play-state: paused;
+}
+
 .marquee-track {
   display: flex;
   gap: 0.75rem;
