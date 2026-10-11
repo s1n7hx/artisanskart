@@ -34,6 +34,13 @@ export interface Product {
   slug?: string;
   makerId?: string;
   featured?: boolean;
+  variants?: ProductVariant[];
+  prepTimeDays?: number;
+  originCity?: string;
+  pickupPincode?: string;
+  isMadeToOrder?: boolean;
+  color?: string;
+  weightKg?: number;
 }
 
 export interface CustomerAddress {
@@ -60,14 +67,102 @@ export interface OrderItemSnapshot {
   subtotal: number;
   makerName: string;
   makerId?: string;
-  makerEarningPercent?: number;
   makerShareAmount?: number;
+  makerEarningPercent?: number;
+  variantName?: string;
   productionStatus?: 'pending' | 'in_production' | 'ready_for_pickup' | 'completed';
 }
 
-export type OrderStatus = 'new' | 'in_production' | 'ready' | 'shipped' | 'completed' | 'cancelled';
+export interface ProductVariant {
+  id: string;
+  name: string;
+  price?: number;
+  inStock?: boolean;
+  sku?: string;
+}
+
+export type OrderStatus =
+  | 'order_placed'
+  | 'awaiting_maker_acceptance'
+  | 'accepted'
+  | 'in_production'
+  | 'quality_check'
+  | 'ready_to_pack'
+  | 'packed'
+  | 'ready_to_ship'
+  | 'shipment_booked'
+  | 'picked_up'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'maker_rejected'
+  | 'acceptance_timed_out'
+  | 'cancellation_requested'
+  | 'cancelled'
+  | 'shipment_failed'
+  | 'delivery_exception'
+  | 'return_requested'
+  | 'returned'
+  // Legacy compatibility:
+  | 'new'
+  | 'ready'
+  | 'completed';
+
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'cod';
 export type PaymentMethod = 'razorpay' | 'upi' | 'card' | 'netbanking' | 'cod' | 'test_gateway';
+
+export interface OrderStatusHistoryItem {
+  id: string;
+  orderId: string | number;
+  fromStatus?: string;
+  toStatus: OrderStatus;
+  actorId?: string;
+  actorName: string;
+  actorRole: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface MakerPickupLocation {
+  id: string;
+  makerId: string;
+  locationNickname: string;
+  pincode: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  contactPerson: string;
+  contactPhone: string;
+  isVerifiedByAdmin?: boolean;
+}
+
+export interface CourierOption {
+  courierId?: number | string;
+  name: string;
+  rate: number;
+  etd: string;
+  cod: boolean;
+  isExpress?: boolean;
+}
+
+export interface PincodeIntelligence {
+  pincode: string;
+  isServiceable: boolean;
+  locality: string;
+  district: string;
+  state: string;
+  officeName?: string;
+  courierOptions: CourierOption[];
+  recommendedCourier: string;
+  estimatedDelivery: string;
+  estimatedDays: number;
+  shippingFee: number;
+  codAvailable: boolean;
+  message: string;
+  originPincode: string;
+  verifiedSource: 'official_postal_shiprocket' | 'shiprocket_api' | 'verified_postal_registry';
+}
 
 export interface Order {
   id: number;
@@ -94,6 +189,17 @@ export interface Order {
   itemsTotal?: number;
   shippingFee?: number;
   discountAmount?: number;
+  // Professional maker & shipment fields
+  makerId?: string;
+  makerName?: string;
+  pickupPincode?: string;
+  acceptanceDeadline?: string;
+  acceptedAt?: string;
+  rejectionReason?: string;
+  confirmedPrepDays?: number;
+  parcelWeightKg?: number;
+  parcelDimensions?: string;
+  statusHistory?: OrderStatusHistoryItem[];
 }
 
 export interface CartItem {

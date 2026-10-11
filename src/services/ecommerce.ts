@@ -1,4 +1,15 @@
-import { Product, Order, CustomerAddress, OrderItemSnapshot, PaymentMethod, PaymentStatus, OrderStatus, getProductSlug, slugify } from '../types';
+import {
+  Product,
+  Order,
+  CustomerAddress,
+  OrderItemSnapshot,
+  PaymentMethod,
+  PaymentStatus,
+  OrderStatus,
+  PincodeIntelligence,
+  getProductSlug,
+  slugify,
+} from '../types';
 import { supabase } from './supabase';
 
 // -------------------------------------------------------------
@@ -123,15 +134,16 @@ export function checkPincodeServiceability(pincode: string): PincodeServiceabili
   const prefix2 = cleanPin.slice(0, 2);
   const info = PINCODE_PREFIX_MAP[prefix2];
 
-  if (info) {
-    const deliveryDate = new Date();
-    deliveryDate.setDate(deliveryDate.getDate() + info.days + 2); // 2 days student crafting + shipping
-    const dateFormatted = deliveryDate.toLocaleDateString('en-IN', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+  const estimatedDays = info ? info.days : 4;
+  const deliveryDate = new Date();
+  deliveryDate.setDate(deliveryDate.getDate() + estimatedDays + 2); // 2 days student crafting + transit
+  const dateFormatted = deliveryDate.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 
+  if (info) {
     return {
       pincode: cleanPin,
       isServiceable: true,
@@ -146,15 +158,6 @@ export function checkPincodeServiceability(pincode: string): PincodeServiceabili
     };
   }
 
-  // Fallback for valid 6-digit PIN not in specific table: standard India Post / Delhivery national coverage
-  const deliveryDate = new Date();
-  deliveryDate.setDate(deliveryDate.getDate() + 5);
-  const dateFormatted = deliveryDate.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-
   return {
     pincode: cleanPin,
     isServiceable: true,
@@ -166,6 +169,95 @@ export function checkPincodeServiceability(pincode: string): PincodeServiceabili
     codAvailable: true,
     isExpressAvailable: false,
     message: `Serviceable via National Eco-Parcel Network`,
+  };
+}
+
+// -------------------------------------------------------------
+// Live Smart PIN Code Intelligence (Postal Registry + Shiprocket API)
+// -------------------------------------------------------------
+export async function fetchPincodeIntelligence(
+  pincode: string,
+  pickupPincode: string = '110016'
+): Promise<PincodeIntelligence> {
+  const cleanPin = pincode.replace(/\D/g, '').slice(0, 6);
+
+  if (cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
+    return {
+      pincode: cleanPin,
+      isServiceable: false,
+      locality: '',
+      district: '',
+      state: '',
+      courierOptions: [],
+      recommendedCourier: '',
+      estimatedDelivery: '',
+      estimatedDays: 0,
+      shippingFee: 49,
+      codAvailable: false,
+      message: 'Please enter a valid 6-digit Indian Postal PIN code.',
+      originPincode: pickupPincode,
+      verifiedSource: 'verified_postal_registry',
+    };
+  }
+
+  try {
+    const res = await fetch('/api/shipping/pincode-intel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pincode: cleanPin,
+        pickupPincode,
+        weightKg: 0.5,
+        cod: true,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        return {
+          pincode: cleanPin,
+          isServiceable: Boolean(data.isServiceable),
+          locality: data.locality || '',
+          district: data.district || '',
+          state: data.state || '',
+          officeName: data.officeName,
+          courierOptions: data.courierOptions || [],
+          recommendedCourier: data.recommendedCourier || 'Delhivery Surface',
+          estimatedDelivery: data.estimatedDelivery || '3-4 business days',
+          estimatedDays: data.estimatedDays || 3,
+          shippingFee: data.shippingFee || 49,
+          codAvailable: data.codAvailable ?? true,
+          message: data.message || `Delivery to ${data.district}, ${data.state}`,
+          originPincode: data.originPincode || pickupPincode,
+          verifiedSource: data.verifiedSource || 'official_postal_shiprocket',
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Live pincode intelligence request failed, utilizing verified local registry:', err);
+  }
+
+  // Graceful fallback utilizing curated geographic engine
+  const fallback = checkPincodeServiceability(cleanPin);
+  return {
+    pincode: cleanPin,
+    isServiceable: fallback.isServiceable,
+    locality: fallback.city,
+    district: fallback.city,
+    state: fallback.state,
+    courierOptions: [
+      { name: fallback.courierName, rate: 49, etd: `${fallback.estimatedDays} business days`, cod: true },
+      { name: 'India Post Speed Post', rate: 40, etd: `${fallback.estimatedDays + 1} business days`, cod: false },
+    ],
+    recommendedCourier: fallback.courierName,
+    estimatedDelivery: fallback.estimatedDeliveryText,
+    estimatedDays: fallback.estimatedDays,
+    shippingFee: 49,
+    codAvailable: true,
+    message: fallback.message,
+    originPincode: pickupPincode,
+    verifiedSource: 'verified_postal_registry',
   };
 }
 
@@ -347,14 +439,19 @@ export function saveStoredOrders(orders: Order[]): void {
 
 export async function createOrderRecord(orderData: Partial<Order>): Promise<Order> {
   const orderNumber = orderData.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+  const deadlineDate = new Date();
+  deadlineDate.setDate(deadlineDate.getDate() + 3);
+  const acceptanceDeadlineDate = new Date();
+  acceptanceDeadlineDate.setHours(acceptanceDeadlineDate.getHours() + 24);
+
   const fullOrder: Order = {
     id: Date.now(),
     orderNumber,
     city: orderData.shippingAddress ? `${orderData.shippingAddress.city}, ${orderData.shippingAddress.state}` : orderData.city || 'India',
     product: orderData.items && orderData.items.length > 0 ? orderData.items.map((i) => `${i.title} (×${i.quantity})`).join(', ') : orderData.product || 'Handmade Craft',
     qty: orderData.items ? orderData.items.reduce((s, i) => s + i.quantity, 0) : orderData.qty || 1,
-    deadline: orderData.deadline || '5-7 Business Days',
-    status: (orderData.status || 'new') as OrderStatus,
+    deadline: orderData.deadline || `${deadlineDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} (3 Days Prep)`,
+    status: (orderData.status || 'awaiting_maker_acceptance') as OrderStatus,
     amount: orderData.amount || 0,
     itemsTotal: orderData.itemsTotal || orderData.amount || 0,
     shippingFee: orderData.shippingFee || 0,
@@ -369,6 +466,22 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     courierName: orderData.courierName || 'BlueDart / Delhivery Eco',
     createdAt: new Date().toISOString(),
     items: orderData.items || [],
+    makerId: orderData.makerId || orderData.items?.[0]?.makerId,
+    makerName: orderData.makerName || orderData.items?.[0]?.makerName || 'Student Maker',
+    pickupPincode: orderData.pickupPincode || '110016',
+    acceptanceDeadline: acceptanceDeadlineDate.toISOString(),
+    statusHistory: [
+      {
+        id: `init_${Date.now()}`,
+        orderId: Date.now(),
+        fromStatus: undefined,
+        toStatus: (orderData.status || 'awaiting_maker_acceptance') as OrderStatus,
+        actorName: orderData.customerName || 'Customer',
+        actorRole: 'customer',
+        note: 'Order placed by customer and sent to artisan studio',
+        createdAt: new Date().toISOString(),
+      },
+    ],
   };
 
   // 1. Save to local store
@@ -412,6 +525,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
         quantity: item.quantity,
         subtotal: item.subtotal,
         maker_name: item.makerName,
+        maker_id: item.makerId,
         maker_earning_percent: item.makerEarningPercent || 65,
         maker_share_amount: item.makerShareAmount || Math.round(item.subtotal * 0.65),
         production_status: 'pending',
@@ -424,6 +538,85 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
   }
 
   return fullOrder;
+}
+
+// -------------------------------------------------------------
+// Server-Enforced Lifecycle Transition with Audit Trail
+// -------------------------------------------------------------
+export async function updateOrderStatusWithLifecycle(params: {
+  orderId: string | number;
+  orderNumber?: string;
+  currentStatus: OrderStatus;
+  newStatus: OrderStatus;
+  actorRole: string;
+  actorName: string;
+  note?: string;
+  parcelWeightKg?: number;
+  parcelDimensions?: string;
+  rejectionReason?: string;
+  confirmedPrepDays?: number;
+}): Promise<{ success: boolean; status: OrderStatus; error?: string }> {
+  const { orderId, orderNumber, currentStatus, newStatus, actorRole, actorName, note, parcelWeightKg, parcelDimensions, rejectionReason, confirmedPrepDays } = params;
+
+  try {
+    const res = await fetch('/api/orders/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return {
+        success: false,
+        status: currentStatus,
+        error: data.error || `Transition from ${currentStatus} to ${newStatus} is not permitted.`,
+      };
+    }
+
+    // Update local storage orders
+    const stored = getStoredOrders();
+    const updated = stored.map((o) => {
+      if (o.id === Number(orderId) || o.orderNumber === orderNumber) {
+        const hist = o.statusHistory || [];
+        if (data.auditEntry) hist.push(data.auditEntry);
+        return {
+          ...o,
+          status: newStatus,
+          rejectionReason: rejectionReason || o.rejectionReason,
+          confirmedPrepDays: confirmedPrepDays || o.confirmedPrepDays,
+          parcelWeightKg: parcelWeightKg || o.parcelWeightKg,
+          parcelDimensions: parcelDimensions || o.parcelDimensions,
+          statusHistory: hist,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return o;
+    });
+    saveStoredOrders(updated);
+
+    // Sync to Supabase
+    try {
+      if (orderNumber) {
+        await supabase
+          .from('orders')
+          .update({
+            status: newStatus,
+            rejection_reason: rejectionReason,
+            confirmed_prep_days: confirmedPrepDays,
+            parcel_weight_kg: parcelWeightKg,
+            parcel_dimensions: parcelDimensions,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+      }
+    } catch {}
+
+    return { success: true, status: newStatus };
+  } catch (err: any) {
+    return { success: false, status: currentStatus, error: err.message };
+  }
 }
 
 // -------------------------------------------------------------

@@ -31,9 +31,10 @@ import {
   Truck,
   RefreshCw,
   CreditCard,
+  X,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { Product, HeroContent, UserAccount, UserRole, maskEmail } from '../types';
+import { Product, HeroContent, UserAccount, UserRole, OrderStatus, Order, maskEmail } from '../types';
 import { ImageUploader } from '../components/ImageUploader';
 import {
   uploadImageToBucket,
@@ -41,6 +42,7 @@ import {
   reviewMakerApplication,
   MakerApplicationItem,
 } from '../services/supabase';
+import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 
 export const AdminPortalPage: React.FC = () => {
   const {
@@ -111,6 +113,13 @@ export const AdminPortalPage: React.FC = () => {
   const [razorpayStatus, setRazorpayStatus] = useState<any>(null);
   const [isTestingShiprocket, setIsTestingShiprocket] = useState(false);
   const [shiprocketTestResult, setShiprocketTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Administrative Order Management state
+  const [selectedAdminOrder, setSelectedAdminOrder] = useState<Order | null>(null);
+  const [adminStatusFilter, setAdminStatusFilter] = useState<string>('all');
+  const [targetOverrideStatus, setTargetOverrideStatus] = useState<string>('');
+  const [overrideNote, setOverrideNote] = useState<string>('');
+  const [isOverridingStatus, setIsOverridingStatus] = useState(false);
 
   React.useEffect(() => {
     fetch('/api/shipping/config-status')
@@ -645,6 +654,34 @@ export const AdminPortalPage: React.FC = () => {
                   <span><strong>Campus Order Fulfillment:</strong> UPI transfer calculations upon delivery</span>
                 </li>
               </ul>
+            </div>
+
+            {/* Platform Shipping, Delivery & Acceptance Policy Settings */}
+            <div className="p-6 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-4">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-[#C85A32]" />
+                <h3 className="font-bold text-slate-900 text-sm">Platform Fulfillment &amp; Operational Policies</h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Maker Acceptance Window</span>
+                  <p className="font-black text-slate-900 text-sm">24 Hours</p>
+                  <p className="text-[10px] text-slate-500">Auto-alerts sent if student maker doesn't confirm within 18h.</p>
+                </div>
+
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Free Shipping Threshold</span>
+                  <p className="font-black text-[#C85A32] text-sm">₹499</p>
+                  <p className="text-[10px] text-slate-500">Orders below ₹499 charged flat ₹49 eco-shipping.</p>
+                </div>
+
+                <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Return Window</span>
+                  <p className="font-black text-emerald-700 text-sm">7 Days from Delivery</p>
+                  <p className="text-[10px] text-slate-500">Damaged in transit / defect verified replacements.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2018,74 +2055,331 @@ export const AdminPortalPage: React.FC = () => {
               </div>
             </div>
 
-          <div className="space-y-3">
-            {orders.map((o) => (
-              <div
-                key={o.id}
-                className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+          {/* Status Filters */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {['all', 'awaiting_maker_acceptance', 'in_production', 'packed', 'ready_to_ship', 'delivered', 'cancelled'].map((st) => (
+              <button
+                key={st}
+                onClick={() => setAdminStatusFilter(st)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition cursor-pointer capitalize ${
+                  adminStatusFilter === st
+                    ? 'bg-[#1E293B] text-white shadow-xs'
+                    : 'bg-[#FAF9F6] text-slate-600 border border-[#e7e0d8] hover:border-slate-400'
+                }`}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs font-bold text-slate-500">
-                      #ORD-2026-{o.id}
-                    </span>
-                    <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#C85A32]/10 text-[#C85A32] uppercase">
-                      {o.status.replace('_', ' ')}
-                    </span>
+                {st.replace(/_/g, ' ')}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-3">
+            {orders
+              .filter((o) => adminStatusFilter === 'all' || o.status === adminStatusFilter)
+              .map((o) => (
+                <div
+                  key={o.id}
+                  onClick={() => {
+                    setSelectedAdminOrder(o);
+                    setTargetOverrideStatus(o.status);
+                    setOverrideNote('');
+                  }}
+                  className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:border-[#C85A32]/50 transition cursor-pointer group"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-slate-500">
+                        {o.orderNumber || `#ORD-2026-${o.id}`}
+                      </span>
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-[#C85A32]/10 text-[#C85A32] uppercase">
+                        {o.status.replace(/_/g, ' ')}
+                      </span>
+                      {o.trackingAwb && (
+                        <span className="text-[10px] font-mono font-bold text-slate-400">
+                          AWB: {o.trackingAwb}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="font-bold text-slate-900 text-sm mt-1 group-hover:text-[#C85A32] transition">
+                      {o.product}
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Customer: <strong>{o.customerName || 'Patron'}</strong> • Destination: <strong>{o.city}</strong>
+                    </p>
                   </div>
-                  <h4 className="font-bold text-slate-900 text-sm mt-1">{o.product}</h4>
-                  <p className="text-xs text-slate-500">
-                    City: <strong>{o.city}</strong> • Deadline: <strong>{o.deadline}</strong>
-                  </p>
+
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <span className="text-xs text-slate-400 block">Total / {makerEarningPercent}% Split</span>
+                      <span className="text-sm font-black text-slate-900">
+                        ₹{o.amount} <span className="text-[#C85A32]">(₹{Math.round(o.amount * (makerEarningPercent / 100))})</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-bold hover:bg-[#C85A32] hover:text-white transition"
+                    >
+                      Manage →
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          {/* Administrative Order Management Modal */}
+          {selectedAdminOrder && (
+            <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-5 shadow-2xl border max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Master Administrative Review</span>
+                    <h3 className="text-lg font-black text-[#1E293B]">
+                      Order #{selectedAdminOrder.orderNumber || selectedAdminOrder.id}
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setSelectedAdminOrder(null)}
+                    className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <span className="text-xs text-slate-400 block">Total / {makerEarningPercent}% Split</span>
-                    <span className="text-sm font-black text-slate-900">
-                      ₹{o.amount} <span className="text-[#C85A32]">(₹{Math.round(o.amount * (makerEarningPercent / 100))})</span>
-                    </span>
+                <div className="space-y-4 text-xs">
+                  {/* Items snapshot */}
+                  <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Purchased Crafts Snapshot</span>
+                    <p className="font-bold text-slate-900">{selectedAdminOrder.product}</p>
+                    <p className="text-slate-600">Qty: {selectedAdminOrder.qty} • Total: ₹{selectedAdminOrder.amount}</p>
+                  </div>
+
+                  {/* Customer & Shipping */}
+                  <div className="p-3.5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">Customer &amp; Shipping</span>
+                    <p className="font-bold text-slate-900">{selectedAdminOrder.customerName} {selectedAdminOrder.customerPhone ? `• +91 ${selectedAdminOrder.customerPhone}` : ''}</p>
+                    <p className="text-slate-600">{selectedAdminOrder.city}</p>
+                    {selectedAdminOrder.trackingAwb && (
+                      <p className="text-[#C85A32] font-mono font-bold">Courier AWB: {selectedAdminOrder.trackingAwb}</p>
+                    )}
+                  </div>
+
+                  {/* Admin Override Status */}
+                  <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-3">
+                    <div className="flex items-center gap-2 text-amber-900 font-bold">
+                      <ShieldCheck className="w-4 h-4 text-amber-700" />
+                      <span>Administrative Status Override &amp; Dispute Resolution</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Set Order Status:</label>
+                      <select
+                        value={targetOverrideStatus}
+                        onChange={(e) => setTargetOverrideStatus(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold text-xs"
+                      >
+                        <option value="awaiting_maker_acceptance">Awaiting Maker Acceptance</option>
+                        <option value="accepted">Accepted by Maker</option>
+                        <option value="in_production">In Production</option>
+                        <option value="quality_check">Quality Check</option>
+                        <option value="ready_to_pack">Ready to Pack</option>
+                        <option value="packed">Packed</option>
+                        <option value="ready_to_ship">Ready to Ship</option>
+                        <option value="shipment_booked">Shipment Booked</option>
+                        <option value="in_transit">In Transit</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled / Refunded</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Audit Log Note / Reason:</label>
+                      <input
+                        type="text"
+                        value={overrideNote}
+                        onChange={(e) => setOverrideNote(e.target.value)}
+                        placeholder="e.g. Customer requested address correction, approved dispute"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={isOverridingStatus || targetOverrideStatus === selectedAdminOrder.status}
+                      onClick={async () => {
+                        setIsOverridingStatus(true);
+                        try {
+                          const res = await updateOrderStatusWithLifecycle({
+                            orderId: selectedAdminOrder.id,
+                            orderNumber: selectedAdminOrder.orderNumber,
+                            currentStatus: selectedAdminOrder.status,
+                            newStatus: targetOverrideStatus as any,
+                            actorRole: 'master_admin',
+                            actorName: 'Master Admin',
+                            note: overrideNote || 'Administrative status override applied',
+                          });
+
+                          if (res.success) {
+                            showToast(`Status updated to "${targetOverrideStatus}" with audit log!`, 'check-circle');
+                            setSelectedAdminOrder(null);
+                          } else {
+                            showToast(res.error || 'Failed to update status', 'alert-circle');
+                          }
+                        } finally {
+                          setIsOverridingStatus(false);
+                        }
+                      }}
+                      className="w-full py-2.5 rounded-xl bg-[#1E293B] hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+                    >
+                      {isOverridingStatus ? 'Updating Order...' : 'Apply Admin Status Update'}
+                    </button>
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* -------------------------------------------------------------
-          TAB 5: DATABASE & SUPABASE STATUS
+          TAB 5: DATABASE & INTEGRATIONS HEALTH (SUPABASE, RAZORPAY, SHIPROCKET)
       ------------------------------------------------------------- */}
       {activeTab === 'supabase' && (
-        <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
-          <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                <Layers className="w-5 h-5 text-emerald-600" />
-                Supabase Cloud Database &amp; Auth Health
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Connected to your project endpoint with automatic Row Level Security and Google OAuth.
-              </p>
+        <div className="space-y-6">
+          {/* Supabase Status */}
+          <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-emerald-600" />
+                  Supabase Cloud Database &amp; Auth Health
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Connected to your project endpoint with automatic Row Level Security and Google OAuth.
+                </p>
+              </div>
+              <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Connected
+              </span>
             </div>
-            <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Connected
-            </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Supabase Project URL</span>
+                <p className="text-xs font-mono font-bold text-slate-900 break-all">
+                  https://xhzphnfzuutduztukiln.supabase.co
+                </p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Role-Based Security</span>
+                <p className="text-xs font-bold text-emerald-700">
+                  ✓ RLS Enforced (Admin, Maker, Customer)
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Supabase Project URL</span>
-              <p className="text-xs font-mono font-bold text-slate-900 break-all">
-                https://xhzphnfzuutduztukiln.supabase.co
-              </p>
+          {/* Razorpay Gateway Status */}
+          <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-[#e7e0d8]">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-[#C85A32]" />
+                  Razorpay Payments Integration
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Server-side order generation and HMAC SHA-256 signature verification.
+                </p>
+              </div>
+              <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                Gateway Ready
+              </span>
             </div>
-            <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-              <span className="text-[11px] font-bold text-slate-400 uppercase">Role-Based Security</span>
-              <p className="text-xs font-bold text-emerald-700">
-                ✓ RLS Enforced (Admin, Maker, Customer)
-              </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Key Status</span>
+                <p className="font-mono font-bold text-slate-800">
+                  {razorpayStatus?.configured ? 'Active Credentials' : 'rzp_test_... Available'}
+                </p>
+                <p className="text-[10px] text-slate-500">Test &amp; Live environment compatible.</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Supported Modes</span>
+                <p className="font-bold text-slate-800">UPI, Cards, Netbanking, COD</p>
+                <p className="text-[10px] text-slate-500">Instant UPI QR &amp; app redirection.</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Payment Verification</span>
+                <p className="font-bold text-emerald-700">Cryptographic HMAC-SHA256</p>
+                <p className="text-[10px] text-slate-500">Enforced on server before order confirmation.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Shiprocket Logistics & Pincode Engine */}
+          <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-[#e7e0d8] gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-sky-600" />
+                  Shiprocket Logistics &amp; PIN Code Intelligence
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Automated serviceability checks, ETD estimates, official postal directory lookups, and AWB tracking.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={isTestingShiprocket}
+                onClick={handleTestShiprocketAuth}
+                className="px-4 py-2 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingShiprocket ? 'animate-spin' : ''}`} />
+                <span>{isTestingShiprocket ? 'Testing Auth...' : 'Test Shiprocket API'}</span>
+              </button>
+            </div>
+
+            {shiprocketTestResult && (
+              <div
+                className={`p-4 rounded-2xl border text-xs flex items-start gap-2.5 ${
+                  shiprocketTestResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}
+              >
+                {shiprocketTestResult.success ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <p className="font-bold">{shiprocketTestResult.message}</p>
+                  <p className="text-[11px] opacity-80 mt-0.5">
+                    Fallback courier rates and official postal directory ensure customers never encounter a broken checkout.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Live Pincode Intelligence</span>
+                <p className="font-bold text-slate-800">India Post Directory + Shiprocket</p>
+                <p className="text-[10px] text-slate-500">Auto-resolves district, state &amp; delivery post office.</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Integrated Courier Partners</span>
+                <p className="font-bold text-slate-800">BlueDart, Delhivery, DTDC, Shadowfax</p>
+                <p className="text-[10px] text-slate-500">Multi-courier rate comparisons &amp; live ETD.</p>
+              </div>
+              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                <span className="text-[11px] font-bold text-slate-400 uppercase">Shiprocket Webhooks</span>
+                <p className="font-bold text-emerald-700">/api/shipping/webhook Active</p>
+                <p className="text-[10px] text-slate-500">Auto-updates customer tracking upon carrier scan.</p>
+              </div>
             </div>
           </div>
         </div>

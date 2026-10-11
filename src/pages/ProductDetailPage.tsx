@@ -27,15 +27,22 @@ import {
   CreditCard,
   Leaf,
   ExternalLink,
+  Edit,
+  Trash2,
+  Plus,
+  Upload,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Product, getProductSlug } from '../types';
-import { findProductBySlugOrId, checkPincodeServiceability, PincodeServiceabilityResult } from '../services/ecommerce';
+import { Product, getProductSlug, ProductVariant, PincodeIntelligence } from '../types';
+import { findProductBySlugOrId, fetchPincodeIntelligence, checkPincodeServiceability } from '../services/ecommerce';
+import { ImageUploader } from '../components/ImageUploader';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { products, addToCart, showToast, makerEarningPercent } = useApp();
+  const { products, addToCart, showToast, makerEarningPercent, currentUser, userRole, updateProduct } = useApp();
 
   // Find target product
   const product = useMemo(() => {
@@ -48,21 +55,39 @@ export const ProductDetailPage: React.FC = () => {
   const [isImageLoading, setIsImageLoading] = useState(true);
   const [isZoomed, setIsZoomed] = useState(false);
   const [zoomCoords, setZoomCoords] = useState({ x: 50, y: 50 });
+  const touchStartXRef = useRef<number | null>(null);
 
-  // Purchase controls state
+  // Variant & purchase state
+  const [selectedVariantId, setSelectedVariantId] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isCostBreakdownOpen, setIsCostBreakdownOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'desc' | 'craft' | 'shipping' | 'reviews'>('desc');
+  const [activeTab, setActiveTab] = useState<'desc' | 'craft' | 'maker' | 'shipping' | 'reviews'>('desc');
 
   // PIN code / Shiprocket serviceability state
   const [pincodeInput, setPincodeInput] = useState('560034');
-  const [pincodeResult, setPincodeResult] = useState<PincodeServiceabilityResult | null>(null);
+  const [pincodeIntel, setPincodeIntel] = useState<PincodeIntelligence | null>(null);
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
+  const [isEditingPincode, setIsEditingPincode] = useState(false);
+
+  // Authorized Image Management state
+  const [isManagePhotosOpen, setIsManagePhotosOpen] = useState(false);
+  const [newPhotoUrl, setNewPhotoUrl] = useState('');
 
   const reviewsSectionRef = useRef<HTMLDivElement>(null);
 
-  // Compile full gallery photos
+  // Determine authorized maker or admin permission
+  const isAuthorizedToEdit = useMemo(() => {
+    if (!product) return false;
+    if (userRole === 'master_admin' || userRole === 'admin') return true;
+    if (userRole === 'maker') {
+      if (product.makerId && currentUser?.id && product.makerId === currentUser.id) return true;
+      if (currentUser?.name && product.maker.toLowerCase().includes(currentUser.name.toLowerCase())) return true;
+    }
+    return false;
+  }, [product, userRole, currentUser]);
+
+  // Compile full gallery photos with fallbacks
   const galleryImages = useMemo(() => {
     if (!product) return [];
     const list: string[] = [];
@@ -80,6 +105,31 @@ export const ProductDetailPage: React.FC = () => {
     return list;
   }, [product]);
 
+  // Available variants (use product variants or default handcrafted editions)
+  const availableVariants: ProductVariant[] = useMemo(() => {
+    if (!product) return [];
+    if (product.variants && product.variants.length > 0) {
+      return product.variants;
+    }
+    return [
+      { id: 'standard', name: 'Standard Edition', inStock: true },
+      { id: 'gift-box', name: 'Eco Gift Box Packaging (+₹50)', price: (product.price || 299) + 50, inStock: true },
+    ];
+  }, [product]);
+
+  // Sync selected variant
+  useEffect(() => {
+    if (availableVariants.length > 0 && !selectedVariantId) {
+      setSelectedVariantId(availableVariants[0].id);
+    }
+  }, [availableVariants, selectedVariantId]);
+
+  const activeVariant = useMemo(() => {
+    return availableVariants.find((v) => v.id === selectedVariantId) || availableVariants[0];
+  }, [availableVariants, selectedVariantId]);
+
+  const activePrice = activeVariant?.price || product?.price || 0;
+
   // Reset image index when product changes
   useEffect(() => {
     setActiveImageIndex(0);
@@ -88,10 +138,31 @@ export const ProductDetailPage: React.FC = () => {
     setIsZoomed(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (!pincodeResult) {
-      const initial = checkPincodeServiceability('560034');
-      setPincodeResult(initial);
-    }
+    // Initial PIN check
+    (async () => {
+      try {
+        const intel = await fetchPincodeIntelligence('560034', product?.pickupPincode || '110016');
+        setPincodeIntel(intel);
+      } catch {
+        const local = checkPincodeServiceability('560034');
+        setPincodeIntel({
+          pincode: '560034',
+          isServiceable: true,
+          locality: local.city,
+          district: local.city,
+          state: local.state,
+          courierOptions: [{ name: local.courierName, rate: 49, etd: '3-4 business days', cod: true }],
+          recommendedCourier: local.courierName,
+          estimatedDelivery: local.estimatedDeliveryText,
+          estimatedDays: local.estimatedDays,
+          shippingFee: 49,
+          codAvailable: true,
+          message: local.message,
+          originPincode: '110016',
+          verifiedSource: 'verified_postal_registry',
+        });
+      }
+    })();
   }, [product?.id]);
 
   // Check wishlist state
@@ -122,6 +193,30 @@ export const ProductDetailPage: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [galleryImages.length, isLightboxOpen]);
 
+  // Touch gesture swipe handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null) return;
+    const touchEndX = e.changedTouches[0].clientX;
+    const diff = touchStartXRef.current - touchEndX;
+
+    if (Math.abs(diff) > 40 && galleryImages.length > 1) {
+      if (diff > 0) {
+        // Swiped Left -> Next image
+        setIsImageLoading(true);
+        setActiveImageIndex((prev) => (prev + 1) % galleryImages.length);
+      } else {
+        // Swiped Right -> Prev image
+        setIsImageLoading(true);
+        setActiveImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+      }
+    }
+    touchStartXRef.current = null;
+  };
+
   // Zoom mouse tracker
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -148,66 +243,29 @@ export const ProductDetailPage: React.FC = () => {
     } catch {}
   };
 
-  // Check PIN code via Shiprocket API with local fallback
+  // Check PIN code via Smart Indian Postal & Shiprocket intelligence
   const handleCheckPincode = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPin = pincodeInput.trim();
-    if (!cleanPin || cleanPin.length !== 6 || !/^\d{6}$/.test(cleanPin)) {
-      showToast('Please enter a valid 6-digit Indian PIN code', 'alert-circle');
+    if (!cleanPin || cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
+      showToast('Please enter a valid 6-digit Indian PIN code (e.g. 560034)', 'alert-circle');
       return;
     }
 
     setIsCheckingPincode(true);
     try {
-      const res = await fetch('/api/shipping/check-serviceability', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deliveryPincode: cleanPin,
-          pickupPincode: '110001',
-          weightKg: 0.5,
-          cod: 1,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.isServiceable) {
-          const days = data.estimatedDays || 3;
-          const deliveryDate = new Date();
-          deliveryDate.setDate(deliveryDate.getDate() + days);
-          const dateStr = deliveryDate.toLocaleDateString('en-IN', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-          });
-
-          setPincodeResult({
-            pincode: cleanPin,
-            isServiceable: true,
-            city: data.city || 'Your Area',
-            state: data.state || 'India',
-            courierName: data.courierName || 'BlueDart Express',
-            estimatedDays: days,
-            estimatedDeliveryText: `Estimated delivery by ${dateStr}`,
-            codAvailable: data.codAvailable ?? true,
-            isExpressAvailable: data.isExpressAvailable ?? true,
-            message: data.message || `Serviceable via ${data.courierName || 'BlueDart'}`,
-          });
-          showToast(`PIN ${cleanPin} is serviceable for delivery!`, 'check-circle');
-          setIsCheckingPincode(false);
-          return;
-        }
+      const intel = await fetchPincodeIntelligence(cleanPin, product?.pickupPincode || '110016');
+      setPincodeIntel(intel);
+      setIsEditingPincode(false);
+      if (intel.isServiceable) {
+        showToast(`Delivery confirmed to ${intel.district}, ${intel.state}!`, 'check-circle');
+      } else {
+        showToast(`PIN ${cleanPin} is outside standard courier service area`, 'alert-circle');
       }
-    } catch {}
-
-    const localResult = checkPincodeServiceability(cleanPin);
-    setPincodeResult(localResult);
-    setIsCheckingPincode(false);
-    if (localResult.isServiceable) {
-      showToast(`PIN ${cleanPin} serviceable via ${localResult.courierName}`, 'check-circle');
-    } else {
-      showToast(`PIN ${cleanPin} is outside direct coverage`, 'alert-circle');
+    } catch (err: any) {
+      showToast(err.message || 'Could not verify delivery availability.', 'alert-circle');
+    } finally {
+      setIsCheckingPincode(false);
     }
   };
 
@@ -219,10 +277,12 @@ export const ProductDetailPage: React.FC = () => {
     showToast(`Added ${quantity} × "${product.title}" to your cart!`, 'shopping-cart');
   };
 
-  const handleBuyNow = () => {
+  const handleOrderNow = () => {
     if (!product) return;
     handleAddToCart();
-    navigate('/checkout');
+    const targetSlug = getProductSlug(product);
+    const variantParam = selectedVariantId ? `&variant=${encodeURIComponent(selectedVariantId)}` : '';
+    navigate(`/checkout?product=${targetSlug}&qty=${quantity}${variantParam}`);
   };
 
   const handleShare = async () => {
@@ -249,62 +309,124 @@ export const ProductDetailPage: React.FC = () => {
     reviewsSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Gallery management actions for authorized makers and admins
+  const handleAddGalleryImage = (url: string) => {
+    if (!product || !url) return;
+    const currentList = product.images && Array.isArray(product.images) ? [...product.images] : [product.image];
+    if (!currentList.includes(url)) {
+      currentList.push(url);
+    }
+    const updated: Product = {
+      ...product,
+      images: currentList,
+    };
+    updateProduct(updated);
+    showToast('New photograph added to craft gallery!', 'check-circle');
+    setNewPhotoUrl('');
+  };
+
+  const handleDeleteGalleryImage = (imgUrl: string) => {
+    if (!product) return;
+    const currentList = galleryImages.filter((img) => img !== imgUrl);
+    if (currentList.length === 0) {
+      showToast('Product must have at least one photograph', 'alert-circle');
+      return;
+    }
+    const updated: Product = {
+      ...product,
+      image: currentList[0],
+      images: currentList,
+    };
+    updateProduct(updated);
+    setActiveImageIndex(0);
+    showToast('Image removed from craft gallery.', 'check-circle');
+  };
+
+  const handleSetPrimaryImage = (imgUrl: string) => {
+    if (!product) return;
+    const rest = galleryImages.filter((img) => img !== imgUrl);
+    const updated: Product = {
+      ...product,
+      image: imgUrl,
+      images: [imgUrl, ...rest],
+    };
+    updateProduct(updated);
+    setActiveImageIndex(0);
+    showToast('Primary product image updated!', 'check-circle');
+  };
+
+  // If product not found
   if (!product) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-20 text-center space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-amber-50 text-[#C85A32] flex items-center justify-center mx-auto border border-amber-200">
-          <Sparkles className="w-8 h-8" />
+      <div className="max-w-7xl mx-auto px-4 py-20 text-center space-y-6">
+        <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
+          <PackageCheck className="w-8 h-8" />
         </div>
-        <h1 className="text-3xl font-black text-slate-900">Craft Not Found</h1>
+        <h1 className="text-3xl font-black text-[#1E293B]">Craft Not Found</h1>
         <p className="text-slate-500 max-w-md mx-auto text-sm">
-          The requested student craft may have been updated or moved. Browse our live catalog to discover other handmade student creations.
+          The student piece you are looking for may have been sold or moved to another studio collection.
         </p>
-        <div className="flex justify-center gap-3">
-          <Link
-            to="/marketplace"
-            className="btn-terracotta px-6 py-3 rounded-full text-xs font-bold shadow-xs inline-flex items-center gap-2"
-          >
-            Explore Marketplace
-          </Link>
-          <Link
-            to="/"
-            className="px-6 py-3 rounded-full text-xs font-bold bg-white border border-[#e7e0d8] text-slate-700 hover:bg-[#FAF9F6]"
-          >
-            Back to Home
-          </Link>
-        </div>
+        <Link
+          to="/marketplace"
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#C85A32] text-white font-bold text-sm shadow-md hover:bg-[#a04321] transition"
+        >
+          <ChevronLeft className="w-4 h-4" /> Return to Marketplace
+        </Link>
       </div>
     );
   }
 
-  const inStock = product.inStockCount === undefined || product.inStockCount > 0;
-  const maxStock = product.inStockCount !== undefined ? Math.min(product.inStockCount, 15) : 10;
+  // Stock calculations
+  const maxStock = Math.max(1, product.inStockCount ?? 15);
+  const inStock = maxStock > 0;
   const discountPercent =
     product.originalPrice && product.originalPrice > product.price
       ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
       : null;
 
-  // Related products from same maker
-  const moreFromMaker = products
-    .filter((p) => p.maker === product.maker && p.id !== product.id)
-    .slice(0, 4);
+  // Cost split calculations
+  const studentShare = Math.round(activePrice * (makerEarningPercent / 100));
+  const platformFee = Math.round(activePrice * 0.2);
+  const packagingFee = Math.max(0, activePrice - studentShare - platformFee);
 
-  // You may also like
-  const youMayAlsoLike = products
-    .filter((p) => p.category === product.category && p.id !== product.id && p.maker !== product.maker)
+  // Related products
+  const relatedProducts = products
+    .filter((p) => p.id !== product.id && p.category === product.category)
     .slice(0, 4);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 md:py-10 space-y-12">
-      {/* 2-Column Product Grid */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-12">
+      {/* Breadcrumb Navigation & Back Link */}
+      <nav aria-label="Breadcrumb" className="flex items-center justify-between gap-3 text-xs text-slate-500 border-b border-[#e7e0d8] pb-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/" className="hover:text-[#C85A32] transition">Home</Link>
+          <span aria-hidden="true">/</span>
+          <Link to="/marketplace" className="hover:text-[#C85A32] transition">Marketplace</Link>
+          <span aria-hidden="true">/</span>
+          <Link to={`/marketplace?category=${encodeURIComponent(product.category)}`} className="hover:text-[#C85A32] transition">
+            {product.category}
+          </Link>
+          <span aria-hidden="true">/</span>
+          <span className="font-semibold text-slate-800 truncate max-w-[200px] sm:max-w-xs">{product.title}</span>
+        </div>
+
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-[#C85A32] transition cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" /> Back
+        </button>
+      </nav>
+
+      {/* Main Product Layout: 2 Columns */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
         {/* =========================================================
-            LEFT COLUMN: MULTI-IMAGE GALLERY WITH VERTICAL THUMBNAIL STRIP & ZOOM
+            LEFT COLUMN: GALLERY WITH THUMBNAILS, SWIPE & LIGHTBOX
         ========================================================= */}
         <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-4 items-start">
-          {/* Vertical Thumbnail Strip */}
+          {/* Vertical / Horizontal Thumbnail Strip */}
           {galleryImages.length > 1 && (
-            <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-y-auto max-h-[520px] shrink-0 py-1 sm:py-0 select-none">
+            <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-y-auto max-h-[540px] shrink-0 py-1 sm:py-0 select-none w-full sm:w-auto">
               {galleryImages.map((imgUrl, idx) => (
                 <button
                   key={idx}
@@ -315,7 +437,7 @@ export const ProductDetailPage: React.FC = () => {
                       setActiveImageIndex(idx);
                     }
                   }}
-                  aria-label={`Select photo ${idx + 1}`}
+                  aria-label={`Select angle ${idx + 1}`}
                   className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition cursor-pointer ${
                     activeImageIndex === idx
                       ? 'border-[#C85A32] shadow-sm scale-102 ring-2 ring-[#C85A32]/20'
@@ -332,8 +454,12 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           )}
 
-          {/* Main Display Stage with Hover Zoom */}
-          <div className="relative flex-1 w-full bg-white rounded-3xl border border-[#e7e0d8] overflow-hidden aspect-square sm:aspect-[4/4] flex items-center justify-center shadow-xs group select-none">
+          {/* Main Display Stage with Touch Gestures and Hover Zoom */}
+          <div
+            className="relative flex-1 w-full bg-white rounded-3xl border border-[#e7e0d8] overflow-hidden aspect-square flex items-center justify-center shadow-xs group select-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             {/* Badges Overlay */}
             <div className="absolute top-4 left-4 z-10 flex flex-wrap gap-2 pointer-events-none">
               <span className="bg-[#FAF9F6]/95 backdrop-blur-md text-[#C85A32] text-xs font-bold px-3 py-1 rounded-full shadow-xs border border-[#C85A32]/20 flex items-center gap-1.5">
@@ -353,9 +479,7 @@ export const ProductDetailPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setIsImageLoading(true);
-                    setActiveImageIndex(
-                      (prev) => (prev - 1 + galleryImages.length) % galleryImages.length
-                    );
+                    setActiveImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
                   }}
                   aria-label="Previous photo"
                   className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-10 h-10 rounded-full bg-white/90 hover:bg-white text-slate-800 flex items-center justify-center shadow-md backdrop-blur-xs transition opacity-80 sm:opacity-0 group-hover:opacity-100 cursor-pointer"
@@ -376,15 +500,29 @@ export const ProductDetailPage: React.FC = () => {
               </>
             )}
 
-            {/* Lightbox Trigger Button */}
-            <button
-              type="button"
-              onClick={() => setIsLightboxOpen(true)}
-              aria-label="View photo in full screen"
-              className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-700 flex items-center justify-center shadow-md backdrop-blur-xs transition cursor-pointer"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
+            {/* Top Right Actions: Lightbox and Maker Image Management */}
+            <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+              {isAuthorizedToEdit && (
+                <button
+                  type="button"
+                  onClick={() => setIsManagePhotosOpen(true)}
+                  title="Manage product photographs"
+                  className="px-3 py-1.5 rounded-full bg-[#1E293B] text-white hover:bg-[#C85A32] text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Edit Photos</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsLightboxOpen(true)}
+                aria-label="View photo in full screen"
+                className="w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-700 flex items-center justify-center shadow-md backdrop-blur-xs transition cursor-pointer"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
 
             {/* Main Image with Hover Zoom Container */}
             <div
@@ -418,40 +556,20 @@ export const ProductDetailPage: React.FC = () => {
         </div>
 
         {/* =========================================================
-            RIGHT COLUMN: ORDERED EXACTLY AS SPECIFIED
-            1. breadcrumb/category
-            2. product title
-            3. star rating with a review count link
-            4. price section (with taxes, estimated delivery, PIN code)
-            5. status badges
-            6. maker card
-            7. short description
-            8. quantity selector
-            9. action buttons (sticky on mobile)
-            10. trust badges
-            11. cost breakdown
+            RIGHT COLUMN: PRODUCT DETAILS, SMART PINCODE & ORDER ACTIONS
         ========================================================= */}
         <div className="lg:col-span-5 space-y-5">
-          {/* 1. Breadcrumb / Category */}
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-            <Link to="/" className="hover:text-[#C85A32] transition">
-              Home
-            </Link>
-            <span aria-hidden="true">/</span>
-            <Link
-              to={`/marketplace?category=${encodeURIComponent(product.category)}`}
-              className="text-[#C85A32] hover:underline"
-            >
-              {product.category}
-            </Link>
-          </div>
+          {/* Category Tag */}
+          <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider inline-block">
+            {product.category}
+          </span>
 
-          {/* 2. Product Title */}
+          {/* Product Title */}
           <h1 className="text-3xl sm:text-4xl font-black text-[#1E293B] leading-tight tracking-tight">
             {product.title}
           </h1>
 
-          {/* 3. Star Rating with Review Count Link */}
+          {/* Star Rating with Review Count Link */}
           <div className="flex items-center gap-2 text-xs">
             <div className="flex items-center gap-0.5 text-amber-500">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -468,24 +586,22 @@ export const ProductDetailPage: React.FC = () => {
               ))}
             </div>
             <span className="font-bold text-slate-800">{product.rating}</span>
-            <span aria-hidden="true" className="text-slate-300">
-              ·
-            </span>
+            <span aria-hidden="true" className="text-slate-300">·</span>
             <button
               onClick={scrollToReviews}
               className="text-[#C85A32] hover:underline font-semibold cursor-pointer"
             >
-              {product.reviews} customer reviews
+              {product.reviews} verified artisan reviews
             </button>
           </div>
 
-          {/* 4. Price Section */}
+          {/* Price Section */}
           <div className="p-4 sm:p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
             <div className="flex items-baseline flex-wrap gap-3">
               <span className="text-3xl sm:text-4xl font-black text-[#1E293B]">
-                {formatINR(product.price)}
+                {formatINR(activePrice)}
               </span>
-              {product.originalPrice && product.originalPrice > product.price && (
+              {product.originalPrice && product.originalPrice > activePrice && (
                 <>
                   <span className="text-base text-slate-400 line-through">
                     {formatINR(product.originalPrice)}
@@ -501,54 +617,62 @@ export const ProductDetailPage: React.FC = () => {
 
             <p className="text-xs text-slate-500 font-medium">Inclusive of all taxes</p>
 
-            {/* PIN Code Delivery Checker via Shiprocket */}
-            <div className="pt-2 border-t border-[#e7e0d8]/80 space-y-2">
+            {/* Smart Indian Postal & Shiprocket Delivery Intelligence */}
+            <div className="pt-3 border-t border-[#e7e0d8]/80 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Truck className="w-3.5 h-3.5 text-[#C85A32]" /> Delivery &amp; Serviceability
+                  <Truck className="w-3.5 h-3.5 text-[#C85A32]" /> Delivery Checker
                 </span>
-                {pincodeResult && (
-                  <span className="text-[11px] text-slate-500">
-                    PIN: <strong className="text-slate-700">{pincodeResult.pincode}</strong> (
-                    {pincodeResult.city})
-                  </span>
+                {pincodeIntel && !isEditingPincode && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingPincode(true)}
+                    className="text-[#C85A32] hover:underline font-bold text-[11px] cursor-pointer"
+                  >
+                    Change PIN
+                  </button>
                 )}
               </div>
 
-              <form onSubmit={handleCheckPincode} className="flex gap-2">
-                <div className="relative flex-1">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={pincodeInput}
-                    onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ''))}
-                    placeholder="Enter 6-digit PIN code"
-                    className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={isCheckingPincode}
-                  className="px-4 py-2 text-xs font-bold rounded-xl bg-[#1E293B] text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
-                >
-                  {isCheckingPincode ? 'Checking...' : 'Check'}
-                </button>
-              </form>
-
-              {pincodeResult && (
+              {isEditingPincode || !pincodeIntel ? (
+                <form onSubmit={handleCheckPincode} className="flex gap-2">
+                  <div className="relative flex-1">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={pincodeInput}
+                      onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Enter 6-digit PIN code"
+                      className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isCheckingPincode}
+                    className="px-4 py-2 text-xs font-bold rounded-xl bg-[#1E293B] text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isCheckingPincode ? 'Checking...' : 'Check'}
+                  </button>
+                </form>
+              ) : (
                 <div
-                  className={`text-xs p-2.5 rounded-xl flex items-start gap-2 ${
-                    pincodeResult.isServiceable
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                  className={`text-xs p-3 rounded-2xl flex items-start gap-2.5 ${
+                    pincodeIntel.isServiceable
+                      ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-900 border border-amber-200'
                   }`}
                 >
-                  <Check className="w-3.5 h-3.5 shrink-0 mt-0.5 text-emerald-600" />
-                  <div className="leading-tight">
-                    <p className="font-semibold">{pincodeResult.estimatedDeliveryText}</p>
-                    <p className="text-[11px] opacity-80 mt-0.5">
-                      Verified via Shiprocket • {pincodeResult.courierName}
+                  <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-slate-900">
+                      Delivery to {pincodeIntel.locality ? `${pincodeIntel.locality}, ` : ''}{pincodeIntel.district}, {pincodeIntel.state} ({pincodeIntel.pincode})
+                    </p>
+                    <p className="text-[11px] text-slate-700">
+                      <strong>{pincodeIntel.estimatedDelivery}</strong> • Shipping: <strong>{pincodeIntel.shippingFee === 0 ? 'FREE' : `₹${pincodeIntel.shippingFee}`}</strong>
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      Carrier: {pincodeIntel.recommendedCourier} • {pincodeIntel.codAvailable ? 'COD Available' : 'Prepaid Only'}
                     </p>
                   </div>
                 </div>
@@ -556,7 +680,32 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 5. Status Badges (Single-line pills with icons that wrap cleanly) */}
+          {/* Variants Selector */}
+          {availableVariants.length > 1 && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                Select Edition / Variant:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {availableVariants.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setSelectedVariantId(v.id)}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                      selectedVariantId === v.id
+                        ? 'bg-[#1E293B] text-white border-[#1E293B] shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                    }`}
+                  >
+                    {v.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Status Badges */}
           <div className="flex flex-wrap items-center gap-2">
             <span
               className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border whitespace-nowrap ${
@@ -566,13 +715,11 @@ export const ProductDetailPage: React.FC = () => {
               }`}
             >
               <PackageCheck className="w-3.5 h-3.5" />
-              {product.inStockCount !== undefined
-                ? `In Stock (${product.inStockCount} left)`
-                : 'In Stock'}
+              {product.inStockCount !== undefined ? `In Stock (${product.inStockCount} left)` : 'In Stock'}
             </span>
 
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-              <Clock className="w-3.5 h-3.5" /> Made on Demand
+              <Clock className="w-3.5 h-3.5" /> Made on Demand ({product.prepTimeDays || 2}-3 Days Prep)
             </span>
 
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
@@ -580,7 +727,7 @@ export const ProductDetailPage: React.FC = () => {
             </span>
           </div>
 
-          {/* 6. Maker Card */}
+          {/* Maker Card */}
           <div className="p-4 rounded-2xl bg-white border border-[#e7e0d8] shadow-xs flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-11 h-11 rounded-full bg-[#C85A32]/10 border border-[#C85A32]/20 flex items-center justify-center font-bold text-sm text-[#C85A32] shrink-0">
@@ -601,23 +748,21 @@ export const ProductDetailPage: React.FC = () => {
             </div>
 
             <button
-              onClick={() => {
-                showToast(`Student Maker: ${product.maker} from ${product.school}`, 'user');
-              }}
+              onClick={() => setActiveTab('maker')}
               className="text-xs font-bold text-[#C85A32] hover:text-[#a04321] hover:underline shrink-0 cursor-pointer"
             >
-              View Maker Profile →
+              Maker Details →
             </button>
           </div>
 
-          {/* 7. Short Description */}
+          {/* Short Description */}
           {product.description && (
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
               {product.description}
             </p>
           )}
 
-          {/* 8. Quantity Selector */}
+          {/* Quantity Selector */}
           <div className="flex items-center gap-3 pt-1">
             <span className="text-xs font-semibold text-slate-700">Quantity:</span>
             <div className="inline-flex items-center rounded-xl border border-slate-300 bg-white">
@@ -638,28 +783,31 @@ export const ProductDetailPage: React.FC = () => {
               </button>
             </div>
             <span className="text-xs text-slate-400">
-              (Max {maxStock} per student order)
+              (Max {maxStock} available)
             </span>
           </div>
 
-          {/* 9. Action Buttons (Sticky on Mobile) */}
+          {/* Action Buttons: Add to Cart & Prominent Order Now */}
           <div className="sticky bottom-0 bg-white/95 backdrop-blur-sm -mx-4 px-4 py-3 sm:static sm:p-0 sm:bg-transparent sm:mx-0 z-20 border-t sm:border-t-0 border-[#e7e0d8]">
             <div className="flex items-center gap-3">
               <button
+                type="button"
                 onClick={handleAddToCart}
-                className="flex-1 py-3.5 px-4 rounded-xl text-xs sm:text-sm font-bold border-2 border-[#C85A32] text-[#C85A32] hover:bg-[#C85A32]/5 active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="flex-1 py-3.5 px-4 rounded-xl text-xs sm:text-sm font-bold border-2 border-[#1E293B] text-[#1E293B] hover:bg-[#1E293B] hover:text-white active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
                 <ShoppingCart className="w-4 h-4" /> Add to Cart
               </button>
 
               <button
-                onClick={handleBuyNow}
+                type="button"
+                onClick={handleOrderNow}
                 className="flex-1 py-3.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-[#C85A32] text-white hover:bg-[#a04321] active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-[#C85A32]/25"
               >
-                <Zap className="w-4 h-4" /> Buy Now
+                <Zap className="w-4 h-4 fill-current" /> Order Now
               </button>
 
               <button
+                type="button"
                 onClick={handleToggleWishlist}
                 aria-label="Wishlist craft"
                 className={`p-3.5 rounded-xl border transition cursor-pointer shrink-0 ${
@@ -672,6 +820,7 @@ export const ProductDetailPage: React.FC = () => {
               </button>
 
               <button
+                type="button"
                 onClick={handleShare}
                 aria-label="Share craft"
                 className="p-3.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-500 hover:text-slate-800 transition cursor-pointer shrink-0"
@@ -681,7 +830,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 10. Trust Badges Row */}
+          {/* Trust Badges Row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs text-slate-600">
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <CreditCard className="w-4 h-4 text-blue-600 shrink-0" />
@@ -689,7 +838,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <RotateCcw className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="leading-tight font-medium">Easy 7-day Returns</span>
+              <span className="leading-tight font-medium">7-Day Returns</span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <Truck className="w-4 h-4 text-[#C85A32] shrink-0" />
@@ -701,77 +850,60 @@ export const ProductDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 11. Cost Breakdown: Collapsible "See where your money goes" */}
-          <div className="rounded-2xl border border-[#e7e0d8] overflow-hidden bg-white">
+          {/* Collapsible Transparent Cost Split */}
+          <div className="border border-[#e7e0d8] rounded-2xl overflow-hidden bg-white">
             <button
-              type="button"
               onClick={() => setIsCostBreakdownOpen(!isCostBreakdownOpen)}
-              className="w-full px-4 py-3.5 bg-[#FAF9F6] hover:bg-[#f3eee7] transition flex items-center justify-between text-xs sm:text-sm font-bold text-slate-800 cursor-pointer"
+              className="w-full px-4 py-3 flex items-center justify-between text-xs font-bold text-slate-800 hover:bg-slate-50 transition cursor-pointer"
             >
-              <span className="flex items-center gap-2 text-[#C85A32]">
-                <Sparkles className="w-4 h-4" /> See where your money goes (Fair Split)
+              <span className="flex items-center gap-2">
+                <Layers className="w-3.5 h-3.5 text-[#C85A32]" />
+                See where your money goes (Transparent Split)
               </span>
               {isCostBreakdownOpen ? (
-                <ChevronUp className="w-4 h-4 text-slate-500" />
+                <ChevronUp className="w-4 h-4 text-slate-400" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-slate-500" />
+                <ChevronDown className="w-4 h-4 text-slate-400" />
               )}
             </button>
 
             {isCostBreakdownOpen && (
-              <div className="p-4 sm:p-5 space-y-4 animate-[fadeIn_0.2s_ease-out]">
-                {/* Clean Stacked Bar */}
-                <div className="h-3.5 w-full bg-[#f0ebe3] rounded-full overflow-hidden flex shadow-inner">
+              <div className="p-4 pt-1 space-y-3 bg-[#FAF9F6] border-t border-[#e7e0d8]">
+                {/* Stacked Percentage Bar */}
+                <div className="h-3 rounded-full overflow-hidden flex bg-slate-200">
                   <div
-                    className="h-full bg-[#C85A32] transition-all duration-300"
                     style={{ width: `${makerEarningPercent}%` }}
-                    title={`Student Maker: ${makerEarningPercent}%`}
+                    className="bg-[#C85A32] transition-all"
+                    title={`Student Maker (${makerEarningPercent}%)`}
                   />
                   <div
-                    className="h-full bg-[#1E293B] transition-all duration-300"
                     style={{ width: '20%' }}
-                    title="ArtisansKart Platform: 20%"
+                    className="bg-[#1E293B] transition-all"
+                    title="Platform Support (20%)"
                   />
                   <div
-                    className="h-full bg-[#8A9A86] transition-all duration-300"
-                    style={{ width: '15%' }}
-                    title="Packaging & Delivery: 15%"
+                    style={{ width: `${Math.max(0, 100 - makerEarningPercent - 20)}%` }}
+                    className="bg-[#8A9A86] transition-all"
+                    title="Packaging & Logistics"
                   />
                 </div>
 
-                {/* Legend with Amounts & Percentages */}
-                <div className="grid grid-cols-3 gap-2.5 pt-1 text-xs">
-                  <div className="p-3 rounded-xl bg-orange-50/70 border border-orange-200">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#C85A32]" />
-                      <span>Student Maker</span>
-                    </div>
-                    <p className="font-bold text-base text-[#C85A32] mt-1">
-                      {formatINR(product.price * (makerEarningPercent / 100))}
-                    </p>
-                    <span className="text-[11px] text-slate-400">{makerEarningPercent}% direct</span>
+                {/* Legend */}
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="p-2 rounded-xl bg-white border border-[#e7e0d8]">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Student Maker</div>
+                    <div className="font-black text-[#C85A32] text-sm">{formatINR(studentShare)}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">{makerEarningPercent}%</div>
                   </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#1E293B]" />
-                      <span>Platform</span>
-                    </div>
-                    <p className="font-bold text-base text-slate-800 mt-1">
-                      {formatINR(product.price * 0.2)}
-                    </p>
-                    <span className="text-[11px] text-slate-400">20% server &amp; lab</span>
+                  <div className="p-2 rounded-xl bg-white border border-[#e7e0d8]">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Platform Ops</div>
+                    <div className="font-black text-[#1E293B] text-sm">{formatINR(platformFee)}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">20%</div>
                   </div>
-
-                  <div className="p-3 rounded-xl bg-[#8A9A86]/10 border border-[#8A9A86]/30">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#8A9A86]" />
-                      <span>Packaging</span>
-                    </div>
-                    <p className="font-bold text-base text-[#5c6a58] mt-1">
-                      {formatINR(product.price * 0.15)}
-                    </p>
-                    <span className="text-[11px] text-slate-400">15% eco-delivery</span>
+                  <div className="p-2 rounded-xl bg-white border border-[#e7e0d8]">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Packaging</div>
+                    <div className="font-black text-[#5c6a58] text-sm">{formatINR(packagingFee)}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">{100 - makerEarningPercent - 20}%</div>
                   </div>
                 </div>
               </div>
@@ -781,329 +913,349 @@ export const ProductDetailPage: React.FC = () => {
       </div>
 
       {/* =========================================================
-          BELOW THE MAIN SECTION: TABS & CAROUSELS
+          BELOW THE MAIN STAGE: TABS FOR SPECIFICATIONS & DETAILS
       ========================================================= */}
-      <div ref={reviewsSectionRef} className="pt-8 border-t border-[#e7e0d8] space-y-8">
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-4 border-b border-[#e7e0d8] overflow-x-auto select-none">
-          <button
-            onClick={() => setActiveTab('desc')}
-            className={`pb-3.5 px-4 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'desc'
-                ? 'border-[#C85A32] text-[#C85A32]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Description &amp; Origin
-          </button>
-          <button
-            onClick={() => setActiveTab('craft')}
-            className={`pb-3.5 px-4 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'craft'
-                ? 'border-[#C85A32] text-[#C85A32]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Craft Details &amp; Care
-          </button>
-          <button
-            onClick={() => setActiveTab('shipping')}
-            className={`pb-3.5 px-4 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'shipping'
-                ? 'border-[#C85A32] text-[#C85A32]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Shipping &amp; Returns
-          </button>
-          <button
-            onClick={() => setActiveTab('reviews')}
-            className={`pb-3.5 px-4 text-sm font-bold border-b-2 transition whitespace-nowrap cursor-pointer ${
-              activeTab === 'reviews'
-                ? 'border-[#C85A32] text-[#C85A32]'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            Customer Reviews ({product.reviews})
-          </button>
+      <section ref={reviewsSectionRef} className="pt-8 border-t border-[#e7e0d8]">
+        {/* Tab Headers */}
+        <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto border-b border-[#e7e0d8] pb-px">
+          {[
+            { id: 'desc', label: 'Description & Craft Story' },
+            { id: 'craft', label: 'Craft Specifications' },
+            { id: 'maker', label: 'Maker Details & Studio' },
+            { id: 'shipping', label: 'Shipping & Returns Policy' },
+            { id: 'reviews', label: `Customer Reviews (${product.reviews})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`pb-3 px-3 sm:px-4 text-xs sm:text-sm font-bold transition whitespace-nowrap cursor-pointer border-b-2 ${
+                activeTab === tab.id
+                  ? 'border-[#C85A32] text-[#C85A32]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Tab Content */}
-        <div className="min-h-[160px] text-sm leading-relaxed text-slate-700">
+        <div className="py-6 sm:py-8 max-w-4xl text-slate-700 leading-relaxed text-sm">
           {activeTab === 'desc' && (
-            <div className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
-              <p className="text-base">{product.description}</p>
-              <div className="p-6 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
-                <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                  The Story Behind the Craft
-                </h4>
-                <p className="text-slate-600">
-                  Every unit of <strong>{product.title}</strong> is made by {product.maker}, a student in{' '}
-                  {product.cls} at {product.school}. By procuring raw materials in small campus batches
-                  and making crafts on demand, student artisans gain real entrepreneurship experience while
-                  earning funds for books and supplies.
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">The Artisan's Vision</h3>
+              <p>{product.description || 'Authentic student handcrafted creation created with meticulous care.'}</p>
+              <p>
+                Each piece in our collection is produced on-demand. Minor variations in tone, hand-etched pattern, and natural texture reflect the human hand and make your item uniquely yours.
+              </p>
             </div>
           )}
 
           {activeTab === 'craft' && (
-            <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-4 animate-[fadeIn_0.2s_ease-out]">
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Materials
-                </span>
-                <p className="font-semibold text-slate-800">
-                  {product.materials || 'Natural riverbed terracotta, organic ochre pigments'}
-                </p>
-              </div>
+            <div className="space-y-6">
+              <h3 className="text-lg font-bold text-slate-900">Craft Details &amp; Materials</h3>
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
+                  <dt className="text-xs font-bold text-slate-400 uppercase">Materials Used</dt>
+                  <dd className="font-semibold text-slate-800 mt-1">{product.materials || 'Pure natural terracotta / stoneware / artisanal supplies'}</dd>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
+                  <dt className="text-xs font-bold text-slate-400 uppercase">Dimensions</dt>
+                  <dd className="font-semibold text-slate-800 mt-1">{product.dimensions || 'Custom handcrafted proportions'}</dd>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
+                  <dt className="text-xs font-bold text-slate-400 uppercase">Weight &amp; Parcel Sizing</dt>
+                  <dd className="font-semibold text-slate-800 mt-1">{product.weight || `${product.weightKg || 0.5} kg`}</dd>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
+                  <dt className="text-xs font-bold text-slate-400 uppercase">Crafting Time &amp; Origin</dt>
+                  <dd className="font-semibold text-slate-800 mt-1">
+                    {product.prepTimeDays || 2}-3 Days Studio Crafting • {product.originCity || 'New Delhi'}, India
+                  </dd>
+                </div>
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] sm:col-span-2">
+                  <dt className="text-xs font-bold text-slate-400 uppercase">Care Instructions</dt>
+                  <dd className="font-semibold text-slate-800 mt-1">{product.careInstructions || 'Keep away from excessive dampness. Gently wipe clean with dry microfiber cloth.'}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Dimensions
-                </span>
-                <p className="font-semibold text-slate-800">
-                  {product.dimensions || 'Handcrafted size specs as listed'}
-                </p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Weight
-                </span>
-                <p className="font-semibold text-slate-800">{product.weight || '300g – 500g'}</p>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Care Instructions
-                </span>
-                <p className="font-semibold text-slate-800">
-                  {product.careInstructions ||
-                    'Wipe gently with dry cloth. Avoid harsh chemical cleaners.'}
-                </p>
+          {activeTab === 'maker' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">Student Artisan Profile</h3>
+              <div className="p-6 rounded-3xl bg-white border border-[#e7e0d8] shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                <div className="w-16 h-16 rounded-full bg-[#C85A32]/10 border border-[#C85A32]/30 flex items-center justify-center font-black text-xl text-[#C85A32]">
+                  {product.maker[0]}
+                </div>
+                <div className="space-y-1 flex-1">
+                  <h4 className="text-base font-black text-[#1E293B]">{product.maker}</h4>
+                  <p className="text-xs text-slate-500">{product.cls} • {product.school}</p>
+                  <p className="text-xs text-slate-600 pt-1">
+                    Student creator verified on ArtisansKart. {makerEarningPercent}% of each purchase goes directly toward funding the student's tuition, raw craft materials, and creative tools.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'shipping' && (
-            <div className="grid sm:grid-cols-3 gap-4 animate-[fadeIn_0.2s_ease-out]">
-              <div className="p-5 rounded-2xl bg-white border border-[#e7e0d8] space-y-2">
-                <Truck className="w-6 h-6 text-[#C85A32]" />
-                <h4 className="font-bold text-slate-900">Shiprocket Verified Logistics</h4>
-                <p className="text-xs text-slate-500">
-                  Fast delivery across all operational PIN codes in India. Live tracking updates sent via SMS &amp; Email.
-                </p>
-              </div>
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-900">Shipping, Delivery &amp; Return Policies</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-[#C85A32]">
+                    <Truck className="w-4 h-4" /> Pan-India Courier Delivery
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    Dispatched via verified courier partners (Delhivery, BlueDart, India Post) through Shiprocket. Free shipping on orders over ₹499.
+                  </p>
+                </div>
 
-              <div className="p-5 rounded-2xl bg-white border border-[#e7e0d8] space-y-2">
-                <Clock className="w-6 h-6 text-amber-600" />
-                <h4 className="font-bold text-slate-900">24-48 Hours Dispatch</h4>
-                <p className="text-xs text-slate-500">
-                  Carefully boxed and inspected by campus team before transit.
-                </p>
-              </div>
-
-              <div className="p-5 rounded-2xl bg-white border border-[#e7e0d8] space-y-2">
-                <RotateCcw className="w-6 h-6 text-emerald-600" />
-                <h4 className="font-bold text-slate-900">Easy 7-Day Returns</h4>
-                <p className="text-xs text-slate-500">
-                  Zero-hassle replacement or refund if damaged during transit.
-                </p>
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-emerald-700">
+                    <RotateCcw className="w-4 h-4" /> Easy 7-Day Returns
+                  </h4>
+                  <p className="text-xs text-slate-600">
+                    If your handcrafted item arrives damaged or defective in transit, submit a return or replacement request within 7 days of delivery for a full refund.
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'reviews' && (
-            <div className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl font-black text-[#1E293B]">{product.rating}</div>
-                  <div>
-                    <div className="flex items-center text-amber-500">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
-                      ))}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Based on {product.reviews} student craft buyer ratings
-                    </p>
-                  </div>
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Verified Customer Reviews</h3>
+                  <p className="text-xs text-slate-500">Genuine feedback from patrons who purchased this craft.</p>
                 </div>
-
-                <button
-                  onClick={() =>
-                    showToast('Thank you! Reviews are verified after delivery.', 'check-circle')
-                  }
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-[#1E293B] text-white hover:bg-slate-800 transition cursor-pointer"
-                >
-                  Write a Review
-                </button>
+                <span className="text-2xl font-black text-[#1E293B] flex items-center gap-1">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                  {product.rating} / 5.0
+                </span>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl bg-white border border-[#e7e0d8] space-y-2">
+              <div className="space-y-3">
+                <div className="p-4 rounded-2xl bg-white border border-[#e7e0d8] space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-900">Pooja Sharma</span>
-                    <span className="text-slate-400 text-[11px]">Verified Buyer · 3 days ago</span>
+                    <span className="font-bold text-slate-800">Radhika S. • Verified Buyer</span>
+                    <span className="text-amber-500 font-bold">★★★★★</span>
                   </div>
-                  <div className="flex text-amber-400 text-sm">{'★'.repeat(5)}</div>
                   <p className="text-xs text-slate-600">
-                    "The craftsmanship on this {product.title} is astonishing! Knowing the earnings reach
-                    a hardworking student artist makes it even more special."
+                    "The hand-carved terracotta finish is breathtaking! Packed safely in recyclable bubble wrap. It brought so much warmth to our home."
                   </p>
                 </div>
 
-                <div className="p-4 rounded-2xl bg-white border border-[#e7e0d8] space-y-2">
+                <div className="p-4 rounded-2xl bg-white border border-[#e7e0d8] space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-900">Vikram Malhotra</span>
-                    <span className="text-slate-400 text-[11px]">Verified Buyer · 1 week ago</span>
+                    <span className="font-bold text-slate-800">Amitabh V. • Bengaluru</span>
+                    <span className="text-amber-500 font-bold">★★★★★</span>
                   </div>
-                  <div className="flex text-amber-400 text-sm">{'★'.repeat(5)}</div>
                   <p className="text-xs text-slate-600">
-                    "Packaged with biodegradable honeycomb wrap and arrived without a single scratch.
-                    10/10 student craftsmanship!"
+                    "Arrived right on time via Delhivery. Knowing the proceeds support a student artisan directly makes it even more meaningful."
                   </p>
                 </div>
               </div>
             </div>
           )}
         </div>
+      </section>
 
-        {/* Product Carousels */}
-        {/* 1. More from this maker */}
-        {moreFromMaker.length > 0 && (
-          <div className="pt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-[#1E293B]">More from {product.maker}</h3>
-              <Link
-                to="/marketplace"
-                className="text-xs font-semibold text-[#C85A32] hover:underline"
-              >
-                View All Crafts →
-              </Link>
+      {/* =========================================================
+          RELATED PRODUCTS CAROUSEL
+      ========================================================= */}
+      {relatedProducts.length > 0 && (
+        <section className="pt-8 border-t border-[#e7e0d8] space-y-6">
+          <div className="flex items-end justify-between">
+            <div>
+              <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
+                Handpicked Pairings
+              </span>
+              <h2 className="text-2xl font-black text-[#1E293B] mt-1">You May Also Like</h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {moreFromMaker.map((item) => (
-                <Link
-                  key={`maker-${item.id}`}
-                  to={`/product/${getProductSlug(item)}`}
-                  className="group p-3 rounded-2xl bg-white border border-[#e7e0d8] hover:border-[#C85A32]/40 hover:shadow-md transition flex flex-col justify-between"
-                >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2.5">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover:text-[#C85A32]">
-                      {item.title}
-                    </p>
-                    <p className="text-sm font-black text-[#1E293B] mt-1">
-                      {formatINR(item.price)}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <Link to="/marketplace" className="text-xs font-bold text-[#C85A32] hover:underline">
+              View All Crafts →
+            </Link>
           </div>
-        )}
 
-        {/* 2. You may also like */}
-        {youMayAlsoLike.length > 0 && (
-          <div className="pt-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-black text-[#1E293B]">You May Also Like</h3>
-              <Link
-                to={`/marketplace?category=${encodeURIComponent(product.category)}`}
-                className="text-xs font-semibold text-[#C85A32] hover:underline"
-              >
-                More in {product.category} →
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {youMayAlsoLike.map((item) => (
-                <Link
-                  key={`like-${item.id}`}
-                  to={`/product/${getProductSlug(item)}`}
-                  className="group p-3 rounded-2xl bg-white border border-[#e7e0d8] hover:border-[#C85A32]/40 hover:shadow-md transition flex flex-col justify-between"
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {relatedProducts.map((rel) => {
+              const relSlug = getProductSlug(rel);
+              return (
+                <div
+                  key={rel.id}
+                  onClick={() => navigate(`/product/${relSlug}`)}
+                  className="bg-white rounded-2xl p-3 border border-[#e7e0d8] shadow-xs hover:shadow-md hover:border-[#C85A32]/40 transition cursor-pointer flex flex-col justify-between group"
                 >
-                  <div className="aspect-square rounded-xl overflow-hidden bg-slate-100 mb-2.5">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-800 truncate group-hover:text-[#C85A32]">
-                      {item.title}
+                    <div className="aspect-square rounded-xl overflow-hidden bg-slate-50 mb-2">
+                      <img
+                        src={rel.image}
+                        alt={rel.title}
+                        className="w-full h-full object-cover group-hover:scale-104 transition duration-300"
+                      />
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 truncate group-hover:text-[#C85A32] transition">
+                      {rel.title}
                     </p>
-                    <p className="text-sm font-black text-[#1E293B] mt-1">
-                      {formatINR(item.price)}
-                    </p>
+                    <p className="text-[11px] text-slate-400">{rel.maker}</p>
                   </div>
-                </Link>
-              ))}
-            </div>
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="font-black text-sm text-[#1E293B]">{formatINR(rel.price)}</span>
+                    <span className="text-[10px] font-bold text-[#C85A32]">View →</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+        </section>
+      )}
 
-      {/* Fullscreen Lightbox */}
+      {/* =========================================================
+          FULL-SCREEN LIGHTBOX MODAL
+      ========================================================= */}
       {isLightboxOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4 animate-in fade-in select-none"
           onClick={() => setIsLightboxOpen(false)}
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between p-4 md:p-8 animate-fade-in"
         >
-          <div className="flex items-center justify-between text-white z-10">
-            <span className="text-sm font-medium">
-              {product.title} • Photo {activeImageIndex + 1} of {galleryImages.length}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsLightboxOpen(false)}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition cursor-pointer"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          <div
-            className="relative flex-1 flex items-center justify-center py-4"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            onClick={() => setIsLightboxOpen(false)}
+            aria-label="Close photo view"
+            className="absolute top-6 right-6 w-11 h-11 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition cursor-pointer z-30"
           >
-            {galleryImages.length > 1 && (
+            <X className="w-6 h-6" />
+          </button>
+
+          {galleryImages.length > 1 && (
+            <>
               <button
                 type="button"
-                onClick={() =>
-                  setActiveImageIndex(
-                    (prev) => (prev - 1 + galleryImages.length) % galleryImages.length
-                  )
-                }
-                className="absolute left-2 sm:left-6 p-3 rounded-full bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+                }}
+                className="absolute left-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition cursor-pointer z-30"
               >
-                <ChevronLeft className="w-8 h-8" />
+                <ChevronLeft className="w-6 h-6" />
               </button>
-            )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev + 1) % galleryImages.length);
+                }}
+                className="absolute right-6 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/20 hover:bg-white/40 text-white flex items-center justify-center transition cursor-pointer z-30"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+            </>
+          )}
 
+          <div
+            className="max-w-4xl max-h-[85vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
             <img
               src={galleryImages[activeImageIndex]}
               alt={product.title}
-              className="max-h-[82vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
             />
+          </div>
+        </div>
+      )}
 
-            {galleryImages.length > 1 && (
+      {/* =========================================================
+          MAKER & ADMIN IMAGE MANAGEMENT MODAL (Supabase Storage)
+      ========================================================= */}
+      {isManagePhotosOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4"
+          onClick={() => setIsManagePhotosOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-6 shadow-2xl border border-[#e7e0d8] max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-lg font-black text-[#1E293B]">Manage Craft Photographs</h3>
+                <p className="text-xs text-slate-500">Add, replace, or set primary images for "{product.title}".</p>
+              </div>
+              <button
+                onClick={() => setIsManagePhotosOpen(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Existing Gallery Photos */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-700 uppercase">Current Photographs ({galleryImages.length}):</label>
+              <div className="grid grid-cols-3 gap-3">
+                {galleryImages.map((imgUrl, idx) => (
+                  <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-square">
+                    <img src={imgUrl} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
+                    {idx === 0 && (
+                      <span className="absolute top-1 left-1 bg-[#C85A32] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                        Primary
+                      </span>
+                    )}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 p-1">
+                      {idx !== 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleSetPrimaryImage(imgUrl)}
+                          title="Set as Primary"
+                          className="p-1 rounded-full bg-white text-slate-800 text-[10px] font-bold hover:bg-[#C85A32] hover:text-white cursor-pointer"
+                        >
+                          Primary
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGalleryImage(imgUrl)}
+                        title="Delete Image"
+                        className="p-1.5 rounded-full bg-white text-red-600 hover:bg-red-600 hover:text-white cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Upload or Add New Image */}
+            <div className="space-y-3 pt-3 border-t">
+              <label className="text-xs font-bold text-slate-700 uppercase">Add New Photograph:</label>
+              <ImageUploader
+                value={newPhotoUrl}
+                onChange={(url) => {
+                  setNewPhotoUrl(url);
+                  handleAddGalleryImage(url);
+                }}
+                label="Upload photo from device or provide image URL"
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="pt-2 flex justify-end">
               <button
                 type="button"
-                onClick={() => setActiveImageIndex((prev) => (prev + 1) % galleryImages.length)}
-                className="absolute right-2 sm:right-6 p-3 rounded-full bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                onClick={() => setIsManagePhotosOpen(false)}
+                className="px-5 py-2.5 rounded-full bg-[#1E293B] text-white text-xs font-bold hover:bg-slate-800 cursor-pointer"
               >
-                <ChevronRight className="w-8 h-8" />
+                Done
               </button>
-            )}
+            </div>
           </div>
         </div>
       )}
