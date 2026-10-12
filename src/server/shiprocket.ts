@@ -206,38 +206,51 @@ export async function checkCourierServiceability(params: {
     const result = await shiprocketApiRequest(endpoint, { method: 'GET' });
 
     if (result.ok && result.data?.data) {
+      const couriers = Array.isArray(result.data.data.available_courier_companies)
+        ? result.data.data.available_courier_companies
+        : [];
+      const isServiceable = couriers.length > 0;
       return {
         status: 200,
         mode: 'live_shiprocket',
-        serviceable: Boolean(result.data.data.available_courier_companies?.length),
+        serviceable: isServiceable,
+        carrierAvailable: true,
         pickup_postcode: pickupPincode,
         delivery_postcode: deliveryPincode,
-        couriers: result.data.data.available_courier_companies,
-        recommended_courier:
-          result.data.data.available_courier_companies?.[0]?.courier_name || 'Delhivery Surface',
-        rate: result.data.data.available_courier_companies?.[0]?.rate || 49,
-        etd: result.data.data.available_courier_companies?.[0]?.etd || '3-5 business days',
+        couriers,
+        recommended_courier: couriers[0]?.courier_name || undefined,
+        rate: couriers[0]?.rate !== undefined ? Math.round(Number(couriers[0].rate)) : undefined,
+        etd: couriers[0]?.etd || undefined,
         cod_available: Boolean(codValue),
+        message: isServiceable
+          ? `Courier delivery serviceable via ${couriers[0]?.courier_name}`
+          : 'This PIN code is currently outside our courier delivery network.',
       };
     }
+
+    return {
+      status: 200,
+      mode: 'live_shiprocket',
+      serviceable: false,
+      carrierAvailable: true,
+      pickup_postcode: pickupPincode,
+      delivery_postcode: deliveryPincode,
+      couriers: [],
+      message: result.error || 'Courier serviceability check was unable to confirm an active delivery route for this PIN code.',
+    };
   }
 
-  // Clean, high-fidelity verified simulation fallback when live credentials are not present or PIN check fails
-  const isValidPincode = /^[1-9][0-9]{5}$/.test(deliveryPincode.trim());
+  // When live Shiprocket credentials are not provided:
+  // Do not invent fake couriers or claim verified status.
   return {
     status: 200,
-    mode: hasCredentials ? 'fallback_simulation' : 'simulation',
-    serviceable: isValidPincode,
+    mode: 'unconfigured',
+    serviceable: false,
+    carrierAvailable: false,
     pickup_postcode: pickupPincode,
     delivery_postcode: deliveryPincode,
-    recommended_courier: 'Delhivery Surface (Eco-Packaging)',
-    etd_days: 3,
-    estimated_delivery: '3-4 business days',
-    rate: 49,
-    cod_available: true,
-    message: hasCredentials
-      ? 'Shiprocket API fallback active. Courier service verified.'
-      : 'Shiprocket running in simulation mode. Real Indian PIN code check active.',
+    couriers: [],
+    message: 'Shiprocket courier service is currently offline or not configured in environment.',
   };
 }
 

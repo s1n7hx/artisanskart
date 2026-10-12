@@ -201,14 +201,14 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
           setPincodeResult({
             pincode: cleanPin,
             isServiceable: true,
-            city: data.city || 'Your Area',
-            state: data.state || 'India',
-            courierName: data.courierName || 'BlueDart Express',
+            city: data.city || '',
+            state: data.state || '',
+            courierName: data.courierName || 'Standard Surface Delivery',
             estimatedDays: days,
             estimatedDeliveryText: `Estimated delivery by ${dateStr}`,
             codAvailable: data.codAvailable ?? true,
-            isExpressAvailable: data.isExpressAvailable ?? true,
-            message: data.message || `Serviceable via ${data.courierName || 'BlueDart'}`,
+            isExpressAvailable: data.isExpressAvailable ?? false,
+            message: data.message || `Serviceable for delivery`,
           });
           showToast(`PIN ${cleanPin} is serviceable for delivery!`, 'check-circle');
           setIsCheckingPincode(false);
@@ -217,14 +217,14 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
       }
     } catch {}
 
-    // Fallback to high-precision local courier mapping
-    const localResult = checkPincodeServiceability(cleanPin);
+    // Pure authentic lookup via India Post & Shiprocket
+    const localResult = await checkPincodeServiceability(cleanPin);
     setPincodeResult(localResult);
     setIsCheckingPincode(false);
     if (localResult.isServiceable) {
-      showToast(`PIN ${cleanPin} serviceable via ${localResult.courierName}`, 'check-circle');
+      showToast(`PIN ${cleanPin} serviceable via ${localResult.courierName || 'Courier Partner'}`, 'check-circle');
     } else {
-      showToast(`PIN ${cleanPin} is currently outside direct service area`, 'alert-circle');
+      showToast(localResult.message || `PIN ${cleanPin} delivery unconfirmed`, 'alert-circle');
     }
   };
 

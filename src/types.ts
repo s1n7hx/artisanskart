@@ -146,6 +146,46 @@ export interface CourierOption {
   isExpress?: boolean;
 }
 
+export interface PostalOfficeRecord {
+  name: string;
+  branchType: string;
+  deliveryStatus: string;
+  district: string;
+  state: string;
+  circle?: string;
+  block?: string;
+}
+
+export interface PostalLookupResult {
+  success: boolean;
+  pincode: string;
+  district?: string;
+  state?: string;
+  country?: string;
+  primaryLocality?: string;
+  localities: string[];
+  postOffices: PostalOfficeRecord[];
+  multipleOffices?: boolean;
+  errorCode?: 'INVALID_PINCODE' | 'PINCODE_NOT_FOUND' | 'LOOKUP_FAILED';
+  message?: string;
+}
+
+export interface CourierServiceabilityResult {
+  checked: boolean;
+  serviceable: boolean;
+  courierAvailable: boolean;
+  pincode: string;
+  originPincode?: string;
+  courierName?: string;
+  courierOptions: CourierOption[];
+  recommendedCourier?: string;
+  rate?: number;
+  etd?: string;
+  estimatedDays?: number;
+  codAvailable?: boolean;
+  message?: string;
+}
+
 export interface PincodeIntelligence {
   pincode: string;
   isServiceable: boolean;
@@ -162,6 +202,8 @@ export interface PincodeIntelligence {
   message: string;
   originPincode: string;
   verifiedSource: 'official_postal_shiprocket' | 'shiprocket_api' | 'verified_postal_registry';
+  localities?: string[];
+  postOffices?: PostalOfficeRecord[];
 }
 
 export interface Order {

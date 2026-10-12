@@ -206,95 +206,232 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API Route 4: Smart Indian PIN Code Intelligence (Postal Registry + Shiprocket)
-// Retrieves verified locality, district, state from India Post Registry
-// and live courier serviceability & ETD from Shiprocket.
+// In-Memory Cache for Authentic India Post Registry Records
+// -------------------------------------------------------------
+interface CachedPostalResult {
+  pincode: string;
+  district: string;
+  state: string;
+  country: string;
+  primaryLocality: string;
+  localities: string[];
+  postOffices: Array<{
+    name: string;
+    branchType: string;
+    deliveryStatus: string;
+    district: string;
+    state: string;
+    circle?: string;
+    block?: string;
+  }>;
+  multipleOffices: boolean;
+  cachedAt: number;
+}
+
+const postalLookupCache = new Map<string, CachedPostalResult>();
+
+/**
+ * Fetch Authentic Postal Data across all of India using official India Post records.
+ * Never invents, fabricates, or defaults to prefix-based guesses.
+ */
+async function fetchAuthenticPostalData(cleanPin: string): Promise<
+  | { success: true; data: CachedPostalResult }
+  | { success: false; errorCode: 'INVALID_PINCODE' | 'PINCODE_NOT_FOUND' | 'LOOKUP_FAILED'; message: string; status: number }
+> {
+  if (!cleanPin || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
+    return {
+      success: false,
+      errorCode: 'INVALID_PINCODE',
+      message: 'Invalid PIN code. Must be exactly 6 numeric digits starting with 1-9.',
+      status: 400,
+    };
+  }
+
+  // Check cache (TTL 24 hours)
+  const cached = postalLookupCache.get(cleanPin);
+  if (cached && Date.now() - cached.cachedAt < 24 * 60 * 60 * 1000) {
+    return { success: true, data: cached };
+  }
+
+  // 1. Primary Source: Official India Post Records (api.postalpincode.in)
+  try {
+    const postalRes = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(4500),
+    });
+
+    if (postalRes.ok) {
+      const postalData = await postalRes.json();
+      if (Array.isArray(postalData) && postalData[0]) {
+        const entry = postalData[0];
+        if (entry.Status === 'Success' && Array.isArray(entry.PostOffice) && entry.PostOffice.length > 0) {
+          const offices = entry.PostOffice;
+          const deliveryOffice = offices.find((o: any) => o.DeliveryStatus === 'Delivery') || offices[0];
+          const district = (deliveryOffice.District || offices[0].District || '').trim();
+          const state = (deliveryOffice.State || offices[0].State || '').trim();
+          const country = (deliveryOffice.Country || offices[0].Country || 'India').trim();
+
+          const localities = Array.from(
+            new Set(offices.map((o: any) => (o.Name || '').trim()).filter(Boolean))
+          ) as string[];
+
+          const primaryLocality = deliveryOffice.Name ? deliveryOffice.Name.trim() : (localities[0] || district);
+
+          const postOffices = offices.map((o: any) => ({
+            name: (o.Name || '').trim(),
+            branchType: o.BranchType || '',
+            deliveryStatus: o.DeliveryStatus || '',
+            district: (o.District || district).trim(),
+            state: (o.State || state).trim(),
+            circle: o.Circle || '',
+            block: o.Block || '',
+          }));
+
+          const record: CachedPostalResult = {
+            pincode: cleanPin,
+            district,
+            state,
+            country,
+            primaryLocality,
+            localities,
+            postOffices,
+            multipleOffices: localities.length > 1,
+            cachedAt: Date.now(),
+          };
+
+          postalLookupCache.set(cleanPin, record);
+          return { success: true, data: record };
+        } else if (
+          entry.Status === 'Error' ||
+          (entry.Message && entry.Message.toLowerCase().includes('no records found'))
+        ) {
+          return {
+            success: false,
+            errorCode: 'PINCODE_NOT_FOUND',
+            message: `PIN code ${cleanPin} not found in official Indian postal directory.`,
+            status: 404,
+          };
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Postal Registry] Primary source timeout/error for PIN ${cleanPin}:`, err.message);
+  }
+
+  // 2. Secondary Authentic Source: Zippopotam India Registry
+  try {
+    const backupRes = await fetch(`https://api.zippopotam.us/in/${cleanPin}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(4000),
+    });
+
+    if (backupRes.status === 404) {
+      return {
+        success: false,
+        errorCode: 'PINCODE_NOT_FOUND',
+        message: `PIN code ${cleanPin} not found in official Indian postal directory.`,
+        status: 404,
+      };
+    }
+
+    if (backupRes.ok) {
+      const data = await backupRes.json();
+      if (Array.isArray(data.places) && data.places.length > 0) {
+        const places = data.places;
+        const state = (places[0].state || '').trim();
+        const district = (places[0]['place name'] || '').trim();
+        const localities = Array.from(new Set(places.map((p: any) => (p['place name'] || '').trim()))) as string[];
+        const primaryLocality = localities[0] || district;
+
+        const record: CachedPostalResult = {
+          pincode: cleanPin,
+          district,
+          state,
+          country: data.country || 'India',
+          primaryLocality,
+          localities,
+          postOffices: places.map((p: any) => ({
+            name: (p['place name'] || '').trim(),
+            branchType: 'Post Office',
+            deliveryStatus: 'Delivery',
+            district,
+            state,
+          })),
+          multipleOffices: localities.length > 1,
+          cachedAt: Date.now(),
+        };
+
+        postalLookupCache.set(cleanPin, record);
+        return { success: true, data: record };
+      }
+    }
+  } catch (err: any) {
+    console.warn(`[Postal Registry] Secondary source timeout/error for PIN ${cleanPin}:`, err.message);
+  }
+
+  // 3. If both APIs failed due to network / timeout, return honest error with Retry option
+  return {
+    success: false,
+    errorCode: 'LOOKUP_FAILED',
+    message: 'Postal directory lookup service is currently unreachable. Please check connection and retry.',
+    status: 503,
+  };
+}
+
+// -------------------------------------------------------------
+// API Route 4a: Pure Postal Lookup (Authentic India Post Directory)
+// -------------------------------------------------------------
+app.get('/api/postal/lookup/:pincode', async (req: Request, res: Response) => {
+  const cleanPin = String(req.params.pincode || '').replace(/\D/g, '').slice(0, 6);
+  const result = await fetchAuthenticPostalData(cleanPin);
+
+  if (!result.success) {
+    return res.status(result.status).json(result);
+  }
+
+  return res.json({
+    success: true,
+    ...result.data,
+  });
+});
+
+app.post('/api/postal/lookup', async (req: Request, res: Response) => {
+  const cleanPin = String(req.body.pincode || '').replace(/\D/g, '').slice(0, 6);
+  const result = await fetchAuthenticPostalData(cleanPin);
+
+  if (!result.success) {
+    return res.status(result.status).json(result);
+  }
+
+  return res.json({
+    success: true,
+    ...result.data,
+  });
+});
+
+// -------------------------------------------------------------
+// API Route 4: PIN Code Postal Intelligence + Shiprocket Serviceability
+// Completely removes fabricated locations, prefix guessing & fake couriers.
 // -------------------------------------------------------------
 app.post('/api/shipping/pincode-intel', async (req: Request, res: Response) => {
   try {
     const { pincode, pickupPincode = '110016', weightKg = 0.5, cod = true } = req.body;
     const cleanPin = String(pincode || '').replace(/\D/g, '').slice(0, 6);
 
-    if (!cleanPin || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
-      return res.status(400).json({
+    // Step 1: Real Postal Validation & Directory Lookup
+    const postalResult = await fetchAuthenticPostalData(cleanPin);
+    if (!postalResult.success) {
+      return res.status(postalResult.status).json({
         success: false,
         isServiceable: false,
-        message: 'Please enter a valid 6-digit Indian Postal PIN code (e.g. 560034, 110001).',
+        errorCode: postalResult.errorCode,
+        message: postalResult.message,
       });
     }
 
-    // 1. Fetch Official Postal Directory Data from India Post Registry
-    let postalDetails = {
-      locality: '',
-      district: '',
-      state: '',
-      officeName: '',
-      country: 'India',
-    };
+    const postal = postalResult.data;
 
-    try {
-      const postalRes = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(3500),
-      });
-
-      if (postalRes.ok) {
-        const postalData = await postalRes.json();
-        if (Array.isArray(postalData) && postalData[0]?.Status === 'Success' && Array.isArray(postalData[0]?.PostOffice)) {
-          const offices = postalData[0].PostOffice;
-          const primaryOffice = offices.find((o: any) => o.DeliveryStatus === 'Delivery') || offices[0];
-          if (primaryOffice) {
-            postalDetails = {
-              locality: primaryOffice.Name || primaryOffice.Block || '',
-              district: primaryOffice.District || '',
-              state: primaryOffice.State || '',
-              officeName: primaryOffice.Name ? `${primaryOffice.Name} SO` : '',
-              country: primaryOffice.Country || 'India',
-            };
-          }
-        }
-      }
-    } catch (postalErr) {
-      // Fallback gracefully to high-accuracy prefix mapping if external registry is slow
-      console.warn(`[Postal Registry] Timeout/notice for PIN ${cleanPin}, using verified prefix engine.`);
-    }
-
-    // Fallback if registry lookup didn't populate
-    if (!postalDetails.district || !postalDetails.state) {
-      const prefixMap: Record<string, { city: string; state: string }> = {
-        '11': { city: 'New Delhi', state: 'Delhi' },
-        '12': { city: 'Gurugram', state: 'Haryana' },
-        '13': { city: 'Ambala', state: 'Haryana' },
-        '14': { city: 'Ludhiana', state: 'Punjab' },
-        '16': { city: 'Chandigarh', state: 'Chandigarh' },
-        '17': { city: 'Shimla', state: 'Himachal Pradesh' },
-        '18': { city: 'Jammu', state: 'Jammu and Kashmir' },
-        '19': { city: 'Srinagar', state: 'Jammu and Kashmir' },
-        '20': { city: 'Noida', state: 'Uttar Pradesh' },
-        '22': { city: 'Lucknow', state: 'Uttar Pradesh' },
-        '24': { city: 'Dehradun', state: 'Uttarakhand' },
-        '30': { city: 'Jaipur', state: 'Rajasthan' },
-        '38': { city: 'Ahmedabad', state: 'Gujarat' },
-        '40': { city: 'Mumbai', state: 'Maharashtra' },
-        '41': { city: 'Pune', state: 'Maharashtra' },
-        '45': { city: 'Indore', state: 'Madhya Pradesh' },
-        '50': { city: 'Hyderabad', state: 'Telangana' },
-        '56': { city: 'Bengaluru', state: 'Karnataka' },
-        '60': { city: 'Chennai', state: 'Tamil Nadu' },
-        '68': { city: 'Kochi', state: 'Kerala' },
-        '70': { city: 'Kolkata', state: 'West Bengal' },
-        '75': { city: 'Bhubaneswar', state: 'Odisha' },
-        '78': { city: 'Guwahati', state: 'Assam' },
-        '80': { city: 'Patna', state: 'Bihar' },
-        '83': { city: 'Ranchi', state: 'Jharkhand' },
-      };
-      const fallbackInfo = prefixMap[cleanPin.slice(0, 2)] || { city: 'Regional Postal Division', state: 'India' };
-      postalDetails.locality = postalDetails.locality || fallbackInfo.city;
-      postalDetails.district = postalDetails.district || fallbackInfo.city;
-      postalDetails.state = postalDetails.state || fallbackInfo.state;
-    }
-
-    // 2. Query Shiprocket Courier Serviceability with origin & destination
+    // Step 2: Separate Courier Serviceability Check via Shiprocket
     const shiprocketResult = await checkCourierServiceability({
       deliveryPincode: cleanPin,
       pickupPincode: pickupPincode || '110016',
@@ -302,62 +439,45 @@ app.post('/api/shipping/pincode-intel', async (req: Request, res: Response) => {
       cod: cod ? 1 : 0,
     });
 
-    const isServiceable = shiprocketResult.serviceable !== false;
-    const days = shiprocketResult.etd_days || 3;
-    const estDate = new Date();
-    estDate.setDate(estDate.getDate() + days);
-    const dateFormatted = estDate.toLocaleDateString('en-IN', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const isCourierServiceable = Boolean(shiprocketResult.serviceable);
+    const hasLiveCarrier = Boolean(shiprocketResult.carrierAvailable);
+    const courierOptions = Array.isArray(shiprocketResult.couriers) ? shiprocketResult.couriers : [];
 
-    const courierOptions = Array.isArray(shiprocketResult.couriers) && shiprocketResult.couriers.length > 0
-      ? shiprocketResult.couriers.slice(0, 4).map((c: any) => ({
-          courierId: c.courier_company_id,
-          name: c.courier_name,
-          rate: Math.round(Number(c.rate) || 49),
-          etd: c.etd || `${days} business days`,
-          cod: Boolean(c.cod),
-          isExpress: (c.courier_name || '').toLowerCase().includes('air') || (c.courier_name || '').toLowerCase().includes('express'),
-        }))
-      : [
-          {
-            name: shiprocketResult.recommended_courier || 'Delhivery Surface (Eco-Packaging)',
-            rate: 49,
-            etd: `${days}-${days + 1} business days`,
-            cod: true,
-            isExpress: false,
-          },
-          {
-            name: 'BlueDart Express Air',
-            rate: 89,
-            etd: '2 business days',
-            cod: true,
-            isExpress: true,
-          },
-        ];
+    const recommendedCourier = shiprocketResult.recommended_courier || undefined;
+    const rate = shiprocketResult.rate !== undefined ? shiprocketResult.rate : 49;
+    const etd = shiprocketResult.etd || undefined;
 
     return res.json({
       success: true,
       pincode: cleanPin,
-      isServiceable,
-      locality: postalDetails.locality,
-      district: postalDetails.district,
-      state: postalDetails.state,
-      officeName: postalDetails.officeName,
+      isServiceable: isCourierServiceable,
+      carrierAvailable: hasLiveCarrier,
+      locality: postal.primaryLocality,
+      district: postal.district,
+      state: postal.state,
+      country: postal.country,
+      localities: postal.localities,
+      postOffices: postal.postOffices,
+      multipleOffices: postal.multipleOffices,
       originPincode: pickupPincode || '110016',
-      recommendedCourier: shiprocketResult.recommended_courier || courierOptions[0]?.name,
-      estimatedDays: days,
-      estimatedDelivery: `Estimated delivery by ${dateFormatted}`,
-      shippingFee: 49, // Base standard fee (free above ₹499 in checkout)
-      codAvailable: shiprocketResult.cod_available ?? true,
+      recommendedCourier,
       courierOptions,
-      verifiedSource: postalDetails.officeName ? 'official_postal_shiprocket' : 'verified_postal_registry',
-      message: `Delivery to ${postalDetails.locality ? `${postalDetails.locality}, ` : ''}${postalDetails.district}, ${postalDetails.state}`,
+      shippingFee: rate,
+      estimatedDelivery: etd,
+      codAvailable: shiprocketResult.cod_available ?? false,
+      message: isCourierServiceable && recommendedCourier
+        ? `Delivery to ${postal.primaryLocality}, ${postal.district}, ${postal.state} via ${recommendedCourier}`
+        : hasLiveCarrier
+        ? `PIN ${cleanPin} (${postal.district}, ${postal.state}) is outside our courier delivery network.`
+        : `Verified postal area: ${postal.primaryLocality}, ${postal.district}, ${postal.state}. Courier serviceability unconfirmed.`,
     });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || 'Pincode validation failed' });
+    return res.status(500).json({
+      success: false,
+      isServiceable: false,
+      errorCode: 'LOOKUP_FAILED',
+      message: err.message || 'Pincode validation failed',
+    });
   }
 });
 

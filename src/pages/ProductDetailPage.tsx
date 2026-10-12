@@ -35,8 +35,8 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Product, getProductSlug, ProductVariant, PincodeIntelligence } from '../types';
-import { findProductBySlugOrId, fetchPincodeIntelligence, checkPincodeServiceability } from '../services/ecommerce';
+import { Product, getProductSlug, ProductVariant, PincodeIntelligence, PostalLookupResult, CourierServiceabilityResult } from '../types';
+import { findProductBySlugOrId, lookupPostalPincode, checkCourierAvailability } from '../services/ecommerce';
 import { ImageUploader } from '../components/ImageUploader';
 
 export const ProductDetailPage: React.FC = () => {
@@ -64,9 +64,18 @@ export const ProductDetailPage: React.FC = () => {
   const [isCostBreakdownOpen, setIsCostBreakdownOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'desc' | 'craft' | 'maker' | 'shipping' | 'reviews'>('desc');
 
-  // PIN code / Shiprocket serviceability state
-  const [pincodeInput, setPincodeInput] = useState('560034');
-  const [pincodeIntel, setPincodeIntel] = useState<PincodeIntelligence | null>(null);
+  // PIN code / Postal & Courier serviceability state
+  const [pincodeInput, setPincodeInput] = useState(() => {
+    try {
+      return sessionStorage.getItem('artisanskart_user_pincode') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [verifiedPostal, setVerifiedPostal] = useState<PostalLookupResult | null>(null);
+  const [courierResult, setCourierResult] = useState<CourierServiceabilityResult | null>(null);
+  const [pincodeError, setPincodeError] = useState('');
+  const [pincodeErrorCode, setPincodeErrorCode] = useState('');
   const [isCheckingPincode, setIsCheckingPincode] = useState(false);
   const [isEditingPincode, setIsEditingPincode] = useState(false);
 
@@ -138,31 +147,22 @@ export const ProductDetailPage: React.FC = () => {
     setIsZoomed(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    // Initial PIN check
-    (async () => {
-      try {
-        const intel = await fetchPincodeIntelligence('560034', product?.pickupPincode || '110016');
-        setPincodeIntel(intel);
-      } catch {
-        const local = checkPincodeServiceability('560034');
-        setPincodeIntel({
-          pincode: '560034',
-          isServiceable: true,
-          locality: local.city,
-          district: local.city,
-          state: local.state,
-          courierOptions: [{ name: local.courierName, rate: 49, etd: '3-4 business days', cod: true }],
-          recommendedCourier: local.courierName,
-          estimatedDelivery: local.estimatedDeliveryText,
-          estimatedDays: local.estimatedDays,
-          shippingFee: 49,
-          codAvailable: true,
-          message: local.message,
-          originPincode: '110016',
-          verifiedSource: 'verified_postal_registry',
-        });
-      }
-    })();
+    // If user previously checked a valid PIN in this session, re-verify real data
+    if (pincodeInput && pincodeInput.length === 6 && /^[1-9][0-9]{5}$/.test(pincodeInput)) {
+      (async () => {
+        setIsCheckingPincode(true);
+        const postal = await lookupPostalPincode(pincodeInput);
+        if (postal.success) {
+          setVerifiedPostal(postal);
+          const courier = await checkCourierAvailability({
+            deliveryPincode: pincodeInput,
+            pickupPincode: product?.pickupPincode || '110016',
+          });
+          setCourierResult(courier);
+        }
+        setIsCheckingPincode(false);
+      })();
+    }
   }, [product?.id]);
 
   // Check wishlist state
@@ -243,27 +243,49 @@ export const ProductDetailPage: React.FC = () => {
     } catch {}
   };
 
-  // Check PIN code via Smart Indian Postal & Shiprocket intelligence
+  // Check PIN code via authentic India Post directory + Shiprocket
   const handleCheckPincode = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPin = pincodeInput.trim();
+    const cleanPin = pincodeInput.replace(/\D/g, '').slice(0, 6);
     if (!cleanPin || cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
-      showToast('Please enter a valid 6-digit Indian PIN code (e.g. 560034)', 'alert-circle');
+      setPincodeError('Invalid PIN code. Must be 6 digits starting with 1-9.');
+      setPincodeErrorCode('INVALID_PINCODE');
+      setVerifiedPostal(null);
+      setCourierResult(null);
       return;
     }
 
     setIsCheckingPincode(true);
+    setPincodeError('');
+    setPincodeErrorCode('');
+    setVerifiedPostal(null);
+    setCourierResult(null);
+
     try {
-      const intel = await fetchPincodeIntelligence(cleanPin, product?.pickupPincode || '110016');
-      setPincodeIntel(intel);
-      setIsEditingPincode(false);
-      if (intel.isServiceable) {
-        showToast(`Delivery confirmed to ${intel.district}, ${intel.state}!`, 'check-circle');
-      } else {
-        showToast(`PIN ${cleanPin} is outside standard courier service area`, 'alert-circle');
+      const postal = await lookupPostalPincode(cleanPin);
+      if (!postal.success) {
+        setPincodeError(postal.message || 'PIN code not found in official Indian postal directory.');
+        setPincodeErrorCode(postal.errorCode || 'PINCODE_NOT_FOUND');
+        return;
       }
-    } catch (err: any) {
-      showToast(err.message || 'Could not verify delivery availability.', 'alert-circle');
+
+      setVerifiedPostal(postal);
+      setIsEditingPincode(false);
+      try {
+        sessionStorage.setItem('artisanskart_user_pincode', cleanPin);
+      } catch {}
+
+      // Separate courier check
+      const courier = await checkCourierAvailability({
+        deliveryPincode: cleanPin,
+        pickupPincode: product?.pickupPincode || '110016',
+        weightKg: 0.5,
+        cod: true,
+      });
+      setCourierResult(courier);
+    } catch {
+      setPincodeError('Network error connecting to postal directory. Please retry.');
+      setPincodeErrorCode('LOOKUP_FAILED');
     } finally {
       setIsCheckingPincode(false);
     }
@@ -623,10 +645,12 @@ export const ProductDetailPage: React.FC = () => {
                 <span className="font-semibold text-slate-700 flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5 text-[#C85A32]" /> Delivery Checker
                 </span>
-                {pincodeIntel && !isEditingPincode && (
+                {verifiedPostal && !isEditingPincode && (
                   <button
                     type="button"
-                    onClick={() => setIsEditingPincode(true)}
+                    onClick={() => {
+                      setIsEditingPincode(true);
+                    }}
                     className="text-[#C85A32] hover:underline font-bold text-[11px] cursor-pointer"
                   >
                     Change PIN
@@ -634,46 +658,76 @@ export const ProductDetailPage: React.FC = () => {
                 )}
               </div>
 
-              {isEditingPincode || !pincodeIntel ? (
-                <form onSubmit={handleCheckPincode} className="flex gap-2">
-                  <div className="relative flex-1">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={pincodeInput}
-                      onChange={(e) => setPincodeInput(e.target.value.replace(/\D/g, ''))}
-                      placeholder="Enter 6-digit PIN code"
-                      className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isCheckingPincode}
-                    className="px-4 py-2 text-xs font-bold rounded-xl bg-[#1E293B] text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
-                  >
-                    {isCheckingPincode ? 'Checking...' : 'Check'}
-                  </button>
-                </form>
+              {isEditingPincode || !verifiedPostal ? (
+                <div className="space-y-1.5">
+                  <form onSubmit={handleCheckPincode} className="flex gap-2">
+                    <div className="relative flex-1">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        maxLength={6}
+                        value={pincodeInput}
+                        onChange={(e) => {
+                          setPincodeInput(e.target.value.replace(/\D/g, ''));
+                          setPincodeError('');
+                        }}
+                        placeholder="Enter 6-digit PIN code"
+                        className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isCheckingPincode || pincodeInput.replace(/\D/g, '').length !== 6}
+                      className="px-4 py-2 text-xs font-bold rounded-xl bg-[#1E293B] text-white hover:bg-slate-800 transition cursor-pointer disabled:opacity-50"
+                    >
+                      {isCheckingPincode ? 'Checking...' : 'Check'}
+                    </button>
+                  </form>
+                  {pincodeError && (
+                    <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                        <span>{pincodeError}</span>
+                      </div>
+                      {pincodeErrorCode === 'LOOKUP_FAILED' && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleCheckPincode(e as any)}
+                          className="text-xs font-bold text-rose-700 underline hover:text-rose-900 shrink-0 cursor-pointer"
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div
                   className={`text-xs p-3 rounded-2xl flex items-start gap-2.5 ${
-                    pincodeIntel.isServiceable
+                    courierResult?.serviceable
                       ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
                       : 'bg-amber-50 text-amber-900 border border-amber-200'
                   }`}
                 >
                   <Check className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                  <div className="space-y-1">
+                  <div className="space-y-1 w-full">
                     <p className="font-bold text-slate-900">
-                      Delivery to {pincodeIntel.locality ? `${pincodeIntel.locality}, ` : ''}{pincodeIntel.district}, {pincodeIntel.state} ({pincodeIntel.pincode})
+                      Delivery to {verifiedPostal.primaryLocality ? `${verifiedPostal.primaryLocality}, ` : ''}{verifiedPostal.district}, {verifiedPostal.state} ({verifiedPostal.pincode})
                     </p>
-                    <p className="text-[11px] text-slate-700">
-                      <strong>{pincodeIntel.estimatedDelivery}</strong> • Shipping: <strong>{pincodeIntel.shippingFee === 0 ? 'FREE' : `₹${pincodeIntel.shippingFee}`}</strong>
-                    </p>
-                    <p className="text-[10px] text-slate-500">
-                      Carrier: {pincodeIntel.recommendedCourier} • {pincodeIntel.codAvailable ? 'COD Available' : 'Prepaid Only'}
-                    </p>
+                    {courierResult?.serviceable && courierResult.courierName ? (
+                      <>
+                        <p className="text-[11px] text-slate-700">
+                          <strong>{courierResult.etd || '3-4 business days'}</strong> • Shipping: <strong>{courierResult.rate ? `₹${courierResult.rate}` : 'FREE'}</strong>
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          Carrier: {courierResult.courierName} • {courierResult.codAvailable ? 'COD Available' : 'Prepaid Only'}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-amber-800">
+                        {courierResult?.message || 'Standard delivery unconfirmed for this PIN. You can continue to address details at checkout.'}
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

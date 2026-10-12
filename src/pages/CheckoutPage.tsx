@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -24,18 +24,19 @@ import {
   Home,
   RefreshCw,
   Info,
+  ChevronDown,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { Product, CustomerAddress, OrderItemSnapshot } from '../types';
+import { Product, CustomerAddress, OrderItemSnapshot, PostalLookupResult, CourierServiceabilityResult } from '../types';
 import { initiateRazorpayPayment } from '../services/razorpay';
 import {
-  fetchPincodeIntelligence,
-  checkPincodeServiceability,
   fetchCustomerAddresses,
   saveCustomerAddress,
   createOrderRecord,
   validateCouponCode,
   findProductBySlugOrId,
+  lookupPostalPincode,
+  checkCourierAvailability,
 } from '../services/ecommerce';
 
 export const CheckoutPage: React.FC = () => {
@@ -66,21 +67,29 @@ export const CheckoutPage: React.FC = () => {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
   const [saveAddressForFuture, setSaveAddressForFuture] = useState(true);
 
-  // Address Form
+  // Address Form (Empty by default; never hardcoded to Guwahati or Bangalore)
   const [fullName, setFullName] = useState(currentUser?.name || '');
   const [email, setEmail] = useState(currentUser?.email || '');
   const [phone, setPhone] = useState('');
-  const [pincode, setPincode] = useState('560034');
+  const [pincode, setPincode] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
-  const [locality, setLocality] = useState('Koramangala');
-  const [city, setCity] = useState('Bengaluru');
-  const [state, setState] = useState('Karnataka');
+  const [locality, setLocality] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
   const [landmark, setLandmark] = useState('');
 
-  // Postal & Courier intelligence state
-  const [pincodeInfo, setPincodeInfo] = useState<any>(null);
-  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+  // Postal & Courier state (Strictly Separated)
+  const [postalLookupStatus, setPostalLookupStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [verifiedPostal, setVerifiedPostal] = useState<PostalLookupResult | null>(null);
+  const [postalErrorMessage, setPostalErrorMessage] = useState('');
+  const [postalErrorCode, setPostalErrorCode] = useState('');
+  const [availableLocalities, setAvailableLocalities] = useState<string[]>([]);
+  const [courierResult, setCourierResult] = useState<CourierServiceabilityResult | null>(null);
+  const [courierStatus, setCourierStatus] = useState<'idle' | 'loading' | 'checked'>('idle');
+
+  // Sequence ref to prevent out-of-order API responses from overwriting newer PIN entries
+  const lookupRequestIdRef = useRef<number>(0);
 
   // Coupon state
   const [couponInput, setCouponInput] = useState('');
@@ -94,6 +103,108 @@ export const CheckoutPage: React.FC = () => {
   const [completedOrderNumber, setCompletedOrderNumber] = useState('');
   const [completedTrackingAwb, setCompletedTrackingAwb] = useState('');
   const [completedOrderSnapshot, setCompletedOrderSnapshot] = useState<any>(null);
+
+  // Core Lookup Logic: Runs real postal lookup, then separate courier check
+  const executePostalAndCourierLookup = async (cleanPin: string, reqId: number) => {
+    if (!/^[1-9][0-9]{5}$/.test(cleanPin)) {
+      if (reqId === lookupRequestIdRef.current) {
+        setPostalLookupStatus('error');
+        setPostalErrorCode('INVALID_PINCODE');
+        setPostalErrorMessage('Invalid PIN code. Must be 6 digits and start with 1-9.');
+      }
+      return;
+    }
+
+    setPostalLookupStatus('loading');
+    setCourierStatus('idle');
+
+    // 1. Authentic Postal Lookup
+    const postal = await lookupPostalPincode(cleanPin);
+
+    // Stale check: Discard if customer typed a newer PIN while waiting
+    if (reqId !== lookupRequestIdRef.current) return;
+
+    if (!postal.success) {
+      setPostalLookupStatus('error');
+      setPostalErrorCode(postal.errorCode || 'LOOKUP_FAILED');
+      setPostalErrorMessage(postal.message || 'PIN code not found in Indian postal registry.');
+      setCity('');
+      setState('');
+      setLocality('');
+      return;
+    }
+
+    // Postal lookup succeeded
+    setPostalLookupStatus('success');
+    setVerifiedPostal(postal);
+    setPostalErrorMessage('');
+    setPostalErrorCode('');
+
+    if (postal.district) setCity(postal.district);
+    if (postal.state) setState(postal.state);
+
+    const locs = postal.localities && postal.localities.length > 0
+      ? postal.localities
+      : [postal.primaryLocality || postal.district || ''];
+    setAvailableLocalities(locs);
+
+    const initialLocality = postal.primaryLocality || locs[0] || '';
+    setLocality(initialLocality);
+
+    // Note: Customer's addressLine1, addressLine2, landmark remain untouched!
+
+    // 2. Separate Courier Serviceability Check
+    setCourierStatus('loading');
+    const courier = await checkCourierAvailability({
+      deliveryPincode: cleanPin,
+      pickupPincode: '110016',
+      weightKg: 0.5,
+      cod: true,
+    });
+
+    if (reqId !== lookupRequestIdRef.current) return;
+
+    setCourierStatus('checked');
+    setCourierResult(courier);
+  };
+
+  // Immediate PIN editing handler: Instantly clears stale data
+  const handlePincodeChange = (raw: string) => {
+    const cleanPin = raw.replace(/\D/g, '').slice(0, 6);
+    setPincode(cleanPin);
+
+    // Clear previous verified location, courier, and stale serviceability immediately!
+    setVerifiedPostal(null);
+    setCourierResult(null);
+    setPostalErrorMessage('');
+    setPostalErrorCode('');
+    setAvailableLocalities([]);
+
+    lookupRequestIdRef.current += 1;
+    const currentReqId = lookupRequestIdRef.current;
+
+    if (cleanPin.length === 0) {
+      setPostalLookupStatus('idle');
+      setCity('');
+      setState('');
+      setLocality('');
+      return;
+    }
+
+    if (cleanPin.length < 6) {
+      setPostalLookupStatus('idle');
+      return;
+    }
+
+    executePostalAndCourierLookup(cleanPin, currentReqId);
+  };
+
+  const handleRetryLookup = () => {
+    if (pincode.length === 6) {
+      lookupRequestIdRef.current += 1;
+      executePostalAndCourierLookup(pincode, lookupRequestIdRef.current);
+    }
+  };
 
   // Load customer saved addresses
   useEffect(() => {
@@ -111,6 +222,11 @@ export const CheckoutPage: React.FC = () => {
         setCity(def.city);
         setState(def.state);
         setLandmark(def.landmark || '');
+
+        if (def.pincode && def.pincode.length === 6) {
+          lookupRequestIdRef.current += 1;
+          executePostalAndCourierLookup(def.pincode, lookupRequestIdRef.current);
+        }
       }
     });
   }, [currentUser?.id]);
@@ -119,9 +235,18 @@ export const CheckoutPage: React.FC = () => {
   const handleSelectSavedAddress = (addrId: string) => {
     setSelectedAddressId(addrId);
     if (addrId === 'new') {
+      setPincode('');
       setAddressLine1('');
       setAddressLine2('');
+      setLocality('');
+      setCity('');
+      setState('');
       setLandmark('');
+      setVerifiedPostal(null);
+      setCourierResult(null);
+      setPostalLookupStatus('idle');
+      setPostalErrorMessage('');
+      setAvailableLocalities([]);
       return;
     }
     const match = savedAddresses.find((a) => a.id === addrId);
@@ -131,29 +256,17 @@ export const CheckoutPage: React.FC = () => {
       setPincode(match.pincode);
       setAddressLine1(match.buildingHouse);
       setAddressLine2(match.streetAddress);
+      setLocality(match.landmark || '');
       setCity(match.city);
       setState(match.state);
       setLandmark(match.landmark || '');
+
+      if (match.pincode && match.pincode.length === 6) {
+        lookupRequestIdRef.current += 1;
+        executePostalAndCourierLookup(match.pincode, lookupRequestIdRef.current);
+      }
     }
   };
-
-  // Auto-detect Postal Directory & Courier Serviceability on PIN change
-  useEffect(() => {
-    const cleanPin = pincode.replace(/\D/g, '').slice(0, 6);
-    if (cleanPin.length === 6 && /^[1-9][0-9]{5}$/.test(cleanPin)) {
-      setIsVerifyingPin(true);
-      fetchPincodeIntelligence(cleanPin)
-        .then((intel) => {
-          setPincodeInfo(intel);
-          if (intel.district) setCity(intel.district);
-          if (intel.state) setState(intel.state);
-          if (intel.locality) setLocality(intel.locality);
-        })
-        .finally(() => setIsVerifyingPin(false));
-    } else {
-      setPincodeInfo(null);
-    }
-  }, [pincode]);
 
   // Detailed items in order
   const checkoutItems = useMemo(() => {
@@ -293,7 +406,7 @@ export const CheckoutPage: React.FC = () => {
           paymentStatus: 'cod',
           paymentMethod: 'cod',
           trackingAwb: awb,
-          courierName: pincodeInfo?.recommendedCourier || 'Delhivery Surface (Eco-Packaging)',
+          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Campus Dispatch'),
           items: orderItemSnapshots,
           makerId: checkoutItems[0]?.product?.makerId,
           makerName: checkoutItems[0]?.product?.maker,
@@ -335,7 +448,7 @@ export const CheckoutPage: React.FC = () => {
             paymentStatus: 'paid',
             paymentMethod: 'razorpay',
             trackingAwb: awb,
-            courierName: pincodeInfo?.recommendedCourier || 'BlueDart Air Express',
+            courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Campus Dispatch'),
             items: orderItemSnapshots,
             makerId: checkoutItems[0]?.product?.makerId,
             makerName: checkoutItems[0]?.product?.maker,
@@ -574,40 +687,150 @@ export const CheckoutPage: React.FC = () => {
                 />
               </div>
 
-              {/* PIN Code with auto-lookup */}
+              {/* PIN Code with Authentic Postal Directory Auto-Lookup */}
               <div className="space-y-1 sm:col-span-2">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-700">6-Digit PIN Code *</label>
-                  {isVerifyingPin && (
-                    <span className="text-[11px] text-[#C85A32] flex items-center gap-1 font-semibold">
-                      <RefreshCw className="w-3 h-3 animate-spin" /> Verifying postal hub...
+                  <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <span>6-Digit Indian PIN Code *</span>
+                    <span className="text-[10px] text-slate-400 font-normal">(All India supported)</span>
+                  </label>
+                  {postalLookupStatus === 'loading' && (
+                    <span className="text-[11px] text-[#C85A32] flex items-center gap-1 font-semibold animate-pulse">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Verifying postal directory...
                     </span>
                   )}
                 </div>
-                <input
-                  type="text"
-                  required
-                  maxLength={6}
-                  value={pincode}
-                  onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 560034"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] bg-white text-xs font-mono font-bold"
-                />
 
-                {pincodeInfo && (
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={pincode}
+                    onChange={(e) => handlePincodeChange(e.target.value)}
+                    placeholder="Enter 6-digit PIN code (e.g. 110001, 560034, 400001)"
+                    className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none bg-white text-xs font-mono font-bold transition ${
+                      postalLookupStatus === 'error'
+                        ? 'border-red-400 focus:border-red-500 bg-red-50/20'
+                        : postalLookupStatus === 'success'
+                        ? 'border-emerald-400 focus:border-emerald-500'
+                        : 'border-slate-300 focus:border-[#C85A32]'
+                    }`}
+                  />
+                  {postalLookupStatus === 'success' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </span>
+                  )}
+                </div>
+
+                {/* Honest Error State: Invalid PIN, Not Found, or Network Timeout */}
+                {postalLookupStatus === 'error' && (
+                  <div className="mt-1.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold">{postalErrorMessage}</p>
+                        <p className="text-[11px] text-red-700 mt-0.5">
+                          {postalErrorCode === 'INVALID_PINCODE'
+                            ? 'Please ensure you entered a standard 6-digit numeric Indian postal code.'
+                            : postalErrorCode === 'PINCODE_NOT_FOUND'
+                            ? 'This PIN code was not found in authentic Indian postal directory records.'
+                            : 'Could not reach the postal registry service at this moment.'}
+                        </p>
+                      </div>
+                    </div>
+                    {postalErrorCode === 'LOOKUP_FAILED' && (
+                      <button
+                        type="button"
+                        onClick={handleRetryLookup}
+                        className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] transition cursor-pointer shrink-0"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Verified Postal Registry Result: Authentic locality, district, state */}
+                {postalLookupStatus === 'success' && verifiedPostal && (
+                  <div className="mt-1.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="font-bold text-emerald-900">
+                          Verified Postal Location: {verifiedPostal.district}, {verifiedPostal.state}
+                        </span>
+                      </div>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                        PIN {verifiedPostal.pincode}
+                      </span>
+                    </div>
+
+                    {/* Multiple Post Offices / Localities selector */}
+                    {availableLocalities.length > 1 && (
+                      <div className="pt-2 border-t border-emerald-200/80">
+                        <label className="font-bold text-slate-700 block text-[11px] mb-1">
+                          Select Delivery Post Office / Locality ({availableLocalities.length} found in this PIN):
+                        </label>
+                        <select
+                          value={locality}
+                          onChange={(e) => setLocality(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-emerald-300 bg-white text-xs font-semibold text-slate-800 focus:outline-none focus:border-[#C85A32]"
+                        >
+                          {availableLocalities.map((loc) => (
+                            <option key={loc} value={loc}>
+                              {loc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Separate Courier Delivery Status (Shiprocket) */}
+                {courierStatus === 'loading' && (
+                  <div className="mt-1 p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px] flex items-center gap-1.5">
+                    <RefreshCw className="w-3 h-3 animate-spin text-[#C85A32]" />
+                    <span>Checking courier serviceability &amp; delivery time for PIN {pincode}...</span>
+                  </div>
+                )}
+
+                {courierStatus === 'checked' && courierResult && (
                   <div
-                    className={`mt-1.5 p-2.5 rounded-xl text-xs flex items-center justify-between gap-2 ${
-                      pincodeInfo.isServiceable
-                        ? 'bg-emerald-50 text-emerald-900 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-900 border border-amber-200'
+                    className={`mt-1.5 p-2.5 rounded-xl text-xs flex items-center justify-between gap-2 border ${
+                      courierResult.serviceable
+                        ? 'bg-blue-50 border-blue-200 text-blue-950'
+                        : courierResult.courierAvailable
+                        ? 'bg-amber-50 border-amber-200 text-amber-950'
+                        : 'bg-slate-50 border-slate-200 text-slate-700'
                     }`}
                   >
-                    <span>
-                      Verified: <strong>{pincodeInfo.locality ? `${pincodeInfo.locality}, ` : ''}{pincodeInfo.district}, {pincodeInfo.state}</strong>
-                    </span>
-                    <span className="text-[10px] opacity-80 shrink-0 font-semibold">
-                      {pincodeInfo.recommendedCourier}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <Truck className={`w-4 h-4 shrink-0 ${courierResult.serviceable ? 'text-blue-600' : 'text-slate-500'}`} />
+                      <div>
+                        {courierResult.serviceable && courierResult.courierName ? (
+                          <p className="font-bold text-blue-900">
+                            Serviceable via {courierResult.courierName}
+                            {courierResult.etd ? ` • ${courierResult.etd}` : ''}
+                          </p>
+                        ) : courierResult.courierAvailable ? (
+                          <p className="font-bold text-amber-900">
+                            Courier service currently outside standard zone for this PIN.
+                          </p>
+                        ) : (
+                          <p className="font-medium text-slate-700">
+                            Postal location verified. Courier routing under standard dispatch.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {courierResult.serviceable && (
+                      <span className="text-[10px] font-bold bg-white text-blue-800 px-2.5 py-1 rounded-full border border-blue-200 shrink-0">
+                        {shippingFee === 0 ? 'Free Shipping' : '₹49 Eco-Delivery'}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -632,30 +855,55 @@ export const CheckoutPage: React.FC = () => {
                   type="text"
                   value={addressLine2}
                   onChange={(e) => setAddressLine2(e.target.value)}
-                  placeholder="e.g. Outer Ring Road, Bellandur"
+                  placeholder="e.g. Outer Ring Road, 4th Cross"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] bg-white text-xs"
                 />
               </div>
 
-              {/* City & State */}
+              {/* Locality / Sub-area (if user wants to customize) */}
+              <div className="space-y-1 sm:col-span-2">
+                <label className="font-bold text-slate-700">Locality / Post Office Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={locality}
+                  onChange={(e) => setLocality(e.target.value)}
+                  placeholder="e.g. Connaught Place, Koramangala, etc."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] bg-white text-xs"
+                />
+              </div>
+
+              {/* City & State (prefilled from authentic postal directory) */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">City / District *</label>
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span>City / District *</span>
+                  {postalLookupStatus === 'success' && (
+                    <span className="text-[10px] text-emerald-600 font-semibold">✓ Verified</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   required
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
+                  placeholder="Auto-filled from postal directory"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] bg-white text-xs"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">State *</label>
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span>State *</span>
+                  {postalLookupStatus === 'success' && (
+                    <span className="text-[10px] text-emerald-600 font-semibold">✓ Verified</span>
+                  )}
+                </label>
                 <input
                   type="text"
                   required
                   value={state}
                   onChange={(e) => setState(e.target.value)}
+                  placeholder="Auto-filled from postal directory"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] bg-white text-xs"
                 />
               </div>

@@ -7,6 +7,9 @@ import {
   PaymentStatus,
   OrderStatus,
   PincodeIntelligence,
+  PostalLookupResult,
+  CourierServiceabilityResult,
+  PostalOfficeRecord,
   getProductSlug,
   slugify,
 } from '../types';
@@ -55,131 +58,201 @@ export interface PincodeServiceabilityResult {
   isServiceable: boolean;
   city: string;
   state: string;
-  courierName: string;
-  estimatedDays: number;
-  estimatedDeliveryText: string;
-  codAvailable: boolean;
-  isExpressAvailable: boolean;
+  courierName?: string;
+  estimatedDays?: number;
+  estimatedDeliveryText?: string;
+  codAvailable?: boolean;
+  isExpressAvailable?: boolean;
   message: string;
+  localities?: string[];
+  postOffices?: PostalOfficeRecord[];
+  errorCode?: string;
 }
 
-// Curated high-fidelity geographic mapping for Indian PIN codes
-const PINCODE_PREFIX_MAP: Record<string, { city: string; state: string; days: number; courier: string }> = {
-  '11': { city: 'New Delhi', state: 'Delhi', days: 2, courier: 'BlueDart Express' },
-  '12': { city: 'Gurugram / Faridabad', state: 'Haryana', days: 2, courier: 'Delhivery Surface' },
-  '13': { city: 'Ambala / Karnal', state: 'Haryana', days: 3, courier: 'Delhivery Surface' },
-  '14': { city: 'Ludhiana / Jalandhar', state: 'Punjab', days: 3, courier: 'Delhivery Air' },
-  '15': { city: 'Bathinda', state: 'Punjab', days: 3, courier: 'Delhivery Surface' },
-  '16': { city: 'Chandigarh', state: 'Chandigarh', days: 2, courier: 'BlueDart Air' },
-  '17': { city: 'Shimla', state: 'Himachal Pradesh', days: 4, courier: 'India Post Speed' },
-  '18': { city: 'Jammu', state: 'Jammu & Kashmir', days: 4, courier: 'Delhivery Air' },
-  '19': { city: 'Srinagar', state: 'Jammu & Kashmir', days: 5, courier: 'BlueDart Air' },
-  '20': { city: 'Noida / Ghaziabad', state: 'Uttar Pradesh', days: 2, courier: 'BlueDart Express' },
-  '22': { city: 'Lucknow', state: 'Uttar Pradesh', days: 3, courier: 'Delhivery Surface' },
-  '24': { city: 'Dehradun', state: 'Uttarakhand', days: 3, courier: 'BlueDart Express' },
-  '25': { city: 'Meerut', state: 'Uttar Pradesh', days: 2, courier: 'Delhivery Surface' },
-  '28': { city: 'Agra', state: 'Uttar Pradesh', days: 3, courier: 'Delhivery Surface' },
-  '30': { city: 'Jaipur', state: 'Rajasthan', days: 3, courier: 'Delhivery Air' },
-  '31': { city: 'Udaipur', state: 'Rajasthan', days: 3, courier: 'Delhivery Surface' },
-  '34': { city: 'Jodhpur', state: 'Rajasthan', days: 3, courier: 'Delhivery Surface' },
-  '38': { city: 'Ahmedabad', state: 'Gujarat', days: 3, courier: 'BlueDart Express' },
-  '39': { city: 'Surat', state: 'Gujarat', days: 3, courier: 'Delhivery Air' },
-  '40': { city: 'Mumbai', state: 'Maharashtra', days: 2, courier: 'BlueDart Express' },
-  '41': { city: 'Pune', state: 'Maharashtra', days: 2, courier: 'BlueDart Express' },
-  '42': { city: 'Nashik', state: 'Maharashtra', days: 3, courier: 'Delhivery Surface' },
-  '44': { city: 'Nagpur', state: 'Maharashtra', days: 3, courier: 'Delhivery Surface' },
-  '45': { city: 'Indore', state: 'Madhya Pradesh', days: 3, courier: 'BlueDart Express' },
-  '46': { city: 'Bhopal', state: 'Madhya Pradesh', days: 3, courier: 'Delhivery Surface' },
-  '49': { city: 'Raipur', state: 'Chhattisgarh', days: 4, courier: 'Delhivery Surface' },
-  '50': { city: 'Hyderabad', state: 'Telangana', days: 2, courier: 'BlueDart Express' },
-  '51': { city: 'Tirupati / Kadapa', state: 'Andhra Pradesh', days: 3, courier: 'Delhivery Surface' },
-  '52': { city: 'Vijayawada', state: 'Andhra Pradesh', days: 3, courier: 'BlueDart Air' },
-  '53': { city: 'Visakhapatnam', state: 'Andhra Pradesh', days: 3, courier: 'BlueDart Express' },
-  '56': { city: 'Bengaluru', state: 'Karnataka', days: 2, courier: 'BlueDart Express' },
-  '57': { city: 'Mangaluru', state: 'Karnataka', days: 3, courier: 'Delhivery Surface' },
-  '58': { city: 'Hubli / Dharwad', state: 'Karnataka', days: 3, courier: 'Delhivery Surface' },
-  '60': { city: 'Chennai', state: 'Tamil Nadu', days: 2, courier: 'BlueDart Express' },
-  '62': { city: 'Madurai', state: 'Tamil Nadu', days: 3, courier: 'Delhivery Surface' },
-  '64': { city: 'Coimbatore', state: 'Tamil Nadu', days: 3, courier: 'BlueDart Air' },
-  '67': { city: 'Kozhikode', state: 'Kerala', days: 3, courier: 'Delhivery Surface' },
-  '68': { city: 'Kochi / Ernakulam', state: 'Kerala', days: 3, courier: 'BlueDart Express' },
-  '69': { city: 'Thiruvananthapuram', state: 'Kerala', days: 3, courier: 'BlueDart Express' },
-  '70': { city: 'Kolkata', state: 'West Bengal', days: 2, courier: 'BlueDart Express' },
-  '71': { city: 'Howrah / Hooghly', state: 'West Bengal', days: 2, courier: 'Delhivery Surface' },
-  '73': { city: 'Siliguri', state: 'West Bengal', days: 4, courier: 'Delhivery Air' },
-  '75': { city: 'Bhubaneswar', state: 'Odisha', days: 3, courier: 'BlueDart Express' },
-  '78': { city: 'Guwahati', state: 'Assam', days: 4, courier: 'BlueDart Air' },
-  '80': { city: 'Patna', state: 'Bihar', days: 3, courier: 'Delhivery Surface' },
-  '83': { city: 'Ranchi', state: 'Jharkhand', days: 3, courier: 'Delhivery Surface' },
-};
+// -------------------------------------------------------------
+// Authentic Postal PIN Code Lookup across all of India
+// Queries server endpoint backed by official India Post directory.
+// Never assumes location from prefixes or previous addresses.
+// -------------------------------------------------------------
+export async function lookupPostalPincode(pincode: string): Promise<PostalLookupResult> {
+  const cleanPin = (pincode || '').replace(/\D/g, '').slice(0, 6);
 
-export function checkPincodeServiceability(pincode: string): PincodeServiceabilityResult {
-  const cleanPin = pincode.replace(/\D/g, '').slice(0, 6);
-
-  if (cleanPin.length !== 6) {
+  if (cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
     return {
+      success: false,
       pincode: cleanPin,
+      localities: [],
+      postOffices: [],
+      errorCode: 'INVALID_PINCODE',
+      message: 'Invalid PIN code. Must be 6 numeric digits starting with 1-9.',
+    };
+  }
+
+  try {
+    const res = await fetch(`/api/postal/lookup/${cleanPin}`, {
+      headers: { Accept: 'application/json' },
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success) {
+      return {
+        success: true,
+        pincode: cleanPin,
+        district: data.district,
+        state: data.state,
+        country: data.country || 'India',
+        primaryLocality: data.primaryLocality,
+        localities: Array.isArray(data.localities) ? data.localities : [data.primaryLocality],
+        postOffices: Array.isArray(data.postOffices) ? data.postOffices : [],
+        multipleOffices: Boolean(data.multipleOffices),
+      };
+    }
+
+    return {
+      success: false,
+      pincode: cleanPin,
+      localities: [],
+      postOffices: [],
+      errorCode: data.errorCode || (res.status === 404 ? 'PINCODE_NOT_FOUND' : 'LOOKUP_FAILED'),
+      message: data.message || (res.status === 404 ? 'PIN code not found in postal registry.' : 'Postal directory lookup failed.'),
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      pincode: cleanPin,
+      localities: [],
+      postOffices: [],
+      errorCode: 'LOOKUP_FAILED',
+      message: 'Network error connecting to postal directory. Please retry.',
+    };
+  }
+}
+
+// -------------------------------------------------------------
+// Separate Courier Serviceability Check (Shiprocket)
+// Never assumes a PIN is serviceable or invents fake couriers.
+// -------------------------------------------------------------
+export async function checkCourierAvailability(params: {
+  deliveryPincode: string;
+  pickupPincode?: string;
+  weightKg?: number;
+  cod?: boolean;
+}): Promise<CourierServiceabilityResult> {
+  const cleanPin = (params.deliveryPincode || '').replace(/\D/g, '').slice(0, 6);
+
+  if (cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
+    return {
+      checked: false,
+      serviceable: false,
+      courierAvailable: false,
+      pincode: cleanPin,
+      courierOptions: [],
+      message: 'Invalid PIN code for courier check.',
+    };
+  }
+
+  try {
+    const res = await fetch('/api/shipping/check-serviceability', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deliveryPincode: cleanPin,
+        pickupPincode: params.pickupPincode || '110016',
+        weightKg: params.weightKg || 0.5,
+        cod: params.cod !== false ? 1 : 0,
+      }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        checked: true,
+        serviceable: Boolean(data.serviceable),
+        courierAvailable: Boolean(data.carrierAvailable),
+        pincode: cleanPin,
+        originPincode: data.pickup_postcode || params.pickupPincode,
+        courierName: data.recommended_courier,
+        courierOptions: Array.isArray(data.couriers)
+          ? data.couriers.map((c: any) => ({
+              courierId: c.courier_company_id,
+              name: c.courier_name,
+              rate: Math.round(Number(c.rate) || 49),
+              etd: c.etd || '3-4 business days',
+              cod: Boolean(c.cod),
+            }))
+          : [],
+        rate: data.rate,
+        etd: data.etd,
+        codAvailable: Boolean(data.cod_available),
+        message: data.message || (data.serviceable ? 'Courier delivery available' : 'Outside courier delivery area'),
+      };
+    }
+
+    return {
+      checked: true,
+      serviceable: false,
+      courierAvailable: false,
+      pincode: cleanPin,
+      courierOptions: [],
+      message: 'Courier serviceability check was unable to reach courier network.',
+    };
+  } catch (err: any) {
+    return {
+      checked: false,
+      serviceable: false,
+      courierAvailable: false,
+      pincode: cleanPin,
+      courierOptions: [],
+      message: 'Could not connect to courier serviceability provider.',
+    };
+  }
+}
+
+// -------------------------------------------------------------
+// Compatibility Wrapper: Pure real lookup without mock fallback
+// -------------------------------------------------------------
+export async function checkPincodeServiceability(pincode: string): Promise<PincodeServiceabilityResult> {
+  const postal = await lookupPostalPincode(pincode);
+  if (!postal.success) {
+    return {
+      pincode,
       isServiceable: false,
       city: '',
       state: '',
-      courierName: '',
-      estimatedDays: 0,
-      estimatedDeliveryText: '',
-      codAvailable: false,
-      isExpressAvailable: false,
-      message: 'Enter a valid 6-digit Indian Postal PIN code',
+      message: postal.message || 'Invalid or unverified PIN code',
+      errorCode: postal.errorCode,
     };
   }
 
-  const prefix2 = cleanPin.slice(0, 2);
-  const info = PINCODE_PREFIX_MAP[prefix2];
-
-  const estimatedDays = info ? info.days : 4;
-  const deliveryDate = new Date();
-  deliveryDate.setDate(deliveryDate.getDate() + estimatedDays + 2); // 2 days student crafting + transit
-  const dateFormatted = deliveryDate.toLocaleDateString('en-IN', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-
-  if (info) {
-    return {
-      pincode: cleanPin,
-      isServiceable: true,
-      city: info.city,
-      state: info.state,
-      courierName: info.courier,
-      estimatedDays: info.days,
-      estimatedDeliveryText: `Estimated delivery by ${dateFormatted} via ${info.courier}`,
-      codAvailable: true,
-      isExpressAvailable: info.days <= 2,
-      message: `Delivering to ${info.city}, ${info.state}`,
-    };
-  }
-
+  const courier = await checkCourierAvailability({ deliveryPincode: postal.pincode });
   return {
-    pincode: cleanPin,
-    isServiceable: true,
-    city: 'Direct PIN Hub',
-    state: 'India',
-    courierName: 'Delhivery National Surface',
-    estimatedDays: 4,
-    estimatedDeliveryText: `Estimated delivery by ${dateFormatted} (4-5 business days)`,
-    codAvailable: true,
-    isExpressAvailable: false,
-    message: `Serviceable via National Eco-Parcel Network`,
+    pincode: postal.pincode,
+    isServiceable: courier.serviceable,
+    city: postal.district || postal.primaryLocality || '',
+    state: postal.state || '',
+    courierName: courier.courierName,
+    estimatedDays: courier.estimatedDays,
+    estimatedDeliveryText: courier.etd,
+    codAvailable: courier.codAvailable,
+    message: courier.serviceable && courier.courierName
+      ? `Delivery to ${postal.primaryLocality}, ${postal.district}, ${postal.state} via ${courier.courierName}`
+      : courier.courierAvailable
+      ? `PIN ${postal.pincode} (${postal.district}, ${postal.state}) is outside our courier delivery network.`
+      : `Verified: ${postal.primaryLocality}, ${postal.district}, ${postal.state}. Courier service unconfirmed.`,
+    localities: postal.localities,
+    postOffices: postal.postOffices,
   };
 }
 
 // -------------------------------------------------------------
-// Live Smart PIN Code Intelligence (Postal Registry + Shiprocket API)
+// Combined Pincode Intelligence (Official Postal + Courier)
 // -------------------------------------------------------------
 export async function fetchPincodeIntelligence(
   pincode: string,
   pickupPincode: string = '110016'
 ): Promise<PincodeIntelligence> {
-  const cleanPin = pincode.replace(/\D/g, '').slice(0, 6);
+  const cleanPin = (pincode || '').replace(/\D/g, '').slice(0, 6);
 
   if (cleanPin.length !== 6 || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
     return {
@@ -212,53 +285,63 @@ export async function fetchPincodeIntelligence(
       }),
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        return {
-          pincode: cleanPin,
-          isServiceable: Boolean(data.isServiceable),
-          locality: data.locality || '',
-          district: data.district || '',
-          state: data.state || '',
-          officeName: data.officeName,
-          courierOptions: data.courierOptions || [],
-          recommendedCourier: data.recommendedCourier || 'Delhivery Surface',
-          estimatedDelivery: data.estimatedDelivery || '3-4 business days',
-          estimatedDays: data.estimatedDays || 3,
-          shippingFee: data.shippingFee || 49,
-          codAvailable: data.codAvailable ?? true,
-          message: data.message || `Delivery to ${data.district}, ${data.state}`,
-          originPincode: data.originPincode || pickupPincode,
-          verifiedSource: data.verifiedSource || 'official_postal_shiprocket',
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('Live pincode intelligence request failed, utilizing verified local registry:', err);
-  }
+    const data = await res.json().catch(() => ({}));
 
-  // Graceful fallback utilizing curated geographic engine
-  const fallback = checkPincodeServiceability(cleanPin);
-  return {
-    pincode: cleanPin,
-    isServiceable: fallback.isServiceable,
-    locality: fallback.city,
-    district: fallback.city,
-    state: fallback.state,
-    courierOptions: [
-      { name: fallback.courierName, rate: 49, etd: `${fallback.estimatedDays} business days`, cod: true },
-      { name: 'India Post Speed Post', rate: 40, etd: `${fallback.estimatedDays + 1} business days`, cod: false },
-    ],
-    recommendedCourier: fallback.courierName,
-    estimatedDelivery: fallback.estimatedDeliveryText,
-    estimatedDays: fallback.estimatedDays,
-    shippingFee: 49,
-    codAvailable: true,
-    message: fallback.message,
-    originPincode: pickupPincode,
-    verifiedSource: 'verified_postal_registry',
-  };
+    if (res.ok && data.success) {
+      return {
+        pincode: cleanPin,
+        isServiceable: Boolean(data.isServiceable),
+        locality: data.locality || '',
+        district: data.district || '',
+        state: data.state || '',
+        courierOptions: data.courierOptions || [],
+        recommendedCourier: data.recommendedCourier || '',
+        estimatedDelivery: data.estimatedDelivery || '',
+        estimatedDays: data.estimatedDays || 0,
+        shippingFee: data.shippingFee || 49,
+        codAvailable: Boolean(data.codAvailable),
+        message: data.message || `Delivery to ${data.district}, ${data.state}`,
+        originPincode: data.originPincode || pickupPincode,
+        verifiedSource: 'official_postal_shiprocket',
+        localities: data.localities,
+        postOffices: data.postOffices,
+      };
+    }
+
+    return {
+      pincode: cleanPin,
+      isServiceable: false,
+      locality: '',
+      district: '',
+      state: '',
+      courierOptions: [],
+      recommendedCourier: '',
+      estimatedDelivery: '',
+      estimatedDays: 0,
+      shippingFee: 49,
+      codAvailable: false,
+      message: data.message || 'PIN code not found in Indian postal registry.',
+      originPincode: pickupPincode,
+      verifiedSource: 'verified_postal_registry',
+    };
+  } catch (err: any) {
+    return {
+      pincode: cleanPin,
+      isServiceable: false,
+      locality: '',
+      district: '',
+      state: '',
+      courierOptions: [],
+      recommendedCourier: '',
+      estimatedDelivery: '',
+      estimatedDays: 0,
+      shippingFee: 49,
+      codAvailable: false,
+      message: 'Postal directory lookup service is currently unreachable.',
+      originPincode: pickupPincode,
+      verifiedSource: 'verified_postal_registry',
+    };
+  }
 }
 
 // -------------------------------------------------------------
