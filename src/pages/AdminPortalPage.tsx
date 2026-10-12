@@ -338,7 +338,7 @@ export const AdminPortalPage: React.FC = () => {
             onClick={() => navigate('/')}
             className="w-full sm:w-auto px-5 py-2.5 rounded-full border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition flex items-center justify-center gap-2 cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4" /> Return to Storefront
+            <ArrowLeft className="w-4 h-4" /> Back to Storefront
           </button>
           <button
             onClick={() => navigate('/login?redirect=/admin')}
@@ -677,9 +677,9 @@ export const AdminPortalPage: React.FC = () => {
                 </div>
 
                 <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Return Window</span>
-                  <p className="font-black text-emerald-700 text-sm">7 Days from Delivery</p>
-                  <p className="text-[10px] text-slate-500">Damaged in transit / defect verified replacements.</p>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Return Policy</span>
+                  <p className="font-black text-slate-900 text-sm">No Returns (Final Sale)</p>
+                  <p className="text-[10px] text-slate-500">100% handcrafted made-to-order student creations.</p>
                 </div>
               </div>
             </div>

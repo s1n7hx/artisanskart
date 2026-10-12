@@ -392,7 +392,7 @@ export const ProductDetailPage: React.FC = () => {
           to="/marketplace"
           className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#C85A32] text-white font-bold text-sm shadow-md hover:bg-[#a04321] transition"
         >
-          <ChevronLeft className="w-4 h-4" /> Return to Marketplace
+          <ChevronLeft className="w-4 h-4" /> Back to Marketplace
         </Link>
       </div>
     );
@@ -891,8 +891,8 @@ export const ProductDetailPage: React.FC = () => {
               <span className="leading-tight font-medium">Razorpay Secure</span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
-              <RotateCcw className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="leading-tight font-medium">7-Day Returns</span>
+              <Sparkles className="w-4 h-4 text-[#C85A32] shrink-0" />
+              <span className="leading-tight font-medium">Student Handcrafted</span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <Truck className="w-4 h-4 text-[#C85A32] shrink-0" />
@@ -976,7 +976,7 @@ export const ProductDetailPage: React.FC = () => {
             { id: 'desc', label: 'Description & Craft Story' },
             { id: 'craft', label: 'Craft Specifications' },
             { id: 'maker', label: 'Maker Details & Studio' },
-            { id: 'shipping', label: 'Shipping & Returns Policy' },
+            { id: 'shipping', label: 'Shipping & Delivery Policy' },
             { id: 'reviews', label: `Customer Reviews (${product.reviews})` },
           ].map((tab) => (
             <button
@@ -1055,7 +1055,7 @@ export const ProductDetailPage: React.FC = () => {
 
           {activeTab === 'shipping' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900">Shipping, Delivery &amp; Return Policies</h3>
+              <h3 className="text-lg font-bold text-slate-900">Shipping &amp; Delivery Policies</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                   <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-[#C85A32]">
@@ -1067,11 +1067,11 @@ export const ProductDetailPage: React.FC = () => {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-emerald-700">
-                    <RotateCcw className="w-4 h-4" /> Easy 7-Day Returns
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-slate-700">
+                    <ShieldCheck className="w-4 h-4 text-[#C85A32]" /> No Return Policy
                   </h4>
                   <p className="text-xs text-slate-600">
-                    If your handcrafted item arrives damaged or defective in transit, submit a return or replacement request within 7 days of delivery for a full refund.
+                    As every piece is uniquely handcrafted and made-to-order by student artisans, we do not provide any return policy or refunds. All purchases are final once dispatched.
                   </p>
                 </div>
               </div>

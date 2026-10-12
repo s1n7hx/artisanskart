@@ -702,8 +702,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   <span className="leading-tight font-medium">Razorpay Secure</span>
                 </div>
                 <div className="flex items-center gap-2 p-2 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                  <RotateCcw className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="leading-tight font-medium">Easy 7-day Returns</span>
+                  <ShieldCheck className="w-4 h-4 text-[#C85A32] shrink-0" />
+                  <span className="leading-tight font-medium">Student Handcrafted</span>
                 </div>
                 <div className="flex items-center gap-2 p-2 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
                   <Truck className="w-4 h-4 text-[#C85A32] shrink-0" />
@@ -919,10 +919,10 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     </div>
 
                     <div className="p-3.5 rounded-2xl bg-white border border-[#e7e0d8]">
-                      <RotateCcw className="w-5 h-5 text-emerald-600 mb-1.5" />
-                      <p className="font-bold text-xs text-slate-900">Easy 7-Day Returns</p>
+                      <ShieldCheck className="w-5 h-5 text-slate-700 mb-1.5" />
+                      <p className="font-bold text-xs text-slate-900">No Return Policy</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Damage-in-transit replacement guarantee with instant support.
+                        Each item is handcrafted on-demand by student artisans. All sales are final.
                       </p>
                     </div>
                   </div>

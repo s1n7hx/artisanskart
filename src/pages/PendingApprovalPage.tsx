@@ -81,7 +81,7 @@ export const PendingApprovalPage: React.FC = () => {
             className="flex-1 py-3 px-4 rounded-2xl bg-white border border-slate-300 hover:border-slate-400 text-slate-800 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-xs"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Return to Storefront</span>
+            <span>Back to Storefront</span>
           </Link>
           <button
             type="button"

@@ -174,5 +174,5 @@ INSERT INTO public.platform_settings (setting_key, setting_value, description)
 VALUES
   ('shipping', '{"default_shipping_fee": 49, "free_shipping_threshold": 499, "express_shipping_fee": 99}'::jsonb, 'Shipping rate thresholds'),
   ('maker_workflow', '{"acceptance_deadline_hours": 24, "default_prep_days": 3, "auto_reassign_on_timeout": false}'::jsonb, 'Maker acceptance and crafting defaults'),
-  ('policies', '{"return_window_days": 7, "cancellation_window_hours": 12, "replacement_enabled": true}'::jsonb, 'Customer return and cancellation policies')
+  ('policies', '{"return_window_days": 0, "returns_allowed": false, "cancellation_window_hours": 12, "replacement_enabled": false}'::jsonb, 'Customer policies: no returns (final sale) and cancellation limits')
 ON CONFLICT (setting_key) DO NOTHING;

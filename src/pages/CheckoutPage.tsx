@@ -569,7 +569,7 @@ export const CheckoutPage: React.FC = () => {
             onClick={() => navigate(-1)}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-[#C85A32] transition cursor-pointer mb-1"
           >
-            <ArrowLeft className="w-4 h-4" /> Return to Shop
+            <ArrowLeft className="w-4 h-4" /> Back to Shop
           </button>
           <h1 className="text-2xl sm:text-3xl font-black text-[#1E293B]">
             Checkout &amp; Order Placement
@@ -1145,7 +1145,7 @@ export const CheckoutPage: React.FC = () => {
             </button>
 
             <p className="text-[11px] text-center text-slate-400">
-              By confirming, you agree to ArtisansKart's 7-Day Return and Student Creator Guarantee.
+              By confirming, you agree to ArtisansKart's Terms of Sale (All Sales Final) and Student Creator Guarantee.
             </p>
           </div>
         </div>

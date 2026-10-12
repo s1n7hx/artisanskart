@@ -633,17 +633,15 @@ const ALLOWED_ORDER_TRANSITIONS: Record<string, string[]> = {
   picked_up: ['in_transit', 'delivery_exception'],
   in_transit: ['out_for_delivery', 'delivery_exception'],
   out_for_delivery: ['delivered', 'delivery_exception'],
-  delivered: ['completed', 'return_requested'],
-  completed: ['return_requested'],
+  delivered: ['completed'],
+  completed: [],
   // Exceptions
   maker_rejected: ['cancelled', 'awaiting_maker_acceptance'],
   acceptance_timed_out: ['cancelled', 'awaiting_maker_acceptance'],
   cancellation_requested: ['cancelled', 'in_production'],
   cancelled: [],
   shipment_failed: ['ready_to_ship', 'cancelled'],
-  delivery_exception: ['out_for_delivery', 'returned', 'in_transit'],
-  return_requested: ['returned', 'completed'],
-  returned: [],
+  delivery_exception: ['out_for_delivery', 'in_transit'],
 };
 
 app.post('/api/orders/update-status', async (req: Request, res: Response) => {

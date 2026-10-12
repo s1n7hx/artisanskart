@@ -336,7 +336,7 @@ export const Modals: React.FC<ModalsProps> = ({
                 disabled={isProcessingPayment}
                 className="w-full py-2.5 rounded-full font-medium text-xs text-slate-500 hover:bg-black/5 cursor-pointer transition"
               >
-                Cancel &amp; Return
+                Cancel &amp; Continue Shopping
               </button>
             </div>
 

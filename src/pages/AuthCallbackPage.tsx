@@ -165,7 +165,7 @@ export const AuthCallbackPage: React.FC = () => {
               onClick={() => navigate('/login', { replace: true })}
               className="w-full py-3 rounded-2xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25] transition cursor-pointer"
             >
-              Return to Sign In
+              Back to Sign In
             </button>
           </div>
         ) : (
