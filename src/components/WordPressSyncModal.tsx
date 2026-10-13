@@ -271,6 +271,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
       school: editSchool,
       stock: editStock,
       image: editImage,
+      images: currentProduct.images && currentProduct.images.length > 0 ? currentProduct.images : (editImage ? [editImage] : []),
       source: 'custom',
       updatedAt: new Date().toISOString(),
     };

@@ -48,10 +48,10 @@ export const AboutPage: React.FC = () => {
           Our Story &amp; Purpose
         </span>
         <h1 className="text-4xl md:text-6xl font-black text-[#1E293B] mt-4 tracking-tight">
-          Where Campus Creativity Meets Fair-Trade Support
+          Where Independent Creativity Meets Fair-Trade Support
         </h1>
         <p className="text-slate-500 text-base md:text-lg max-w-2xl mx-auto mt-4 leading-relaxed">
-          ArtisansKart was born out of a simple observation: art and design students produce remarkable, heirloom-quality handcrafts that never leave campus halls.
+          ArtisansKart was born out of a simple observation: independent makers, homemakers, and skilled artisans produce remarkable, heirloom-quality handcrafts that deserve a direct connection with appreciative patrons.
         </p>
       </section>
 
@@ -123,7 +123,7 @@ export const AboutPage: React.FC = () => {
             </div>
             <h3 className="text-2xl font-bold text-[#1E293B] mb-3">{makerEarningPercent}% Direct Split</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Students receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and verified campus drop-off hubs.
+              Creators receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and verified drop-off hubs.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
               Direct UPI transfer every Friday upon delivery confirmation.
@@ -134,12 +134,12 @@ export const AboutPage: React.FC = () => {
             <div className="w-14 h-14 rounded-2xl bg-[#8A9A86]/20 flex items-center justify-center text-[#5c6a58] mb-6">
               <School className="w-7 h-7" />
             </div>
-            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Campus Craft Studios</h3>
+            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Independent Craft Studios</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              We collaborate directly with student design societies and college art clubs, setting up verified studio drop-off lockers inside campuses.
+              We collaborate directly with independent design studios, artisan guilds, and homemaker collectives, setting up verified studio drop-off lockers.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
-              Partnered with 12+ premier art and design universities.
+              Partnered with 12+ premier art and artisan guilds.
             </div>
           </div>
 
@@ -164,20 +164,20 @@ export const AboutPage: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
             <div>
               <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
-                Academic Partners
+                Creator Guilds
               </span>
               <h2 className="text-2xl md:text-3xl font-black text-[#1E293B] mt-2">
-                Active Campus Partner Institutions
+                Active Partner Studios &amp; Guilds
               </h2>
               <p className="text-slate-500 text-sm mt-1">
-                Student makers enrolled across these campuses actively fulfill handcrafted orders.
+                Independent makers and artisans enrolled across these studios actively fulfill handcrafted orders.
               </p>
             </div>
             <button
               onClick={() => setIsMakerSignupOpen(true)}
               className="btn-terracotta text-xs md:text-sm font-semibold px-5 py-2.5 rounded-full self-start md:self-auto cursor-pointer"
             >
-              Add Your College
+              Add Your Studio
             </button>
           </div>
 
@@ -207,10 +207,10 @@ export const AboutPage: React.FC = () => {
       <section className="max-w-5xl mx-auto px-4 md:px-8 text-center pb-8">
         <div className="bg-[#1E293B] text-white rounded-3xl p-8 md:p-12 shadow-xl">
           <h2 className="text-3xl md:text-4xl font-black mb-4">
-            Ready to Support the Next Generation of Makers?
+            Ready to Support Independent Makers &amp; Artisans?
           </h2>
           <p className="text-white/70 max-w-xl mx-auto text-sm md:text-base mb-8">
-            Every piece arrives with a handwritten note from the student creator and details on the craft technique used.
+            Every piece arrives with a handwritten note from the creator and details on the craft technique used.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link

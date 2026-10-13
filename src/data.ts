@@ -527,14 +527,14 @@ export const COLLECTIONS: CollectionItem[] = [
   }
 ];
 
-export const ABOUT_TEXT = "ArtisansKart.in is a conscious marketplace built for creators who craft with their hands and hearts — crochet artists, ceramicists, painters, independent makers, homemakers, and students. Every piece is handcrafted with care. Made by creators. Chosen by you.";
+export const ABOUT_TEXT = "ArtisansKart.in is a conscious marketplace built for independent creators, homemakers, and skilled artisans who craft with their hands and hearts — crochet artists, ceramicists, painters, and independent makers. Every piece is handcrafted with care. Made by creators. Chosen by you.";
 
 export const DEFAULT_HERO_CONTENT: HeroContent = {
-  badgeText: "Handcrafted by Independent Creators",
+  badgeText: "Handcrafted by Independent Artisans & Creators",
   headlineLine1: "Made by Creators.",
   headlineLine2: "Chosen by You.",
   headlineLine3: "",
-  subhead: "Discover one-of-a-kind crochet pieces, pottery, hand-painted art, jewelry & decorative crafts made with heart by skilled makers.",
+  subhead: "Discover one-of-a-kind crochet pieces, pottery, hand-painted art, jewelry & decorative crafts made with heart by independent creators, homemakers, and skilled artisans.",
   mainImage: "https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80",
   leftImage: "https://images.pexels.com/photos/34387792/pexels-photo-34387792.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
   rightImage: "https://images.pexels.com/photos/15955332/pexels-photo-15955332.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",

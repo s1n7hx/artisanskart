@@ -36,7 +36,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { Product, getProductSlug, ProductVariant, PincodeIntelligence, PostalLookupResult, CourierServiceabilityResult } from '../types';
 import { findProductBySlugOrId, lookupPostalPincode, checkCourierAvailability } from '../services/ecommerce';
-import { ImageUploader } from '../components/ImageUploader';
+import { MultiImageUploader } from '../components/MultiImageUploader';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -1249,54 +1249,25 @@ export const ProductDetailPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Existing Gallery Photos */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-700 uppercase">Current Photographs ({galleryImages.length}):</label>
-              <div className="grid grid-cols-3 gap-3">
-                {galleryImages.map((imgUrl, idx) => (
-                  <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-square">
-                    <img src={imgUrl} alt={`Thumb ${idx}`} className="w-full h-full object-cover" />
-                    {idx === 0 && (
-                      <span className="absolute top-1 left-1 bg-[#C85A32] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                        Primary
-                      </span>
-                    )}
-                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2 p-1">
-                      {idx !== 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleSetPrimaryImage(imgUrl)}
-                          title="Set as Primary"
-                          className="p-1 rounded-full bg-white text-slate-800 text-[10px] font-bold hover:bg-[#C85A32] hover:text-white cursor-pointer"
-                        >
-                          Primary
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGalleryImage(imgUrl)}
-                        title="Delete Image"
-                        className="p-1.5 rounded-full bg-white text-red-600 hover:bg-red-600 hover:text-white cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Upload or Add New Image */}
-            <div className="space-y-3 pt-3 border-t">
-              <label className="text-xs font-bold text-slate-700 uppercase">Add New Photograph:</label>
-              <ImageUploader
-                value={newPhotoUrl}
-                onChange={(url) => {
-                  setNewPhotoUrl(url);
-                  handleAddGalleryImage(url);
+            {/* Multi-Photo Manager */}
+            <div className="space-y-4">
+              <MultiImageUploader
+                images={galleryImages}
+                primaryImage={product.image}
+                onChange={(updatedList, newPrimary) => {
+                  const toSave: Product = {
+                    ...product,
+                    image: newPrimary || updatedList[0] || '',
+                    images: updatedList,
+                  };
+                  updateProduct(toSave);
+                  setActiveImageIndex(0);
+                  showToast(`Updated craft gallery (${updatedList.length} photographs)!`, 'check-circle');
                 }}
-                label="Upload photo from device or provide image URL"
-                placeholder="https://..."
+                minImages={2}
+                maxImages={8}
+                label="Craft Photo Gallery"
+                helperText="Upload new photographs from your device or add image URLs. Drag or use arrows to reorder, and star the primary image."
               />
             </div>
 

@@ -197,7 +197,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
               <p className="text-3xl md:text-4xl font-black text-[#1E293B]">
                 <span id="statVerified">{statVerified}</span>%
               </p>
-              <p className="text-xs md:text-sm text-slate-500 font-medium">Verified Student Artisans</p>
+              <p className="text-xs md:text-sm text-slate-500 font-medium">Verified Independent Artisans</p>
             </div>
           </div>
         </div>
@@ -238,7 +238,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             <img
               src={heroContent.mainImage}
               className="w-full h-full object-cover"
-              alt="Student crafting clay art"
+              alt="Artisan crafting clay art"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#1E293B]/45 via-transparent to-transparent" />
             <span className="absolute bottom-3 left-3.5 text-white text-xs font-semibold tracking-wide flex items-center gap-1.5">
@@ -269,7 +269,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             style={{ transitionDelay: '680ms' }}
           >
             <span className="w-2 h-2 rounded-full bg-[#8A9A86] animate-ping" />
-            <span className="text-[11px] font-semibold text-[#1E293B]">100% Student Made</span>
+            <span className="text-[11px] font-semibold text-[#1E293B]">100% Handcrafted</span>
           </div>
 
           {/* Bottom-Left Fair Trade Revenue Split Badge */}
@@ -278,7 +278,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
             style={{ transitionDelay: '720ms' }}
           >
             <p className="text-[11px] text-slate-500 leading-none">Fair-Trade Split</p>
-            <p className="font-bold text-sm text-[#C85A32] mt-0.5">{makerEarningPercent}% Direct to Student</p>
+            <p className="font-bold text-sm text-[#C85A32] mt-0.5">{makerEarningPercent}% Direct to Creator</p>
           </div>
         </div>
       </div>

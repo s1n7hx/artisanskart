@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product, Order, OrderStatus, maskEmail } from '../types';
-import { ImageUploader } from '../components/ImageUploader';
+import { MultiImageUploader } from '../components/MultiImageUploader';
 import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 
 export const MakerPortalPage: React.FC = () => {
@@ -100,7 +100,7 @@ export const MakerPortalPage: React.FC = () => {
 
   // Studio Pickup Location settings
   const [studioPickupPin, setStudioPickupPin] = useState('110016');
-  const [studioAddress, setStudioAddress] = useState('IIT Delhi Campus Innovation Hub, Hauz Khas');
+  const [studioAddress, setStudioAddress] = useState('ArtisansKart Innovation Hub, New Delhi');
   const [studioPhone, setStudioPhone] = useState(currentUser?.email || '9876543210');
   const [isSavingStudio, setIsSavingStudio] = useState(false);
 
@@ -108,20 +108,38 @@ export const MakerPortalPage: React.FC = () => {
   const [isAddingCraft, setIsAddingCraft] = useState(false);
   const [editingCraft, setEditingCraft] = useState<Product | null>(null);
   const [customCategory, setCustomCategory] = useState('');
-  const [craftForm, setCraftForm] = useState({
+  const [craftForm, setCraftForm] = useState<{
+    title: string;
+    category: string;
+    price: number;
+    originalPrice: number;
+    description: string;
+    image: string;
+    images: string[];
+    stock: string;
+    inStockCount: number;
+    materials: string;
+    dimensions: string;
+    weight: string;
+    originCity: string;
+    isMadeToOrder: boolean;
+  }>({
     title: '',
-    category: 'Clay Crafts',
+    category: 'Crochet',
     price: 349,
     originalPrice: 449,
     description: '',
-    image: 'https://images.unsplash.com/photo-1603555501671-8f96b3fce8e4?auto=format&fit=crop&w=1200&q=80',
+    image: 'https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80',
+      'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1200&q=80',
+    ],
     stock: 'In Stock • Made on Demand',
     inStockCount: 15,
-    materials: 'Natural riverbed terracotta, organic ochre pigments',
-    dimensions: '15 cm height × 10 cm base',
-    weight: '500g',
-    prepTimeDays: 3,
-    originCity: 'New Delhi',
+    materials: 'Premium milk cotton yarn, natural fibres',
+    dimensions: '25 cm height × 15 cm width',
+    weight: '350g',
+    originCity: 'Bengaluru',
     isMadeToOrder: true,
   });
 
@@ -223,10 +241,32 @@ export const MakerPortalPage: React.FC = () => {
   // Product submission
   const handleSaveCraft = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!craftForm.title || !craftForm.price) {
-      showToast('Please provide a title and price.', 'alert-circle');
+    if (!craftForm.title || !craftForm.title.trim()) {
+      showToast('Please provide a title for your handcrafted piece.', 'alert-circle');
       return;
     }
+    if (!craftForm.price || Number(craftForm.price) <= 0) {
+      showToast('Please provide a valid selling price greater than ₹0.', 'alert-circle');
+      return;
+    }
+
+    const effectiveImages = Array.isArray(craftForm.images) && craftForm.images.length > 0
+      ? craftForm.images
+      : (craftForm.image ? [craftForm.image] : []);
+
+    if (effectiveImages.length === 0) {
+      showToast('Please upload at least 2 photographs of your craft.', 'alert-circle');
+      return;
+    }
+
+    if (effectiveImages.length < 2) {
+      showToast('Please upload at least 2 photos from different angles (front, close-up texture, packaging).', 'alert-circle');
+      return;
+    }
+
+    const primaryPhoto = craftForm.image && effectiveImages.includes(craftForm.image)
+      ? craftForm.image
+      : effectiveImages[0];
 
     const resolvedCategory =
       craftForm.category === 'Other'
@@ -236,22 +276,22 @@ export const MakerPortalPage: React.FC = () => {
     if (editingCraft) {
       const updated: Product = {
         ...editingCraft,
-        title: craftForm.title,
+        title: craftForm.title.trim(),
         category: resolvedCategory,
         price: Number(craftForm.price),
-        originalPrice: Number(craftForm.originalPrice),
+        originalPrice: craftForm.originalPrice ? Number(craftForm.originalPrice) : undefined,
         description: craftForm.description,
-        image: craftForm.image,
+        image: primaryPhoto,
+        images: effectiveImages,
         materials: craftForm.materials,
         dimensions: craftForm.dimensions,
         weight: craftForm.weight,
-        prepTimeDays: craftForm.prepTimeDays,
         originCity: craftForm.originCity,
         isMadeToOrder: craftForm.isMadeToOrder,
         stock: craftForm.stock,
       };
       updateProduct(updated);
-      showToast(`Craft "${updated.title}" updated successfully!`, 'sparkles');
+      showToast(`Craft "${updated.title}" updated with ${effectiveImages.length} photos!`, 'sparkles');
       setEditingCraft(null);
       setIsAddingCraft(false);
       return;
@@ -259,31 +299,31 @@ export const MakerPortalPage: React.FC = () => {
 
     const newCraft: Product = {
       id: Date.now(),
-      title: craftForm.title,
+      title: craftForm.title.trim(),
       category: resolvedCategory,
       price: Number(craftForm.price),
-      originalPrice: Number(craftForm.originalPrice),
-      rating: 5.0,
-      reviews: 1,
-      maker: currentUser?.name || 'Student Maker',
-      cls: currentUser?.grade || 'Class 10',
+      originalPrice: craftForm.originalPrice ? Number(craftForm.originalPrice) : undefined,
+      rating: 0,
+      reviews: 0,
+      maker: currentUser?.name || 'Independent Maker',
+      cls: currentUser?.grade || 'Artisan Series',
       school: currentUser?.school || 'Fine Arts Studio',
-      image: craftForm.image,
+      image: primaryPhoto,
+      images: effectiveImages,
       stock: craftForm.stock,
       inStockCount: craftForm.inStockCount,
       materials: craftForm.materials,
       dimensions: craftForm.dimensions,
       weight: craftForm.weight,
-      prepTimeDays: craftForm.prepTimeDays,
       originCity: craftForm.originCity,
       pickupPincode: studioPickupPin,
       isMadeToOrder: craftForm.isMadeToOrder,
-      description: craftForm.description || 'Authentic handcrafted student piece.',
+      description: craftForm.description || 'Authentic handcrafted artisan piece.',
       source: 'custom',
     };
 
     addNewProduct(newCraft);
-    showToast(`Craft "${newCraft.title}" published to marketplace!`, 'sparkles');
+    showToast(`Craft "${newCraft.title}" published with ${effectiveImages.length} photos!`, 'sparkles');
     setIsAddingCraft(false);
   };
 
@@ -293,7 +333,7 @@ export const MakerPortalPage: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#e7e0d8] pb-6">
         <div>
           <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider inline-block mb-1">
-            Student Creator Studio
+            Independent Creator Studio
           </span>
           <h1 className="text-2xl sm:text-3xl font-black text-[#1E293B]">
             Artisan Production &amp; Order Dashboard
@@ -341,12 +381,12 @@ export const MakerPortalPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-5 rounded-3xl bg-white border border-[#e7e0d8] shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase">
-            <span>Verified Student Earnings</span>
+            <span>Verified Creator Earnings</span>
             <Wallet className="w-4 h-4 text-[#C85A32]" />
           </div>
           <div className="text-2xl font-black text-[#1E293B]">{formatINR(totalEarnings)}</div>
           <p className="text-[11px] text-emerald-700 font-semibold">
-            {makerEarningPercent}% direct student creator share on delivered orders
+            {makerEarningPercent}% direct creator share on delivered orders
           </p>
         </div>
 
@@ -551,18 +591,18 @@ export const MakerPortalPage: React.FC = () => {
                 setEditingCraft(null);
                 setCraftForm({
                   title: '',
-                  category: 'Clay Crafts',
+                  category: 'Crochet',
                   price: 349,
                   originalPrice: 449,
                   description: '',
-                  image: 'https://images.unsplash.com/photo-1603555501671-8f96b3fce8e4?auto=format&fit=crop&w=1200&q=80',
+                  image: '',
+                  images: [],
                   stock: 'In Stock • Made on Demand',
                   inStockCount: 15,
-                  materials: 'Natural riverbed terracotta, organic ochre pigments',
-                  dimensions: '15 cm height × 10 cm base',
-                  weight: '500g',
-                  prepTimeDays: 3,
-                  originCity: 'New Delhi',
+                  materials: '',
+                  dimensions: '',
+                  weight: '',
+                  originCity: 'Bengaluru',
                   isMadeToOrder: true,
                 });
                 setIsAddingCraft(true);
@@ -574,13 +614,18 @@ export const MakerPortalPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {makerProducts.map((p) => (
+            {makerProducts.map((p) => {
+              const pGallery = p.images && p.images.length > 0 ? p.images : (p.image ? [p.image] : []);
+              return (
               <div key={p.id} className="bg-white rounded-3xl p-4 border border-[#e7e0d8] shadow-xs flex flex-col justify-between space-y-4">
                 <div className="space-y-3">
                   <div className="relative aspect-square rounded-2xl overflow-hidden bg-slate-50">
                     <img src={p.image} alt={p.title} className="w-full h-full object-cover" />
                     <span className="absolute top-2 left-2 badge-sage text-[10px] font-bold px-2 py-0.5 rounded-full">
                       {p.category}
+                    </span>
+                    <span className="absolute bottom-2 right-2 bg-black/60 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      {pGallery.length} {pGallery.length === 1 ? 'photo' : 'photos'}
                     </span>
                   </div>
 
@@ -597,35 +642,39 @@ export const MakerPortalPage: React.FC = () => {
                 </div>
 
                 <div className="pt-2 border-t flex items-center justify-between text-xs">
-                  <span className="text-slate-400">{p.prepTimeDays || 2}-3 Days Prep</span>
+                  <span className="text-emerald-700 font-medium flex items-center gap-1">
+                    ✓ {p.stock}
+                  </span>
                   <button
                     onClick={() => {
                       setEditingCraft(p);
+                      const existingImages = p.images && p.images.length > 0 ? p.images : (p.image ? [p.image] : []);
                       setCraftForm({
                         title: p.title,
                         category: p.category,
                         price: p.price,
                         originalPrice: p.originalPrice || p.price,
                         description: p.description || '',
-                        image: p.image,
+                        image: p.image || existingImages[0] || '',
+                        images: existingImages,
                         stock: p.stock,
                         inStockCount: p.inStockCount || 10,
                         materials: p.materials || '',
                         dimensions: p.dimensions || '',
                         weight: p.weight || '',
-                        prepTimeDays: p.prepTimeDays || 3,
-                        originCity: p.originCity || 'New Delhi',
+                        originCity: p.originCity || 'Bengaluru',
                         isMadeToOrder: p.isMadeToOrder ?? true,
                       });
                       setIsAddingCraft(true);
                     }}
                     className="font-bold text-[#C85A32] hover:underline cursor-pointer flex items-center gap-1"
                   >
-                    <Edit className="w-3.5 h-3.5" /> Edit Craft
+                    <Edit className="w-3.5 h-3.5" /> Edit Craft ({pGallery.length} photos)
                   </button>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
       )}
@@ -639,7 +688,7 @@ export const MakerPortalPage: React.FC = () => {
               Artisan Studio Pickup Address
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Used by Shiprocket to dispatch couriers directly to your student workshop or campus locker.
+              Used by Shiprocket to dispatch couriers directly to your maker workshop or studio locker.
             </p>
           </div>
 
@@ -654,7 +703,7 @@ export const MakerPortalPage: React.FC = () => {
                 onChange={(e) => setStudioPickupPin(e.target.value.replace(/\D/g, ''))}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] font-mono text-sm font-bold"
               />
-              <p className="text-[11px] text-slate-400">Default Campus Hub: 110016 (New Delhi)</p>
+              <p className="text-[11px] text-slate-400">Default Fulfillment Hub: 110016 (New Delhi)</p>
             </div>
 
             <div className="space-y-1">
@@ -867,7 +916,7 @@ export const MakerPortalPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-5 shadow-2xl border max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-black text-slate-900">
-                {editingCraft ? 'Edit Handcrafted Piece' : 'Add New Student Craft'}
+                {editingCraft ? 'Edit Handcrafted Piece' : 'Add New Craft'}
               </h3>
               <button onClick={() => setIsAddingCraft(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">
                 <X className="w-4 h-4" />
@@ -893,8 +942,9 @@ export const MakerPortalPage: React.FC = () => {
                   <select
                     value={craftForm.category}
                     onChange={(e) => setCraftForm({ ...craftForm, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
                   >
+                    <option value="Crochet">Crochet</option>
                     <option value="Clay Crafts">Clay Crafts</option>
                     <option value="Hand-painted Cards">Hand-painted Cards</option>
                     <option value="Paintings">Paintings</option>
@@ -909,6 +959,7 @@ export const MakerPortalPage: React.FC = () => {
                   <input
                     type="number"
                     required
+                    min={1}
                     value={craftForm.price}
                     onChange={(e) => setCraftForm({ ...craftForm, price: Number(e.target.value) })}
                     className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold"
@@ -916,12 +967,22 @@ export const MakerPortalPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* Multi-Photo Gallery Uploader */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Photograph URL or Device Upload *</label>
-                <ImageUploader
-                  value={craftForm.image}
-                  onChange={(url) => setCraftForm({ ...craftForm, image: url })}
-                  label="Product photo"
+                <MultiImageUploader
+                  images={craftForm.images || (craftForm.image ? [craftForm.image] : [])}
+                  primaryImage={craftForm.image}
+                  onChange={(updatedImages, primary) => {
+                    setCraftForm({
+                      ...craftForm,
+                      images: updatedImages,
+                      image: primary || updatedImages[0] || '',
+                    });
+                  }}
+                  minImages={2}
+                  maxImages={8}
+                  label="Craft Photographs (At least 2 angles required) *"
+                  helperText="Upload at least 2 photos from your device or web URLs (front, detail, scale). Star any photo to make it the primary storefront picture."
                 />
               </div>
 

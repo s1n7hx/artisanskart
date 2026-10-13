@@ -25,6 +25,8 @@ import {
   fetchPlatformSettings,
   savePlatformSettings,
   fetchAllProfiles,
+  fetchSupabaseProducts,
+  upsertProductInSupabase,
   updateUserRole as updateSupabaseUserRole,
   updateUserStatus as updateSupabaseUserStatus,
   updateUserRoleAndStatus as updateSupabaseUserRoleAndStatus,
@@ -316,7 +318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: name.trim() || (existingIndex >= 0 ? usersList[existingIndex].name : trimmedEmail.split('@')[0]),
       role: role,
       status: status,
-      school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Campus Arts Club' : 'Customer Patron'),
+      school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Independent Studio' : 'Customer Patron'),
     };
 
     let nextList: UserAccount[];
@@ -529,12 +531,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 merged.push({
                   id: rp.id,
                   email: rp.email,
-                  name: rp.full_name || 'Student Creator',
+                  name: rp.full_name || 'Independent Creator',
                   role: rp.role,
-                  school: rp.school || 'Campus Arts Club',
+                  school: rp.school || 'Independent Studio Guild',
                 });
               }
             });
+            return merged;
+          });
+        }
+        const remoteProducts = await fetchSupabaseProducts();
+        if (remoteProducts && remoteProducts.length > 0) {
+          setProducts((prev) => {
+            const remoteMap = new Map(remoteProducts.map((p) => [p.id, p]));
+            const merged = prev.map((p) => remoteMap.get(p.id) || p);
+            remoteProducts.forEach((rp) => {
+              if (!merged.some((m) => m.id === rp.id)) {
+                merged.unshift(rp);
+              }
+            });
+            try {
+              localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(merged));
+            } catch (e) {}
             return merged;
           });
         }
@@ -766,6 +784,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (e) {}
       return next;
     });
+    // Async background sync to Supabase
+    upsertProductInSupabase(updated, currentUser?.id).catch((err) => {
+      console.warn('Background Supabase product update notice:', err);
+    });
     showToast(`Updated product "${updated.title}"`, 'edit-2');
   };
 
@@ -776,6 +798,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
       } catch (e) {}
       return next;
+    });
+    // Async background sync to Supabase
+    upsertProductInSupabase(newProd, currentUser?.id).catch((err) => {
+      console.warn('Background Supabase product create notice:', err);
     });
     showToast(`Published "${newProd.title}" live!`, 'sparkles');
   };
@@ -850,28 +876,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'in_production' } : o))
     );
-    showToast('Order accepted — student maker crafting started!', 'hammer');
+    showToast('Order accepted — maker crafting started!', 'hammer');
   };
 
   const markReady = (id: number) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'ready' } : o))
     );
-    showToast('Marked ready for campus dispatch!', 'package');
+    showToast('Marked ready for dispatch!', 'package');
   };
 
   const markCompleted = (id: number) => {
     setOrders((prev) =>
       prev.map((o) => (o.id === id ? { ...o, status: 'completed' } : o))
     );
-    showToast(`Order completed. ${makerEarningPercent}% Student Fund updated!`, 'wallet');
+    showToast(`Order completed. ${makerEarningPercent}% Creator Fund updated!`, 'wallet');
   };
 
   const confirmCheckout = () => {
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCart([]);
-    showToast('Order placed! Your student maker will begin crafting.', 'party-popper');
+    showToast('Order placed! Your maker will begin crafting.', 'party-popper');
   };
 
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);

@@ -138,7 +138,7 @@ export const BecomeAMakerPage: React.FC = () => {
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#C85A32]/10 text-[#C85A32] text-xs font-bold">
             <Sparkles className="w-4 h-4" />
-            <span>Student & Artisan Creator Program</span>
+            <span>Independent &amp; Artisan Creator Program</span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
             Apply to Become an ArtisansKart Maker
@@ -156,7 +156,7 @@ export const BecomeAMakerPage: React.FC = () => {
             </div>
             <h3 className="text-xs font-bold text-slate-900">Curated Creator Profile</h3>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Showcase your school, craft heritage, and process stories to authentic patrons.
+              Showcase your studio, craft heritage, and process stories to authentic patrons.
             </p>
           </div>
 
@@ -254,11 +254,11 @@ export const BecomeAMakerPage: React.FC = () => {
                 <span className="font-bold text-slate-800">{currentUser.name} ({maskEmail(currentUser.email)})</span>
               </div>
               <div className="flex justify-between border-b border-[#e7e0d8] pb-2">
-                <span className="text-slate-500">School / College:</span>
+                <span className="text-slate-500">Studio / Guild:</span>
                 <span className="font-bold text-slate-800">{existingApplication.school}</span>
               </div>
               <div className="flex justify-between border-b border-[#e7e0d8] pb-2">
-                <span className="text-slate-500">Class / Grade:</span>
+                <span className="text-slate-500">Specialty / Dept:</span>
                 <span className="font-bold text-slate-800">{existingApplication.grade_class}</span>
               </div>
               {existingApplication.message && (
@@ -309,7 +309,7 @@ export const BecomeAMakerPage: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  School, College, or Institution *
+                  Studio, Guild, or Organization Name *
                 </label>
                 <div className="relative">
                   <School className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -318,7 +318,7 @@ export const BecomeAMakerPage: React.FC = () => {
                     required
                     value={school}
                     onChange={(e) => setSchool(e.target.value)}
-                    placeholder="e.g. Delhi Public School, RK Puram"
+                    placeholder="e.g. Earthcraft Studio, Handmade Guild"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32] bg-[#FAF9F6]"
                   />
                 </div>
@@ -326,7 +326,7 @@ export const BecomeAMakerPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Grade, Class, or Department *
+                  Craft Specialty or Department *
                 </label>
                 <div className="relative">
                   <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -335,7 +335,7 @@ export const BecomeAMakerPage: React.FC = () => {
                     required
                     value={gradeClass}
                     onChange={(e) => setGradeClass(e.target.value)}
-                    placeholder="e.g. Class 10 (Ceramics Club) or 2nd Year Design"
+                    placeholder="e.g. Ceramicist, Crochet Artist, Woodworker"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32] bg-[#FAF9F6]"
                   />
                 </div>

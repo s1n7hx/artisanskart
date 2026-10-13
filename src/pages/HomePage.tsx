@@ -35,10 +35,10 @@ export const HomePage: React.FC = () => {
             Why ArtisansKart?
           </span>
           <h2 className="fade-in text-3xl md:text-4xl font-black text-[#1E293B] mt-3">
-            Every Purchase Empowers a Student's Future
+            Every Purchase Empowers Independent Creators &amp; Artisans
           </h2>
           <p className="fade-in text-slate-500 mt-2 text-sm md:text-base">
-            We bypass middlemen so high school &amp; university makers can fund their tuition and craft supplies directly.
+            We bypass middlemen so independent makers, homemakers, and skilled artisans can earn fair value for their handcrafts.
           </p>
         </div>
 
@@ -47,9 +47,9 @@ export const HomePage: React.FC = () => {
             <div className="w-12 h-12 rounded-2xl bg-[#C85A32]/10 flex items-center justify-center text-[#C85A32] mb-5">
               <Heart className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[#1E293B] mb-2">{makerEarningPercent}% Student-First Earnings</h3>
+            <h3 className="text-xl font-bold text-[#1E293B] mb-2">{makerEarningPercent}% Creator-First Earnings</h3>
             <p className="text-slate-500 text-sm leading-relaxed">
-              Unlike generic e-commerce taking 40-50% cuts, our student creators receive {makerEarningPercent}% of every sale directly to their student accounts.
+              Unlike generic e-commerce taking 40-50% cuts, our creators receive {makerEarningPercent}% of every sale directly to their accounts.
             </p>
           </div>
 
@@ -59,7 +59,7 @@ export const HomePage: React.FC = () => {
             </div>
             <h3 className="text-xl font-bold text-[#1E293B] mb-2">Zero Mass-Production Waste</h3>
             <p className="text-slate-500 text-sm leading-relaxed">
-              Products are handcrafted on demand in campus studios with non-toxic glazes, sustainable papers, and zero warehouse deadstock.
+              Products are handcrafted on demand in independent studios with non-toxic glazes, sustainable papers, and zero warehouse deadstock.
             </p>
           </div>
 
@@ -67,9 +67,9 @@ export const HomePage: React.FC = () => {
             <div className="w-12 h-12 rounded-2xl bg-[#C85A32]/10 flex items-center justify-center text-[#C85A32] mb-5">
               <ShieldCheck className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[#1E293B] mb-2">Verified Student Verification</h3>
+            <h3 className="text-xl font-bold text-[#1E293B] mb-2">Verified Creator Craftsmanship</h3>
             <p className="text-slate-500 text-sm leading-relaxed">
-              Every artisan is verified through institutional student IDs from partner art colleges and university design departments.
+              Every artisan is verified through quality checks and authentic handcrafting standards.
             </p>
           </div>
         </div>
@@ -79,7 +79,7 @@ export const HomePage: React.FC = () => {
             to="/about"
             className="inline-flex items-center gap-2 text-sm font-bold text-[#C85A32] hover:text-[#a04321] transition group"
           >
-            <span>Learn more about our mission &amp; school partners</span>
+            <span>Learn more about our mission &amp; maker studios</span>
             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
           </Link>
         </div>
@@ -93,7 +93,7 @@ export const HomePage: React.FC = () => {
               Handmade With Care
             </span>
             <h2 className="fade-in text-3xl md:text-4xl font-black text-[#1E293B] mt-2">
-              Spotlight Student Creations
+              Spotlight Handcrafted Creations
             </h2>
             <p className="fade-in text-slate-500 mt-1 text-sm md:text-base">
               Hand-picked originals currently being crafted across partner studios.
@@ -206,13 +206,13 @@ export const HomePage: React.FC = () => {
         <div className="bg-linear-to-br from-[#FAF9F6] to-[#f4ebe1] rounded-3xl border border-[#e7e0d8] p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
           <div className="max-w-xl">
             <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
-              Calling Student Creators
+              Calling All Creators &amp; Artisans
             </span>
             <h2 className="text-2xl md:text-3xl font-black text-[#1E293B] mt-2 mb-3">
-              Are you a high school or college maker?
+              Are you an independent maker, homemaker, or skilled artisan?
             </h2>
             <p className="text-slate-600 text-sm leading-relaxed">
-              Join 120+ student artisans selling pottery, jewelry, illustrations, and crochet items. We handle payments, customer support, and campus drop-off logistics.
+              Join 120+ creators selling pottery, jewelry, illustrations, and crochet items. We handle payments, customer support, and secure logistics.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 shrink-0">

@@ -16,19 +16,19 @@ export const HowItWorksPage: React.FC = () => {
   const faqs = [
     {
       q: 'How long does made-on-demand production take?',
-      a: 'Since every item is hand-built by a student artisan on campus, production typically takes 2 to 4 working days before dispatch. You will receive live photo updates as your craft moves through production.',
+      a: 'Since every item is hand-built by an independent artisan, production typically takes 2 to 4 working days before dispatch. You will receive live photo updates as your craft moves through production.',
     },
     {
-      q: 'How do student artisans get paid?',
-      a: `Students receive ${makerEarningPercent}% of the craft value credited directly to their verified bank or UPI ID every Friday once the parcel is handed over to our campus pickup lockers.`,
+      q: 'How do independent creators get paid?',
+      a: `Creators receive ${makerEarningPercent}% of the craft value credited directly to their verified bank or UPI ID every Friday once the parcel is handed over to our secure pickup lockers.`,
     },
     {
       q: 'What if a delicate ceramic or clay item arrives broken?',
       a: 'We use double-layered honeycomb paper wrap and heavy-duty corrugated cartons. In the rare event of damage during transit, we provide an immediate free remake or a 100% hassle-free refund.',
     },
     {
-      q: 'Can students balance coursework while selling on ArtisansKart?',
-      a: 'Yes! Makers set their own maximum monthly order quotas (e.g. 5–15 pieces) and can pause their storefront anytime during exam weeks with one tap in their maker portal.',
+      q: 'Can creators balance their schedule while selling on ArtisansKart?',
+      a: 'Yes! Makers set their own maximum monthly order quotas (e.g. 5–15 pieces) and can pause their storefront anytime with one tap in their maker portal.',
     },
   ];
 
@@ -43,7 +43,7 @@ export const HowItWorksPage: React.FC = () => {
           How ArtisansKart Works
         </h1>
         <p className="text-slate-500 text-base md:text-lg max-w-2xl mx-auto mt-4 leading-relaxed">
-          From the student's studio workbench to your doorstep — here is the complete 5-step journey behind every handcrafted creation.
+          From the creator's studio workbench to your doorstep — here is the complete 5-step journey behind every handcrafted creation.
         </p>
       </section>
 
@@ -92,7 +92,7 @@ export const HowItWorksPage: React.FC = () => {
               Where Does Every Rupee Go?
             </h2>
             <p className="text-white/70 text-sm mt-2">
-              Move the slider to see how order values are split fairly between the student creator, packaging, and platform.
+              Move the slider to see how order values are split fairly between the creator, packaging, and platform.
             </p>
           </div>
 
@@ -122,12 +122,12 @@ export const HowItWorksPage: React.FC = () => {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-[#E6A373]">{makerEarningPercent}% Direct to Student</span>
+                <span className="text-xs uppercase font-bold text-[#E6A373]">{makerEarningPercent}% Direct to Creator</span>
                 <Sparkles className="w-4 h-4 text-[#E6A373]" />
               </div>
               <p className="text-3xl font-black text-white">₹{studentEarnings.toLocaleString('en-IN')}</p>
               <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Direct creator compensation for materials, studio time, tuition assistance, and craft talent.
+                Direct creator compensation for materials, studio time, and craft talent.
               </p>
             </div>
 
@@ -149,7 +149,7 @@ export const HowItWorksPage: React.FC = () => {
               </div>
               <p className="text-3xl font-black text-white">₹{platformFee.toLocaleString('en-IN')}</p>
               <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Hosting, payment gateway charges, campus drop-off locker maintenance, and quality check assurance.
+                Hosting, payment gateway charges, drop-off locker maintenance, and quality check assurance.
               </p>
             </div>
           </div>
@@ -192,7 +192,7 @@ export const HowItWorksPage: React.FC = () => {
             Ready to Experience Handcrafted Goodness?
           </h2>
           <p className="text-slate-500 text-sm max-w-lg mx-auto mb-6">
-            Explore authentic pieces made with love by university &amp; art school students.
+            Explore authentic pieces made with love by independent artisans &amp; creators.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <Link
@@ -206,7 +206,7 @@ export const HowItWorksPage: React.FC = () => {
               onClick={() => setIsMakerSignupOpen(true)}
               className="bg-white border border-[#e7e0d8] text-[#1E293B] hover:border-[#1E293B] text-sm font-semibold px-6 py-3 rounded-full cursor-pointer transition"
             >
-              Apply as Student Maker
+              Apply as Maker / Creator
             </button>
           </div>
         </div>

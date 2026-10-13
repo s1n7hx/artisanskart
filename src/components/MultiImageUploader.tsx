@@ -19,6 +19,7 @@ interface MultiImageUploaderProps {
   primaryImage: string;
   onChange: (images: string[], primary: string) => void;
   maxImages?: number;
+  minImages?: number;
   label?: string;
   helperText?: string;
   className?: string;
@@ -29,8 +30,9 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   primaryImage = '',
   onChange,
   maxImages = 8,
+  minImages = 2,
   label = 'Product Photographs',
-  helperText = 'Upload at least 1 and up to 8 photos. First or starred photo is the primary storefront photo.',
+  helperText = 'Upload at least 2 and up to 8 photos. First or starred photo is the primary storefront photo.',
   className = '',
 }) => {
   const [urlInput, setUrlInput] = useState('');
@@ -260,11 +262,33 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
         </button>
       </div>
 
+      {/* Minimum Photos Requirement Status */}
+      {currentImages.length < minImages ? (
+        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+          <span>
+            <strong>{currentImages.length} of {minImages} minimum photos added.</strong> Please upload at least {minImages} photos (e.g. front angle, close-up texture, packaging) so customers can inspect your craft thoroughly.
+          </span>
+        </div>
+      ) : (
+        <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+            <span className="font-medium">
+              Gallery requirement met ({currentImages.length} photos).
+            </span>
+          </div>
+          <span className="text-[11px] text-emerald-700">
+            ★ Primary: #{currentImages.indexOf(effectivePrimary) + 1}
+          </span>
+        </div>
+      )}
+
       {/* Image Gallery Previews Grid with Controls */}
       {currentImages.length > 0 && (
-        <div className="space-y-2 pt-2">
+        <div className="space-y-2 pt-1">
           <p className="text-xs font-bold text-slate-600">
-            Uploaded Photos ({currentImages.length}) — Click star to set primary, use arrows to reorder
+            Uploaded Photos ({currentImages.length}) — Click star to set storefront primary, arrows to reorder
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

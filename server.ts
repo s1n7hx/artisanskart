@@ -43,6 +43,138 @@ const SERVER_PRODUCT_CATALOG: Record<number, { title: string; price: number; sto
 };
 
 // -------------------------------------------------------------
+// Authoritative Promotional Coupon Evaluation Engine
+// Enforces minimum order values, caps, and genuine active status
+// -------------------------------------------------------------
+export function evaluateCoupon(code: string, subtotal: number): { valid: boolean; code: string; discountAmount: number; message: string } {
+  const clean = String(code || '').trim().toUpperCase();
+  if (!clean) {
+    return { valid: false, code: '', discountAmount: 0, message: 'Coupon code is required.' };
+  }
+
+  if (clean === 'WELCOME10') {
+    const minOrder = 499;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon WELCOME10 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(100, Math.round(subtotal * 0.10));
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `10% creator welcome discount applied (₹${discount} saved)!`,
+    };
+  }
+
+  if (clean === 'CREATOR50') {
+    const minOrder = 399;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon CREATOR50 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(50, subtotal);
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `₹50 Handcrafted support discount applied!`,
+    };
+  }
+
+  if (clean === 'HANDMADE15') {
+    const minOrder = 999;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon HANDMADE15 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(200, Math.round(subtotal * 0.15));
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `15% Handmade Patron discount applied (₹${discount} saved)!`,
+    };
+  }
+
+  if (clean === 'MAKER10' || clean === 'STUDENT10') {
+    const minOrder = 299;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon ${clean} requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(100, Math.round(subtotal * 0.10));
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `10% Independent Maker discount applied (₹${discount} saved)!`,
+    };
+  }
+
+  if (clean === 'FIRSTCRAFT') {
+    const minOrder = 349;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon FIRSTCRAFT requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(50, subtotal);
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `₹50 First craft promotion applied!`,
+    };
+  }
+
+  if (clean === 'CREATORCRAFT' || clean === 'CAMPUSCRAFT') {
+    const minOrder = 499;
+    if (subtotal < minOrder) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `Coupon ${clean} requires a minimum order of ₹${minOrder}. Current subtotal: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(150, Math.round(subtotal * 0.15));
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `15% Creator Craft discount applied (₹${discount} saved)!`,
+    };
+  }
+
+  return {
+    valid: false,
+    code: clean,
+    discountAmount: 0,
+    message: 'Invalid or expired coupon code. Available promotions: WELCOME10 (min ₹499), CREATOR50 (min ₹399), MAKER10 (min ₹299).',
+  };
+}
+
+// -------------------------------------------------------------
 // API Route 1: Validate Order & Compute Server-Authoritative Totals
 // -------------------------------------------------------------
 app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
@@ -64,7 +196,7 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
         title: item.title || `Craft #${prodId}`,
         price: Number(item.price) || 299,
         stock: 20,
-        maker: item.maker || 'Student Maker',
+        maker: item.maker || 'Independent Maker',
       };
 
       const lineSubtotal = catalogItem.price * qty;
@@ -84,16 +216,9 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
     // Shipping computation
     const shippingFee = itemsTotal >= 499 ? 0 : 49;
 
-    // Coupon computation
-    let discountAmount = 0;
-    const cleanCoupon = (couponCode || '').trim().toUpperCase();
-    if (cleanCoupon === 'STUDENT10') {
-      discountAmount = Math.round(itemsTotal * 0.1);
-    } else if (cleanCoupon === 'FIRSTCRAFT') {
-      discountAmount = Math.min(itemsTotal, 50);
-    } else if (cleanCoupon === 'CAMPUSCRAFT') {
-      discountAmount = Math.round(itemsTotal * 0.15);
-    }
+    // Secure server-authoritative coupon evaluation
+    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
+    const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
 
     const finalPayable = Math.max(0, itemsTotal + shippingFee - discountAmount);
 
@@ -104,6 +229,8 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       discountAmount,
       totalAmount: finalPayable,
       validatedItems,
+      couponApplied: discountAmount > 0 ? couponResult.code : null,
+      couponMessage: couponResult.message || undefined,
       currency: 'INR',
       pincodeServiceable: Boolean(pincode && pincode.length === 6),
     });
@@ -161,7 +288,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       orderId: mockOrderId,
       amount: amountInPaise,
       currency: 'INR',
-      keyId: 'rzp_test_artisanskart_campus',
+      keyId: 'rzp_test_artisanskart_hub',
       message: 'Running in safe Indian test gateway mode. Real UPI, NetBanking, Card simulation available.',
     });
   } catch (err: any) {
@@ -212,75 +339,14 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
 app.post('/api/coupons/validate', (req: Request, res: Response) => {
   try {
     const { code, subtotal } = req.body;
-    const cleanCode = String(code || '').trim().toUpperCase();
     const cleanSubtotal = Math.max(0, Number(subtotal) || 0);
 
-    if (!cleanCode) {
-      return res.status(400).json({ valid: false, discountAmount: 0, message: 'Coupon code is required.' });
-    }
-
-    if (cleanCode === 'WELCOME10') {
-      const minOrder = 499;
-      if (cleanSubtotal < minOrder) {
-        return res.json({
-          valid: false,
-          code: cleanCode,
-          discountAmount: 0,
-          message: `Coupon WELCOME10 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
-        });
-      }
-      const discount = Math.min(100, Math.round(cleanSubtotal * 0.10));
-      return res.json({
-        valid: true,
-        code: cleanCode,
-        discountAmount: discount,
-        message: `10% creator welcome discount applied (₹${discount} saved)!`,
-      });
-    }
-
-    if (cleanCode === 'CREATOR50') {
-      const minOrder = 399;
-      if (cleanSubtotal < minOrder) {
-        return res.json({
-          valid: false,
-          code: cleanCode,
-          discountAmount: 0,
-          message: `Coupon CREATOR50 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
-        });
-      }
-      const discount = Math.min(50, cleanSubtotal);
-      return res.json({
-        valid: true,
-        code: cleanCode,
-        discountAmount: discount,
-        message: `₹50 Handcrafted support discount applied!`,
-      });
-    }
-
-    if (cleanCode === 'HANDMADE15') {
-      const minOrder = 999;
-      if (cleanSubtotal < minOrder) {
-        return res.json({
-          valid: false,
-          code: cleanCode,
-          discountAmount: 0,
-          message: `Coupon HANDMADE15 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
-        });
-      }
-      const discount = Math.min(200, Math.round(cleanSubtotal * 0.15));
-      return res.json({
-        valid: true,
-        code: cleanCode,
-        discountAmount: discount,
-        message: `15% Handmade Patron discount applied (₹${discount} saved)!`,
-      });
-    }
-
+    const result = evaluateCoupon(code, cleanSubtotal);
     return res.json({
-      valid: false,
-      code: cleanCode,
-      discountAmount: 0,
-      message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399).',
+      valid: result.valid,
+      code: result.code,
+      discountAmount: result.discountAmount,
+      message: result.message,
     });
   } catch (err: any) {
     return res.status(500).json({ valid: false, discountAmount: 0, message: err.message });
@@ -305,21 +371,8 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
       itemsTotal += price * qty;
     }
 
-    let discountAmount = 0;
-    let couponMessage = '';
-    const cleanCoupon = String(couponCode || '').trim().toUpperCase();
-
-    if (cleanCoupon === 'WELCOME10' && itemsTotal >= 499) {
-      discountAmount = Math.min(100, Math.round(itemsTotal * 0.10));
-      couponMessage = 'WELCOME10 applied (10% off)';
-    } else if (cleanCoupon === 'CREATOR50' && itemsTotal >= 399) {
-      discountAmount = Math.min(50, itemsTotal);
-      couponMessage = 'CREATOR50 applied (₹50 off)';
-    } else if (cleanCoupon === 'HANDMADE15' && itemsTotal >= 999) {
-      discountAmount = Math.min(200, Math.round(itemsTotal * 0.15));
-      couponMessage = 'HANDMADE15 applied (15% off)';
-    }
-
+    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
+    const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
     const shippingFee = itemsTotal >= 499 ? 0 : 49;
     const grandTotal = Math.max(0, itemsTotal - discountAmount + shippingFee);
 
@@ -329,8 +382,8 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
       discountAmount,
       shippingFee,
       grandTotal,
-      couponApplied: discountAmount > 0 ? cleanCoupon : null,
-      couponMessage,
+      couponApplied: discountAmount > 0 ? couponResult.code : null,
+      couponMessage: couponResult.message || '',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

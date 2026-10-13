@@ -36,6 +36,7 @@ import {
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 import { Product, HeroContent, UserAccount, UserRole, OrderStatus, Order, maskEmail } from '../types';
 import { ImageUploader } from '../components/ImageUploader';
+import { MultiImageUploader } from '../components/MultiImageUploader';
 import {
   uploadImageToBucket,
   fetchAllMakerApplications,
@@ -211,12 +212,12 @@ export const AdminPortalPage: React.FC = () => {
     if (confirm('Reset CMS headlines and banners to default?')) {
       resetHeroToDefault();
       setCmsForm({
-        badgeText: '✨ Handcrafted by Student Artisans',
+        badgeText: '✨ Handcrafted by Independent Artisans',
         headlineLine1: 'Crafted by',
-        headlineLine2: 'Students,',
+        headlineLine2: 'Creators,',
         headlineLine3: 'Loved by You',
         subhead:
-          'Discover one-of-a-kind clay crafts, hand-painted cards, accessories & keychains — every purchase directly funds a student creator’s education.',
+          'Discover one-of-a-kind clay crafts, hand-painted cards, accessories & keychains — every purchase directly supports independent creators and artisans.',
         mainImage:
           'https://images.pexels.com/photos/7559739/pexels-photo-7559739.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=800',
         leftImage:
@@ -234,38 +235,58 @@ export const AdminPortalPage: React.FC = () => {
   const handleSaveNewProduct = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProductForm.title || !newProductForm.maker || !newProductForm.price) {
-      alert('Please fill in product title, maker, and price.');
+      showToast('Please fill in product title, maker, and price.', 'alert-circle');
       return;
     }
+
+    const effectiveImages = newProductForm.images && newProductForm.images.length > 0
+      ? newProductForm.images
+      : (newProductForm.image ? [newProductForm.image] : []);
+
+    if (effectiveImages.length === 0) {
+      showToast('Please upload at least 2 photographs of this craft.', 'alert-circle');
+      return;
+    }
+
+    if (effectiveImages.length < 2) {
+      showToast('Please add at least 2 photographs from different angles (front, detail, packaging).', 'alert-circle');
+      return;
+    }
+
+    const primaryImage = newProductForm.image && effectiveImages.includes(newProductForm.image)
+      ? newProductForm.image
+      : effectiveImages[0];
 
     const prodToAdd: Product = {
       id: Date.now(),
       title: newProductForm.title || 'Handmade Craft',
-      category: newProductForm.category || 'Clay Crafts',
+      category: newProductForm.category || 'Crochet',
       price: Number(newProductForm.price) || 299,
-      rating: 5.0,
-      reviews: 1,
-      maker: newProductForm.maker || 'Student Maker',
-      cls: newProductForm.cls || 'Class 10',
-      school: newProductForm.school || 'Campus Fine Arts Club',
-      image: newProductForm.image || 'https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&w=800',
-      stock: newProductForm.stock || 'In Stock • Made to order',
-      description: newProductForm.description || 'Authentic handcrafted student artwork.',
+      rating: 0,
+      reviews: 0,
+      maker: newProductForm.maker || 'Independent Maker',
+      cls: newProductForm.cls || 'Artisan Series',
+      school: newProductForm.school || 'Independent Studio Guild',
+      image: primaryImage,
+      images: effectiveImages,
+      stock: newProductForm.stock || 'In Stock • Made on Demand',
+      description: newProductForm.description || 'Authentic handcrafted independent artwork.',
       source: 'custom',
     };
 
     addNewProduct(prodToAdd);
-    showToast(`Added product "${prodToAdd.title}" to marketplace!`, 'sparkles');
+    showToast(`Added craft "${prodToAdd.title}" with ${effectiveImages.length} photos!`, 'sparkles');
     setIsAddingProduct(false);
     setNewProductForm({
       title: '',
-      category: 'Clay Crafts',
+      category: 'Crochet',
       price: 349,
       maker: '',
       cls: 'Class 10',
       school: '',
-      image: 'https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg?auto=compress&cs=tinysrgb&w=800',
-      stock: 'In Stock • Made to order',
+      image: '',
+      images: [],
+      stock: 'In Stock • Made on Demand',
       description: '',
     });
   };
@@ -273,8 +294,21 @@ export const AdminPortalPage: React.FC = () => {
   const handleUpdateProductSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      updateProduct(editingProduct);
-      showToast(`Saved changes to "${editingProduct.title}"!`, 'check-circle-2');
+      const effectiveImages = editingProduct.images && editingProduct.images.length > 0
+        ? editingProduct.images
+        : (editingProduct.image ? [editingProduct.image] : []);
+      const primaryImage = editingProduct.image && effectiveImages.includes(editingProduct.image)
+        ? editingProduct.image
+        : (effectiveImages[0] || '');
+
+      const toSave: Product = {
+        ...editingProduct,
+        image: primaryImage,
+        images: effectiveImages,
+      };
+
+      updateProduct(toSave);
+      showToast(`Saved changes to "${toSave.title}" with ${effectiveImages.length} photos!`, 'check-circle-2');
       setEditingProduct(null);
     }
   };
@@ -368,7 +402,7 @@ export const AdminPortalPage: React.FC = () => {
             ArtisansKart Control Center
           </h1>
           <p className="text-slate-400 text-sm mt-1 max-w-xl leading-relaxed">
-            Direct visual control over storefront photography, headlines, catalog items, and student maker permission grants.
+            Direct visual control over storefront photography, headlines, catalog items, and independent maker permission grants.
           </p>
         </div>
 
@@ -380,7 +414,7 @@ export const AdminPortalPage: React.FC = () => {
           <div className="h-8 w-px bg-slate-700" />
           <div className="flex items-center gap-2">
             <div>
-              <span className="text-[11px] text-[#C85A32] block font-semibold">{makerEarningPercent}% Student Fund</span>
+              <span className="text-[11px] text-[#C85A32] block font-semibold">{makerEarningPercent}% Creator Fund</span>
               <span className="text-2xl font-black text-[#C85A32]">₹{Math.round(studentSharePaid).toLocaleString('en-IN')}</span>
             </div>
             <button
@@ -498,13 +532,13 @@ export const AdminPortalPage: React.FC = () => {
                     Maker Commission &amp; Earnings Split Policy
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Customizable administrative setting: configure the percentage of order amounts credited directly to student creators.
+                    Customizable administrative setting: configure the percentage of order amounts credited directly to creators.
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <span className="text-xs font-black px-3.5 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  Active Platform Split: {makerEarningPercent}% Student / {100 - makerEarningPercent}% Platform
+                  Active Platform Split: {makerEarningPercent}% Creator / {100 - makerEarningPercent}% Platform
                 </span>
               </div>
             </div>
@@ -514,7 +548,7 @@ export const AdminPortalPage: React.FC = () => {
               <div className="lg:col-span-2 space-y-6">
                 <div>
                   <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
-                    <span>Adjust Direct Student Creator Share:</span>
+                    <span>Adjust Direct Creator Share:</span>
                     <span className="text-2xl font-black text-[#C85A32]">{customPercentInput}%</span>
                   </div>
                   <input
@@ -545,9 +579,9 @@ export const AdminPortalPage: React.FC = () => {
                       { val: 50, label: '50% (Equal Split)' },
                       { val: 65, label: '65% (ArtisansKart Default)' },
                       { val: 70, label: '70% (Fair-Trade Tier)' },
-                      { val: 75, label: '75% (Student Focused)' },
+                      { val: 75, label: '75% (Creator Focused)' },
                       { val: 80, label: '80% (High Support)' },
-                      { val: 90, label: '90% (Scholarship Tier)' },
+                      { val: 90, label: '90% (Partner Tier)' },
                     ].map((preset) => (
                       <button
                         key={preset.val}
@@ -568,7 +602,7 @@ export const AdminPortalPage: React.FC = () => {
                 {/* Order Simulation Matrix */}
                 <div className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
                   <h4 className="text-xs font-black uppercase tracking-wider text-slate-600">
-                    Live Order Value Simulation (Based on {customPercentInput}% Student Payout)
+                    Live Order Value Simulation (Based on {customPercentInput}% Creator Payout)
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     {[350, 850, 1500, 3000].map((amt) => {
@@ -578,7 +612,7 @@ export const AdminPortalPage: React.FC = () => {
                         <div key={amt} className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
                           <span className="font-extrabold text-slate-900 block text-xs">₹{amt} Order</span>
                           <div className="text-[11px]">
-                            <span className="text-slate-400 block">Student receives:</span>
+                            <span className="text-slate-400 block">Creator receives:</span>
                             <span className="font-black text-[#C85A32]">₹{studentCut}</span>
                           </div>
                           <div className="text-[10px] text-slate-400">
@@ -608,7 +642,7 @@ export const AdminPortalPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-slate-500">
-                    Platform retains <strong>{100 - customPercentInput}%</strong> for parcel packaging, campus delivery lockers, and logistics.
+                    Platform retains <strong>{100 - customPercentInput}%</strong> for parcel packaging, studio drop-off lockers, and logistics.
                   </p>
                 </div>
 
@@ -627,7 +661,7 @@ export const AdminPortalPage: React.FC = () => {
                     <span>{isSavingPercent ? 'Saving Policy...' : `Save ${customPercentInput}% Policy`}</span>
                   </button>
                   <p className="text-[10px] text-center text-slate-400">
-                    Saved to cloud settings &amp; automatically applied across all student maker workspaces.
+                    Saved to cloud settings &amp; automatically applied across all maker workspaces.
                   </p>
                 </div>
               </div>
@@ -639,11 +673,11 @@ export const AdminPortalPage: React.FC = () => {
               <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] text-slate-500">
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span><strong>Student Maker Workspace:</strong> Total earnings metric &amp; order payout splits</span>
+                  <span><strong>Maker Workspace:</strong> Total earnings metric &amp; order payout splits</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span><strong>Marketplace Header:</strong> Real-time student creator split badge</span>
+                  <span><strong>Marketplace Header:</strong> Real-time creator split badge</span>
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -651,7 +685,7 @@ export const AdminPortalPage: React.FC = () => {
                 </li>
                 <li className="flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span><strong>Campus Order Fulfillment:</strong> UPI transfer calculations upon delivery</span>
+                  <span><strong>Studio Order Fulfillment:</strong> UPI transfer calculations upon delivery</span>
                 </li>
               </ul>
             </div>
@@ -667,7 +701,7 @@ export const AdminPortalPage: React.FC = () => {
                 <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Maker Acceptance Window</span>
                   <p className="font-black text-slate-900 text-sm">24 Hours</p>
-                  <p className="text-[10px] text-slate-500">Auto-alerts sent if student maker doesn't confirm within 18h.</p>
+                  <p className="text-[10px] text-slate-500">Auto-alerts sent if maker doesn't confirm within 18h.</p>
                 </div>
 
                 <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
@@ -778,7 +812,7 @@ export const AdminPortalPage: React.FC = () => {
               {/* Subheading / Mission Copy */}
               <div>
                 <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-1">
-                  Hero Subtitle &amp; Student Pledge
+                  Hero Subtitle &amp; Creator Pledge
                 </label>
                 <textarea
                   rows={3}
@@ -895,7 +929,7 @@ export const AdminPortalPage: React.FC = () => {
                       Maker Commission &amp; Earnings Split Policy
                     </h3>
                     <p className="text-xs text-slate-500">
-                      Customizable platform setting: configure the percentage of order amounts given directly to student makers.
+                      Customizable platform setting: configure the percentage of order amounts given directly to creators.
                     </p>
                   </div>
                 </div>
@@ -908,7 +942,7 @@ export const AdminPortalPage: React.FC = () => {
                 <div className="md:col-span-2 space-y-4">
                   <div>
                     <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
-                      <span>Adjust Student Creator Share:</span>
+                      <span>Adjust Creator Share:</span>
                       <span className="text-xl font-black text-[#C85A32]">{customPercentInput}%</span>
                     </div>
                     <input
@@ -932,7 +966,7 @@ export const AdminPortalPage: React.FC = () => {
                   {/* Real-time Order Breakdown Visualizer */}
                   <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] grid grid-cols-2 gap-4 text-xs">
                     <div className="space-y-1">
-                      <span className="text-slate-500 font-bold block">Student Maker Receives:</span>
+                      <span className="text-slate-500 font-bold block">Maker / Creator Receives:</span>
                       <span className="text-lg font-black text-[#C85A32]">{customPercentInput}%</span>
                       <span className="text-[11px] text-slate-400 block">
                         ₹{Math.round(1000 * (customPercentInput / 100))} on a ₹1,000 order
@@ -1031,7 +1065,7 @@ export const AdminPortalPage: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Add authorized Google emails and grant permissions for <strong>Admins</strong> or <strong>Student Makers</strong>.
+                Add authorized Google emails and grant permissions for <strong>Admins</strong> or <strong>Independent Makers</strong>.
               </p>
             </div>
 
@@ -1084,7 +1118,7 @@ export const AdminPortalPage: React.FC = () => {
                     required
                     value={newUserEmail}
                     onChange={(e) => setNewUserEmail(e.target.value)}
-                    placeholder="student@gmail.com"
+                    placeholder="creator@gmail.com"
                     className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
                   />
                 </div>
@@ -1111,7 +1145,7 @@ export const AdminPortalPage: React.FC = () => {
                     onChange={(e) => setNewUserRole(e.target.value as any)}
                     className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs font-semibold focus:outline-hidden focus:border-[#C85A32]"
                   >
-                    <option value="maker">🔨 Student Maker (Publish & Fulfill)</option>
+                    <option value="maker">🔨 Independent Maker (Publish &amp; Fulfill)</option>
                     <option value="admin">🛡️ Co-Admin (Full CMS Access)</option>
                     <option value="customer">👤 Customer (Standard Buyer)</option>
                   </select>
@@ -1122,7 +1156,7 @@ export const AdminPortalPage: React.FC = () => {
                     type="text"
                     value={newUserSchool}
                     onChange={(e) => setNewUserSchool(e.target.value)}
-                    placeholder="School / College (Optional)"
+                    placeholder="Studio / Affiliation (Optional)"
                     className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
                   />
                   <button
@@ -1183,7 +1217,7 @@ export const AdminPortalPage: React.FC = () => {
                 type="text"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                placeholder="Search by name, email, or school..."
+                placeholder="Search by name, email, or studio..."
                 className="w-full pl-10 pr-4 py-2 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] text-xs focus:bg-white focus:outline-hidden focus:border-[#C85A32]"
               />
             </div>
@@ -1437,14 +1471,14 @@ export const AdminPortalPage: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-black text-slate-900">
-                  Maker Applications &amp; Student Portfolios
+                  Maker Applications &amp; Creator Portfolios
                 </h2>
                 <span className="text-xs bg-[#C85A32]/10 text-[#C85A32] font-black px-2.5 py-0.5 rounded-full">
                   {makerApps.length} total applications
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Review student creator applications. Approving an application automatically upgrades the user's role to <strong>Maker</strong> in the database.
+                Review creator applications. Approving an application automatically upgrades the user's role to <strong>Maker</strong> in the database.
               </p>
             </div>
 
@@ -1475,10 +1509,10 @@ export const AdminPortalPage: React.FC = () => {
               </div>
               <div>
                 <p className="font-bold text-slate-900">
-                  Student Fair-Trade Split: <span className="text-[#C85A32] font-black">{makerEarningPercent}%</span>
+                  Fair-Trade Creator Split: <span className="text-[#C85A32] font-black">{makerEarningPercent}%</span>
                 </p>
                 <p className="text-[11px] text-slate-500">
-                  Approved student makers receive {makerEarningPercent}% directly via UPI upon order completion (₹{Math.round(1000 * (makerEarningPercent / 100))} per ₹1,000 order).
+                  Approved makers receive {makerEarningPercent}% directly via UPI upon order completion (₹{Math.round(1000 * (makerEarningPercent / 100))} per ₹1,000 order).
                 </p>
               </div>
             </div>
@@ -1503,7 +1537,7 @@ export const AdminPortalPage: React.FC = () => {
             <div className="space-y-4">
               {makerApps.map((app) => {
                 const userMatch = usersList.find((u) => u.id === app.user_id);
-                const applicantEmail = app.applicant_email || userMatch?.email || 'Student Creator';
+                const applicantEmail = app.applicant_email || userMatch?.email || 'Independent Creator';
                 const applicantName = app.applicant_name || userMatch?.name || 'Applicant';
                 const isPending = app.status === 'pending';
                 const isApproved = app.status === 'approved';
@@ -1607,7 +1641,7 @@ export const AdminPortalPage: React.FC = () => {
                           </button>
                         ) : (
                           <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4" /> Approved Student Maker
+                            <CheckCircle2 className="w-4 h-4" /> Approved Maker
                           </span>
                         )}
                       </div>
@@ -1629,7 +1663,7 @@ export const AdminPortalPage: React.FC = () => {
             <div>
               <h2 className="text-xl font-black text-slate-900">Marketplace Product Catalog</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Master Admin can edit titles, prices, student names, descriptions, or remove items.
+                Master Admin can edit titles, prices, maker names, descriptions, or remove items.
               </p>
             </div>
             <button
@@ -1648,7 +1682,7 @@ export const AdminPortalPage: React.FC = () => {
               className="bg-[#FAF9F6] p-6 rounded-2xl border border-[#C85A32]/30 space-y-4 animate-fade-in"
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-black text-slate-900">Create New Student Product</h3>
+                <h3 className="text-base font-black text-slate-900">Create New Product</h3>
                 <button
                   type="button"
                   onClick={() => setIsAddingProduct(false)}
@@ -1701,7 +1735,7 @@ export const AdminPortalPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Student Maker Name</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Maker Name</label>
                   <input
                     type="text"
                     required
@@ -1711,7 +1745,7 @@ export const AdminPortalPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">School / Club</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Studio / Guild</label>
                   <input
                     type="text"
                     value={newProductForm.school}
@@ -1722,13 +1756,20 @@ export const AdminPortalPage: React.FC = () => {
               </div>
 
               <div>
-                <ImageUploader
-                  value={newProductForm.image || ''}
-                  onChange={(url) => setNewProductForm({ ...newProductForm, image: url })}
-                  label="Product Photography"
-                  helperText="Upload picture from device or paste image link"
-                  placeholder="https://images.pexels.com/... or browse file"
-                  previewHeight="h-32"
+                <MultiImageUploader
+                  images={newProductForm.images || (newProductForm.image ? [newProductForm.image] : [])}
+                  primaryImage={newProductForm.image || ''}
+                  onChange={(imgs, primary) => {
+                    setNewProductForm({
+                      ...newProductForm,
+                      images: imgs,
+                      image: primary || imgs[0] || '',
+                    });
+                  }}
+                  minImages={2}
+                  maxImages={8}
+                  label="Product Photographs (At least 2 angles required) *"
+                  helperText="Upload at least 2 photos from your device or paste web links. Star the primary storefront photo."
                 />
               </div>
 
@@ -1818,13 +1859,20 @@ export const AdminPortalPage: React.FC = () => {
               </div>
 
               <div>
-                <ImageUploader
-                  value={editingProduct.image || ''}
-                  onChange={(url) => setEditingProduct({ ...editingProduct, image: url })}
-                  label="Product Photo"
-                  helperText="Upload new photo from device or update link"
-                  placeholder="https://images.pexels.com/... or choose file"
-                  previewHeight="h-32"
+                <MultiImageUploader
+                  images={editingProduct.images && editingProduct.images.length > 0 ? editingProduct.images : (editingProduct.image ? [editingProduct.image] : [])}
+                  primaryImage={editingProduct.image || ''}
+                  onChange={(imgs, primary) => {
+                    setEditingProduct({
+                      ...editingProduct,
+                      images: imgs,
+                      image: primary || imgs[0] || '',
+                    });
+                  }}
+                  minImages={2}
+                  maxImages={8}
+                  label="Product Photographs (Gallery & Storefront) *"
+                  helperText="Upload, reorder, or remove photos. Click the star to set the storefront primary image."
                 />
               </div>
 
@@ -1847,7 +1895,7 @@ export const AdminPortalPage: React.FC = () => {
                   <th className="py-3 px-4">Item</th>
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Price</th>
-                  <th className="py-3 px-4">Student Maker</th>
+                  <th className="py-3 px-4">Maker / Creator</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1910,7 +1958,7 @@ export const AdminPortalPage: React.FC = () => {
             <div>
               <h2 className="text-xl font-black text-slate-900">Customer Fulfillment Orders</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Overview of all student craft orders, delivery deadlines, and payment payouts.
+                Overview of all craft orders, delivery deadlines, and payment payouts.
               </p>
             </div>
             <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full">

@@ -450,11 +450,68 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     };
   }
 
+  if (clean === 'STUDENT10') {
+    const minOrder = 299;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `STUDENT10 requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(100, Math.round(subtotal * 0.1));
+    return {
+      isValid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `10% Student craft discount applied (₹${discount} saved)!`,
+    };
+  }
+
+  if (clean === 'FIRSTCRAFT') {
+    const minOrder = 349;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `FIRSTCRAFT requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(50, subtotal);
+    return {
+      isValid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `₹50 First craft promotion applied!`,
+    };
+  }
+
+  if (clean === 'CAMPUSCRAFT') {
+    const minOrder = 499;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `CAMPUSCRAFT requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(150, Math.round(subtotal * 0.15));
+    return {
+      isValid: true,
+      code: clean,
+      discountAmount: discount,
+      message: `15% Campus Craft discount applied (₹${discount} saved)!`,
+    };
+  }
+
   return {
     isValid: false,
     code: clean,
     discountAmount: 0,
-    message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399).',
+    message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399), STUDENT10 (min ₹299).',
   };
 }
 

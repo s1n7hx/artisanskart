@@ -188,7 +188,7 @@ export async function checkCourierServiceability(params: {
 }) {
   const {
     deliveryPincode,
-    pickupPincode = '110016', // Default ArtisansKart Campus Fulfillment Hub (New Delhi)
+    pickupPincode = '110016', // Default ArtisansKart Fulfillment Hub (New Delhi)
     weightKg = 0.5,
     cod = 1,
   } = params;
@@ -275,7 +275,7 @@ export async function createShipmentOrder(params: {
     customerName,
     phone = '9876543210',
     email = 'customer@artisanskart.in',
-    address = 'Campus Quarters / Residence',
+    address = 'Studio Residence',
     city = 'New Delhi',
     state = 'Delhi',
     pincode,
@@ -293,7 +293,7 @@ export async function createShipmentOrder(params: {
     const payload = {
       order_id: orderNumber,
       order_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      pickup_location: 'Primary Campus Hub',
+      pickup_location: 'Primary Fulfillment Hub',
       billing_customer_name: customerName,
       billing_last_name: '',
       billing_address: address,
@@ -335,7 +335,7 @@ export async function createShipmentOrder(params: {
         courierName: result.data.courier_name || 'Delhivery Surface',
         status: 'SHIPMENT_CREATED',
         trackingUrl: `https://shiprocket.co/tracking/${awb}`,
-        pickupScheduled: 'Next business day at Campus Hub',
+        pickupScheduled: 'Next business day at Fulfillment Hub',
       };
     }
   }
@@ -350,7 +350,7 @@ export async function createShipmentOrder(params: {
     courierName: 'Delhivery Surface (Eco-Packaging)',
     status: 'AWB_ASSIGNED',
     trackingUrl: `https://shiprocket.co/tracking/${awb}`,
-    pickupScheduled: 'Next business day at Campus Hub',
+    pickupScheduled: 'Next business day at Fulfillment Hub',
   };
 }
 

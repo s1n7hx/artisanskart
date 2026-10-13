@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, ShoppingCart, Edit3, Globe, Sparkles, RefreshCw, Zap } from 'lucide-react';
+import { User, ShoppingCart, Edit3, Globe, Sparkles, RefreshCw, Zap, Images } from 'lucide-react';
 import { CATEGORIES } from '../data';
 import { Product, getProductSlug } from '../types';
 import { useApp } from '../context/AppContext';
@@ -119,6 +119,12 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
                   <span className="absolute top-3 left-3 badge-sage text-[10px] font-bold px-2.5 py-1 rounded-full">
                     {p.stock}
                   </span>
+
+                  {p.images && p.images.length > 1 && (
+                    <span className="absolute bottom-2.5 right-2.5 bg-black/65 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">
+                      <Images className="w-3 h-3" /> {p.images.length} photos
+                    </span>
+                  )}
 
                   {/* Edit description shortcut button */}
                   <button

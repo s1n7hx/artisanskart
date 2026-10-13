@@ -474,16 +474,28 @@ export async function saveHeroCmsContent(content: HeroContent) {
 // Supabase Storage Image Uploads
 // -------------------------------------------------------------
 export async function uploadImageToBucket(file: File, bucket = 'cms-assets'): Promise<string> {
-  const ext = file.name.split('.').pop() || 'jpg';
-  const filePath = `uploads/${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`;
+  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filePath = `products/${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${cleanName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(bucket)
-    .upload(filePath, file, { upsert: true });
+  // Try configured bucket first
+  let targetBucket = bucket;
+  let { error: uploadError } = await supabase.storage
+    .from(targetBucket)
+    .upload(filePath, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+
+  // If target bucket failed and wasn't cms-assets, fallback attempt to cms-assets
+  if (uploadError && targetBucket !== 'cms-assets') {
+    targetBucket = 'cms-assets';
+    const fallbackRes = await supabase.storage
+      .from('cms-assets')
+      .upload(filePath, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+    uploadError = fallbackRes.error;
+  }
 
   if (uploadError) throw uploadError;
 
-  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  const { data } = supabase.storage.from(targetBucket).getPublicUrl(filePath);
   return data.publicUrl;
 }
 
@@ -600,22 +612,92 @@ export async function fetchSupabaseProducts(): Promise<Product[] | null> {
 
     if (error || !data || data.length === 0) return null;
 
-    return data.map((item) => ({
-      id: typeof item.id === 'string' ? Math.abs(hashCode(item.id)) : item.id,
-      title: item.title,
-      category: item.category_name,
-      price: Number(item.price),
-      rating: Number(item.rating || 5.0),
-      reviews: item.reviews_count || 1,
-      maker: item.maker_name,
-      cls: 'Class 10',
-      school: item.maker_school || 'Fine Arts Studio',
-      image: item.image_url,
-      stock: item.stock_status || 'In Stock • Made to order',
-      description: item.description || '',
-      source: 'custom',
-    }));
+    return data.map((item) => {
+      const gallery = Array.isArray(item.gallery_images) && item.gallery_images.length > 0
+        ? item.gallery_images.filter(Boolean)
+        : (item.image_url ? [item.image_url] : []);
+      const primary = item.image_url || gallery[0] || '';
+      const allImages = Array.from(new Set([primary, ...gallery].filter(Boolean)));
+
+      return {
+        id: typeof item.id === 'string' ? Math.abs(hashCode(item.id)) : item.id,
+        title: item.title,
+        category: item.category_name,
+        price: Number(item.price),
+        rating: Number(item.rating || 5.0),
+        reviews: item.reviews_count || 1,
+        maker: item.maker_name,
+        cls: 'Class 10',
+        school: item.maker_school || 'Fine Arts Studio',
+        image: primary,
+        images: allImages,
+        stock: item.stock_status || 'In Stock • Made on Demand',
+        description: item.description || '',
+        materials: item.materials,
+        dimensions: item.dimensions,
+        weight: item.weight,
+        careInstructions: item.care_instructions,
+        inStockCount: item.in_stock_count,
+        slug: item.slug,
+        makerId: item.maker_id,
+        originalPrice: item.original_price ? Number(item.original_price) : undefined,
+        source: 'custom',
+      };
+    });
   } catch (err) {
+    return null;
+  }
+}
+
+export async function upsertProductInSupabase(product: Product, makerId?: string) {
+  try {
+    const gallery = product.images && product.images.length > 0
+      ? product.images
+      : (product.image ? [product.image] : []);
+    const primary = product.image || gallery[0] || '';
+
+    const payload: any = {
+      title: product.title,
+      category_name: product.category,
+      price: product.price,
+      maker_name: product.maker,
+      maker_school: product.school || 'Fine Arts Studio',
+      image_url: primary,
+      gallery_images: gallery,
+      stock_status: product.stock || 'In Stock • Made on Demand',
+      description: product.description || '',
+      materials: product.materials,
+      dimensions: product.dimensions,
+      weight: product.weight,
+      in_stock_count: product.inStockCount ?? 15,
+      slug: product.slug,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (product.originalPrice) {
+      payload.original_price = product.originalPrice;
+    }
+
+    if (makerId) {
+      payload.maker_id = makerId;
+    }
+
+    // Only set numeric DB ID if not a huge timestamp
+    if (typeof product.id === 'number' && product.id > 0 && product.id < 100000) {
+      payload.id = product.id;
+    }
+
+    const { data, error } = await supabase
+      .from('products')
+      .upsert(payload)
+      .select();
+
+    if (error) {
+      console.warn('Notice saving product to Supabase products table:', error.message);
+    }
+    return data;
+  } catch (err: any) {
+    console.warn('upsertProductInSupabase error:', err.message);
     return null;
   }
 }
