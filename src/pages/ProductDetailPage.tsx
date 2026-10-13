@@ -16,7 +16,6 @@ import {
   School,
   User,
   Clock,
-  RotateCcw,
   PackageCheck,
   Layers,
   Award,
@@ -976,7 +975,7 @@ export const ProductDetailPage: React.FC = () => {
             { id: 'desc', label: 'Description & Craft Story' },
             { id: 'craft', label: 'Craft Specifications' },
             { id: 'maker', label: 'Maker Details & Studio' },
-            { id: 'shipping', label: 'Shipping & Delivery Policy' },
+            { id: 'shipping', label: 'Shipping & Delivery' },
             { id: 'reviews', label: `Customer Reviews (${product.reviews})` },
           ].map((tab) => (
             <button
@@ -1055,7 +1054,7 @@ export const ProductDetailPage: React.FC = () => {
 
           {activeTab === 'shipping' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900">Shipping &amp; Delivery Policies</h3>
+              <h3 className="text-lg font-bold text-slate-900">Shipping &amp; Delivery Details</h3>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                   <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-[#C85A32]">
@@ -1067,11 +1066,11 @@ export const ProductDetailPage: React.FC = () => {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-slate-700">
-                    <ShieldCheck className="w-4 h-4 text-[#C85A32]" /> No Return Policy
+                  <h4 className="font-bold text-slate-800 flex items-center gap-1.5 text-xs uppercase text-emerald-700">
+                    <PackageCheck className="w-4 h-4 text-emerald-600" /> Safe Transit Packaging
                   </h4>
                   <p className="text-xs text-slate-600">
-                    As every piece is uniquely handcrafted and made-to-order by student artisans, we do not provide any return policy or refunds. All purchases are final once dispatched.
+                    Each handcrafted piece is bubble-wrapped and packed with recycled, shock-resistant material to reach you safely.
                   </p>
                 </div>
               </div>

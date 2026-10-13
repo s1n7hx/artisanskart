@@ -360,39 +360,93 @@ export interface CouponValidationResult {
   message: string;
 }
 
+export async function validateCouponCodeAsync(code: string, subtotal: number): Promise<CouponValidationResult> {
+  const clean = code.trim().toUpperCase();
+  if (!clean) {
+    return { isValid: false, code: '', discountAmount: 0, message: '' };
+  }
+
+  try {
+    const res = await fetch('/api/coupons/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: clean, subtotal }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        isValid: Boolean(data.valid),
+        code: clean,
+        discountAmount: data.discountAmount || 0,
+        message: data.message || '',
+      };
+    }
+  } catch {}
+
+  // Fallback to local evaluation
+  return validateCouponCode(code, subtotal);
+}
+
 export function validateCouponCode(code: string, subtotal: number): CouponValidationResult {
   const clean = code.trim().toUpperCase();
   if (!clean) {
     return { isValid: false, code: '', discountAmount: 0, message: '' };
   }
 
-  if (clean === 'STUDENT10') {
-    const discount = Math.round(subtotal * 0.1);
+  if (clean === 'WELCOME10') {
+    const minOrder = 499;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `WELCOME10 requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(100, Math.round(subtotal * 0.1));
     return {
       isValid: true,
       code: clean,
       discountAmount: discount,
-      message: `10% Student Art Patron discount applied (₹${discount} saved)!`,
+      message: `10% welcome discount applied (₹${discount} saved)!`,
     };
   }
 
-  if (clean === 'FIRSTCRAFT') {
-    const discount = Math.min(subtotal, 50);
+  if (clean === 'CREATOR50') {
+    const minOrder = 399;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `CREATOR50 requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(50, subtotal);
     return {
       isValid: true,
       code: clean,
       discountAmount: discount,
-      message: `₹50 Welcome gift applied!`,
+      message: `₹50 creator support discount applied!`,
     };
   }
 
-  if (clean === 'CAMPUSCRAFT') {
-    const discount = Math.round(subtotal * 0.15);
+  if (clean === 'HANDMADE15') {
+    const minOrder = 999;
+    if (subtotal < minOrder) {
+      return {
+        isValid: false,
+        code: clean,
+        discountAmount: 0,
+        message: `HANDMADE15 requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+      };
+    }
+    const discount = Math.min(200, Math.round(subtotal * 0.15));
     return {
       isValid: true,
       code: clean,
       discountAmount: discount,
-      message: `15% Campus Craft Pass discount applied!`,
+      message: `15% Handmade Patron discount applied (₹${discount} saved)!`,
     };
   }
 
@@ -400,7 +454,7 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     isValid: false,
     code: clean,
     discountAmount: 0,
-    message: 'Invalid or expired coupon code. Try STUDENT10 or FIRSTCRAFT.',
+    message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399).',
   };
 }
 
@@ -509,14 +563,47 @@ const LOCAL_STORAGE_ORDERS_KEY = 'artisanskart_all_orders_v2';
 export function getStoredOrders(): Order[] {
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_ORDERS_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed: Order[] = JSON.parse(saved);
+      // Purge fake demo order records safely
+      return parsed.filter((o) => !o.orderNumber?.startsWith('AK-2026-0842'));
+    }
   } catch {}
   return [];
 }
 
 export function saveStoredOrders(orders: Order[]): void {
   try {
-    localStorage.setItem(LOCAL_STORAGE_ORDERS_KEY, JSON.stringify(orders));
+    const genuine = orders.filter((o) => !o.orderNumber?.startsWith('AK-2026-0842'));
+    localStorage.setItem(LOCAL_STORAGE_ORDERS_KEY, JSON.stringify(genuine));
+  } catch {}
+}
+
+export interface ProductReviewItem {
+  id: string;
+  productId: number;
+  userId?: string;
+  reviewerName: string;
+  rating: number;
+  reviewTitle?: string;
+  comment: string;
+  createdAt: string;
+  verifiedPurchase?: boolean;
+}
+
+export function getProductReviews(productId: number): ProductReviewItem[] {
+  try {
+    const saved = localStorage.getItem(`artisanskart_reviews_${productId}`);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+  return [];
+}
+
+export function saveProductReview(review: ProductReviewItem): void {
+  try {
+    const current = getProductReviews(review.productId);
+    const updated = [review, ...current];
+    localStorage.setItem(`artisanskart_reviews_${review.productId}`, JSON.stringify(updated));
   } catch {}
 }
 
@@ -533,7 +620,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     city: orderData.shippingAddress ? `${orderData.shippingAddress.city}, ${orderData.shippingAddress.state}` : orderData.city || 'India',
     product: orderData.items && orderData.items.length > 0 ? orderData.items.map((i) => `${i.title} (×${i.quantity})`).join(', ') : orderData.product || 'Handmade Craft',
     qty: orderData.items ? orderData.items.reduce((s, i) => s + i.quantity, 0) : orderData.qty || 1,
-    deadline: orderData.deadline || `${deadlineDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} (3 Days Prep)`,
+    deadline: orderData.deadline || deadlineDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
     status: (orderData.status || 'awaiting_maker_acceptance') as OrderStatus,
     amount: orderData.amount || 0,
     itemsTotal: orderData.itemsTotal || orderData.amount || 0,
@@ -550,7 +637,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     createdAt: new Date().toISOString(),
     items: orderData.items || [],
     makerId: orderData.makerId || orderData.items?.[0]?.makerId,
-    makerName: orderData.makerName || orderData.items?.[0]?.makerName || 'Student Maker',
+    makerName: orderData.makerName || orderData.items?.[0]?.makerName || 'Artisan Creator',
     pickupPincode: orderData.pickupPincode || '110016',
     acceptanceDeadline: acceptanceDeadlineDate.toISOString(),
     statusHistory: [

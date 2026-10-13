@@ -677,9 +677,9 @@ export const AdminPortalPage: React.FC = () => {
                 </div>
 
                 <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Customer Return Policy</span>
-                  <p className="font-black text-slate-900 text-sm">No Returns (Final Sale)</p>
-                  <p className="text-[10px] text-slate-500">100% handcrafted made-to-order student creations.</p>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Packaging Standard</span>
+                  <p className="font-black text-slate-900 text-sm">Eco Protective Cushioning</p>
+                  <p className="text-[10px] text-slate-500">100% biodegradable corrugated wrap.</p>
                 </div>
               </div>
             </div>

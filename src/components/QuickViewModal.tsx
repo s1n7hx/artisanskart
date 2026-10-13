@@ -12,7 +12,6 @@ import {
   Zap,
   ShieldCheck,
   Truck,
-  RotateCcw,
   PackageCheck,
   Check,
   Sparkles,
@@ -794,7 +793,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
             </div>
           </div>
 
-          {/* LOWER SECTION: Tabs for Description, Craft Details, Shipping & Returns, and Reviews */}
+          {/* LOWER SECTION: Tabs for Description, Craft Details, Shipping & Delivery, and Reviews */}
           <div ref={bottomTabsRef} className="pt-6 border-t border-[#e7e0d8] space-y-6">
             {/* Tab navigation */}
             <div className="flex items-center gap-2 border-b border-[#e7e0d8] overflow-x-auto select-none">
@@ -826,7 +825,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     : 'border-transparent text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Shipping &amp; Returns
+                Shipping &amp; Delivery
               </button>
               <button
                 onClick={() => setActiveTab('reviews')}
@@ -919,10 +918,10 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     </div>
 
                     <div className="p-3.5 rounded-2xl bg-white border border-[#e7e0d8]">
-                      <ShieldCheck className="w-5 h-5 text-slate-700 mb-1.5" />
-                      <p className="font-bold text-xs text-slate-900">No Return Policy</p>
+                      <PackageCheck className="w-5 h-5 text-emerald-600 mb-1.5" />
+                      <p className="font-bold text-xs text-slate-900">Eco-Protective Packaging</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Each item is handcrafted on-demand by student artisans. All sales are final.
+                        Each item is safely cushioned with recyclable materials to reach you intact.
                       </p>
                     </div>
                   </div>

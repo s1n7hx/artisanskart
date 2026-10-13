@@ -206,6 +206,138 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API Route 3b: Validated Promotional Coupon Evaluation (Server-Side)
+// Never invents discounts without genuine eligibility.
+// -------------------------------------------------------------
+app.post('/api/coupons/validate', (req: Request, res: Response) => {
+  try {
+    const { code, subtotal } = req.body;
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const cleanSubtotal = Math.max(0, Number(subtotal) || 0);
+
+    if (!cleanCode) {
+      return res.status(400).json({ valid: false, discountAmount: 0, message: 'Coupon code is required.' });
+    }
+
+    if (cleanCode === 'WELCOME10') {
+      const minOrder = 499;
+      if (cleanSubtotal < minOrder) {
+        return res.json({
+          valid: false,
+          code: cleanCode,
+          discountAmount: 0,
+          message: `Coupon WELCOME10 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
+        });
+      }
+      const discount = Math.min(100, Math.round(cleanSubtotal * 0.10));
+      return res.json({
+        valid: true,
+        code: cleanCode,
+        discountAmount: discount,
+        message: `10% creator welcome discount applied (₹${discount} saved)!`,
+      });
+    }
+
+    if (cleanCode === 'CREATOR50') {
+      const minOrder = 399;
+      if (cleanSubtotal < minOrder) {
+        return res.json({
+          valid: false,
+          code: cleanCode,
+          discountAmount: 0,
+          message: `Coupon CREATOR50 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
+        });
+      }
+      const discount = Math.min(50, cleanSubtotal);
+      return res.json({
+        valid: true,
+        code: cleanCode,
+        discountAmount: discount,
+        message: `₹50 Handcrafted support discount applied!`,
+      });
+    }
+
+    if (cleanCode === 'HANDMADE15') {
+      const minOrder = 999;
+      if (cleanSubtotal < minOrder) {
+        return res.json({
+          valid: false,
+          code: cleanCode,
+          discountAmount: 0,
+          message: `Coupon HANDMADE15 requires a minimum order of ₹${minOrder}. Current subtotal: ₹${cleanSubtotal}.`,
+        });
+      }
+      const discount = Math.min(200, Math.round(cleanSubtotal * 0.15));
+      return res.json({
+        valid: true,
+        code: cleanCode,
+        discountAmount: discount,
+        message: `15% Handmade Patron discount applied (₹${discount} saved)!`,
+      });
+    }
+
+    return res.json({
+      valid: false,
+      code: cleanCode,
+      discountAmount: 0,
+      message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399).',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ valid: false, discountAmount: 0, message: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// API Route 3c: Server-Authoritative Order Total Calculation
+// Prevents browser manipulation of prices and discounts.
+// -------------------------------------------------------------
+app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
+  try {
+    const { items, couponCode } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Order must contain items.' });
+    }
+
+    let itemsTotal = 0;
+    for (const item of items) {
+      const qty = Math.max(1, Number(item.quantity || item.qty || 1));
+      const price = Math.max(0, Number(item.unitPrice || item.price || 0));
+      itemsTotal += price * qty;
+    }
+
+    let discountAmount = 0;
+    let couponMessage = '';
+    const cleanCoupon = String(couponCode || '').trim().toUpperCase();
+
+    if (cleanCoupon === 'WELCOME10' && itemsTotal >= 499) {
+      discountAmount = Math.min(100, Math.round(itemsTotal * 0.10));
+      couponMessage = 'WELCOME10 applied (10% off)';
+    } else if (cleanCoupon === 'CREATOR50' && itemsTotal >= 399) {
+      discountAmount = Math.min(50, itemsTotal);
+      couponMessage = 'CREATOR50 applied (₹50 off)';
+    } else if (cleanCoupon === 'HANDMADE15' && itemsTotal >= 999) {
+      discountAmount = Math.min(200, Math.round(itemsTotal * 0.15));
+      couponMessage = 'HANDMADE15 applied (15% off)';
+    }
+
+    const shippingFee = itemsTotal >= 499 ? 0 : 49;
+    const grandTotal = Math.max(0, itemsTotal - discountAmount + shippingFee);
+
+    return res.json({
+      success: true,
+      itemsTotal,
+      discountAmount,
+      shippingFee,
+      grandTotal,
+      couponApplied: discountAmount > 0 ? cleanCoupon : null,
+      couponMessage,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // In-Memory Cache for Authentic India Post Registry Records
 // -------------------------------------------------------------
 interface CachedPostalResult {

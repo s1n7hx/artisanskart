@@ -17,6 +17,8 @@ import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 
+import { MakerRouteGuard, AdminRouteGuard } from './components/RouteGuards';
+
 export default function App() {
   return (
     <AppProvider>
@@ -30,12 +32,47 @@ export default function App() {
             <Route path="marketplace" element={<MarketplacePage />} />
             <Route path="product/:slug" element={<ProductDetailPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
-            <Route path="maker" element={<MakerPortalPage />} />
+            <Route
+              path="maker"
+              element={
+                <MakerRouteGuard>
+                  <MakerPortalPage />
+                </MakerRouteGuard>
+              }
+            />
             <Route path="become-a-maker" element={<BecomeAMakerPage />} />
-            <Route path="admin" element={<AdminPortalPage />} />
-            <Route path="admin/cms" element={<AdminPortalPage />} />
-            <Route path="admin/users" element={<AdminPortalPage />} />
-            <Route path="admin/applications" element={<AdminPortalPage />} />
+            <Route
+              path="admin"
+              element={
+                <AdminRouteGuard>
+                  <AdminPortalPage />
+                </AdminRouteGuard>
+              }
+            />
+            <Route
+              path="admin/cms"
+              element={
+                <AdminRouteGuard>
+                  <AdminPortalPage />
+                </AdminRouteGuard>
+              }
+            />
+            <Route
+              path="admin/users"
+              element={
+                <AdminRouteGuard>
+                  <AdminPortalPage />
+                </AdminRouteGuard>
+              }
+            />
+            <Route
+              path="admin/applications"
+              element={
+                <AdminRouteGuard>
+                  <AdminPortalPage />
+                </AdminRouteGuard>
+              }
+            />
             <Route path="pending-approval" element={<PendingApprovalPage />} />
             <Route path="login" element={<LoginPage />} />
             <Route path="signin" element={<LoginPage />} />
