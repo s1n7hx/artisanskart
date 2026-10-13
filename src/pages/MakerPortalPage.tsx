@@ -204,7 +204,7 @@ export const MakerPortalPage: React.FC = () => {
         currentStatus: order.status,
         newStatus,
         actorRole: userRole || 'maker',
-        actorName: currentUser?.name || 'Student Maker',
+        actorName: currentUser?.name || 'Independent Maker',
         note: note || `Artisan moved order to ${newStatus}`,
         ...extra,
       });
@@ -307,7 +307,7 @@ export const MakerPortalPage: React.FC = () => {
       reviews: 0,
       maker: currentUser?.name || 'Independent Maker',
       cls: currentUser?.grade || 'Artisan Series',
-      school: currentUser?.school || 'Fine Arts Studio',
+      school: currentUser?.school || 'Independent Studio',
       image: primaryPhoto,
       images: effectiveImages,
       stock: craftForm.stock,

@@ -313,13 +313,13 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
     const newId = Date.now();
     const newCraft: Product = {
       id: newId,
-      title: 'New Student Handcrafted Item',
-      description: 'Crafted with natural materials and traditional techniques by student creators.',
+      title: 'New Artisan Handcrafted Item',
+      description: 'Crafted with natural materials and traditional techniques by independent creators.',
       category: 'Clay Crafts',
       price: 299,
       rating: 5.0,
       reviews: 1,
-      maker: 'Student Artisan',
+      maker: 'Artisan',
       cls: 'Fine Arts',
       school: 'Campus Art Studio',
       image: 'https://images.pexels.com/photos/18646120/pexels-photo-18646120.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940',
@@ -585,7 +585,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                     </div>
                     <h5 className="font-bold text-sm text-[#1E293B]">Activate &amp; View</h5>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Click <strong>Activate</strong>! Visit your homepage and refresh (Ctrl+F5) to see the sliding marquee, hero collage, and all 13 student crafts.
+                      Click <strong>Activate</strong>! Visit your homepage and refresh (Ctrl+F5) to see the sliding marquee, hero collage, and all 13 artisan crafts.
                     </p>
                   </div>
                 </div>
@@ -1027,7 +1027,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                     Instant Live Craft &amp; Photo Editing
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Edit craft photos, descriptions, prices, student makers, or titles below. All changes update across the website immediately and persist in your browser!
+                    Edit craft photos, descriptions, prices, makers, or titles below. All changes update across the website immediately and persist in your browser!
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -1162,7 +1162,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                           rows={3}
                           value={editDesc}
                           onChange={(e) => setEditDesc(e.target.value)}
-                          placeholder="Describe materials, student crafting process, dimensions, finish..."
+                          placeholder="Describe materials, crafting process, dimensions, finish..."
                           className="w-full px-3.5 py-2.5 rounded-xl border border-[#e7e0d8] text-sm focus:border-[#C85A32] focus:outline-hidden leading-relaxed"
                         />
                       </div>

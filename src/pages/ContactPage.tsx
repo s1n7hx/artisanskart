@@ -14,7 +14,7 @@ export const ContactPage: React.FC = () => {
     e.preventDefault();
     if (!name || !email || !message) return;
     setSubmitted(true);
-    showToast('Message sent! Our student coordinator team will reply within 24 hours.', 'party-popper');
+    showToast('Message sent! Our coordinator team will reply within 24 hours.', 'party-popper');
     setName('');
     setEmail('');
     setMessage('');
@@ -31,7 +31,7 @@ export const ContactPage: React.FC = () => {
           Contact ArtisansKart
         </h1>
         <p className="text-slate-500 text-sm md:text-base mt-2 leading-relaxed">
-          Have a question about an order, want to partner your college art club, or need custom student creations? We are here to help.
+          Have a question about an order, want to partner your art studio, or need custom artisan creations? We are here to help.
         </p>
       </div>
 
@@ -48,7 +48,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                    Student &amp; Buyer Support
+                    Support &amp; Buyer Support
                   </h3>
                   <a
                     href="mailto:hello@artisanskart.in"
@@ -95,14 +95,14 @@ export const ContactPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Student Creator Guarantee Card */}
+          {/* Creator Guarantee Card */}
           <div className="bg-[#FAF9F6] rounded-3xl p-6 border border-[#e7e0d8]">
             <div className="flex items-center gap-2 text-xs font-bold text-[#C85A32] uppercase tracking-wider mb-2">
               <Clock className="w-4 h-4" />
               <span>Dedicated Maker Desk</span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              If you are a student maker needing urgent help with packaging kits, courier pickups, or UPI settlement verification, reach our student coordinator on WhatsApp during campus hours (9 AM – 6 PM).
+              If you are a maker needing urgent help with packaging kits, courier pickups, or UPI settlement verification, reach our coordinator on WhatsApp during business hours (9 AM – 6 PM).
             </p>
           </div>
         </div>
@@ -168,7 +168,7 @@ export const ContactPage: React.FC = () => {
                 >
                   <option value="General Question">General Question</option>
                   <option value="Order Status">Order Tracking / Status</option>
-                  <option value="Student Maker Application">Student Maker Application</option>
+                  <option value="Maker Application">Maker Application</option>
                   <option value="Campus Partnership">College / Campus Partnership</option>
                   <option value="Bulk Gifting">Bulk / Corporate Craft Gifting</option>
                 </select>

@@ -121,7 +121,7 @@ export function transformWordPressItem(item: any, index: number): Product {
     id: typeof item.id === 'number' ? item.id : 1000 + index,
     wpId: item.id,
     title: cleanTitle,
-    description: cleanDesc || 'Handcrafted student creation published directly from WordPress.',
+    description: cleanDesc || 'Handcrafted artisan creation published directly from WordPress.',
     category: categoryName,
     price: parsedPrice,
     rating: parseFloat(acf.rating || meta.rating) || 4.8,

@@ -344,7 +344,7 @@ h1, h2, h3, h4, h5, h6 {
                     <span style="font-size:22px; font-weight:900; color:#1E293B; line-height:1; display:block; letter-spacing:-0.02em;">
                         ArtisansKart
                     </span>
-                    <span style="font-size:10px; font-weight:700; color:#C85A32; text-transform:uppercase; letter-spacing:0.06em;">Student Artisan Marketplace</span>
+                    <span style="font-size:10px; font-weight:700; color:#C85A32; text-transform:uppercase; letter-spacing:0.06em;">Artisan Marketplace</span>
                 </div>
             </a>
 
@@ -389,7 +389,7 @@ h1, h2, h3, h4, h5, h6 {
                     <h3 style="font-size:22px; font-weight:900; color:#ffffff; margin:0;">ArtisansKart</h3>
                 </div>
                 <p style="font-size:13px; color:#94a3b8; line-height:1.7;">
-                    A nationwide handmade craft marketplace empowering school students and young artisans to showcase their creative talents and fund their education.
+                    A nationwide handmade craft marketplace empowering independent creators and young artisans to showcase their creative talents.
                 </p>
             </div>
             <div>
@@ -400,20 +400,20 @@ h1, h2, h3, h4, h5, h6 {
                     <a href="<?php echo esc_url(home_url('/collections/')); ?>" style="color:#cbd5e1;">Curated Collections</a>
                     <a href="<?php echo esc_url(home_url('/how-it-works/')); ?>" style="color:#cbd5e1;">How It Works &amp; Process</a>
                     <a href="<?php echo esc_url(home_url('/about/')); ?>" style="color:#cbd5e1;">Our Story &amp; Mission</a>
-                    <a href="<?php echo esc_url(home_url('/maker-portal/')); ?>" style="color:#cbd5e1;">Student Maker Portal</a>
+                    <a href="<?php echo esc_url(home_url('/maker-portal/')); ?>" style="color:#cbd5e1;">Maker Portal</a>
                     <a href="<?php echo esc_url(home_url('/contact/')); ?>" style="color:#cbd5e1;">Contact &amp; Custom Orders</a>
                 </div>
             </div>
             <div>
-                <h4 style="font-size:14px; font-weight:800; color:#ffffff; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Student Creator Pledge</h4>
+                <h4 style="font-size:14px; font-weight:800; color:#ffffff; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Creator Pledge</h4>
                 <p style="font-size:13px; color:#cbd5e1; line-height:1.7;">
-                    65% of all proceeds go directly into verified student creator accounts. Every piece is 100% made to order with plastic-free, recyclable packaging.
+                    65% of all proceeds go directly into verified creator accounts. Every piece is 100% made to order with plastic-free, recyclable packaging.
                 </p>
             </div>
         </div>
         <div class="ak-container" style="border-top:1px solid #334155; margin-top:48px; padding-top:24px; font-size:13px; color:#94a3b8; display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px;">
-            <span>&copy; <?php echo date('Y'); ?> ArtisansKart.in • Handcrafted with Pride by Student Creators across India</span>
-            <span>Crafted for Student Entrepreneurs</span>
+            <span>&copy; <?php echo date('Y'); ?> ArtisansKart.in • Handcrafted with Pride by Creators across India</span>
+            <span>Crafted for Entrepreneurs</span>
         </div>
     </footer>
 
@@ -442,10 +442,10 @@ h1, h2, h3, h4, h5, h6 {
                     </div>
                     <div style="border-top:1px solid #E7E0D8; padding-top:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
                         <div>
-                            <span style="font-size:11px; color:#8A9A86; font-weight:700; display:block;">Direct Student Price</span>
+                            <span style="font-size:11px; color:#8A9A86; font-weight:700; display:block;">Direct Price</span>
                             <span id="modalPrice" style="font-size:26px; font-weight:900; color:#1E293B;">₹349</span>
                         </div>
-                        <button onclick="alert('Thank you for supporting student creators! Your on-demand order inquiry has been initiated.')" class="btn-terracotta" style="padding:10px 24px;">
+                        <button onclick="alert('Thank you for supporting creators! Your on-demand order inquiry has been initiated.')" class="btn-terracotta" style="padding:10px 24px;">
                             Order on Demand →
                         </button>
                     </div>
@@ -495,7 +495,7 @@ function openCraftModal(id) {
     document.getElementById('modalImg').src = item.image;
     document.getElementById('modalCat').innerText = item.category;
     document.getElementById('modalTitle').innerText = item.title;
-    document.getElementById('modalMaker').innerText = '🎨 ' + (item.maker || 'Student Maker');
+    document.getElementById('modalMaker').innerText = '🎨 ' + (item.maker || 'Maker');
     document.getElementById('modalSchool').innerText = (item.cls || 'Class 10') + ', ' + (item.school || 'Campus Studio');
     document.getElementById('modalDesc').innerText = item.description;
     document.getElementById('modalPrice').innerText = '₹' + item.price;
@@ -552,7 +552,7 @@ function closeCraftModalDirect() {
   const frontPagePhp = `<?php
 /**
  * Template Name: Home Page (Front Page)
- * Description: Dedicated homepage template with Hero Collage, Sliding Marquee, Featured Showcase, and Student-First impact banner.
+ * Description: Dedicated homepage template with Hero Collage, Sliding Marquee, Featured Showcase, and Impact banner.
  *
  * @package ArtisansKart
  */
@@ -565,19 +565,19 @@ get_header();
             <!-- Left Headline Column -->
             <div style="z-index:2;">
                 <span class="badge-sage" style="margin-bottom:16px;">
-                    ✨ Handcrafted by Student Artisans
+                    ✨ Handcrafted by Artisans
                 </span>
                 <h1 class="hero-heading" style="font-size:clamp(40px, 5.5vw, 68px); margin-bottom:20px; font-weight:900;">
                     Crafted by<br>
-                    <span style="color:#C85A32;">Students,</span><br>
+                    <span style="color:#C85A32;">Artisans,</span><br>
                     Loved by You
                 </h1>
                 <p style="font-size:18px; color:#475569; margin-bottom:32px; max-width:480px; line-height:1.65;">
-                    Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds a student creator's dream.
+                    Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds a creator's dream.
                 </p>
                 <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:44px;">
                     <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">
-                        Explore Student Shop →
+                        Explore Shop →
                     </a>
                     <a href="<?php echo esc_url(home_url('/how-it-works/')); ?>" class="btn-outline">
                         How It Works
@@ -595,7 +595,7 @@ get_header();
                     </div>
                     <div>
                         <p style="font-size:32px; font-weight:900; color:#1E293B; margin:0;">100%</p>
-                        <p style="font-size:12px; color:#64748b; margin:0; font-weight:700;">Verified Students</p>
+                        <p style="font-size:12px; color:#64748b; margin:0; font-weight:700;">Verified Creators</p>
                     </div>
                 </div>
             </div>
@@ -631,7 +631,7 @@ get_header();
                     <span style="width:24px; height:24px; border-radius:50%; background:#dcfce7; color:#16a34a; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px;">✓</span>
                     <div>
                         <span style="font-size:11px; font-weight:800; color:#1E293B; display:block;">Zero Machine Copies</span>
-                        <span style="font-size:10px; color:#64748b;">100% Student Handcrafted</span>
+                        <span style="font-size:10px; color:#64748b;">100% Artisan Handcrafted</span>
                     </div>
                 </div>
             </div>
@@ -641,8 +641,8 @@ get_header();
     <!-- 2. SLIDING PHOTOS MARQUEE SECTION -->
     <section style="padding:40px 0 48px 0; background:#FAF9F6; border-top:1px solid #E7E0D8; border-bottom:1px solid #E7E0D8; overflow:hidden;">
         <div class="ak-container" style="text-align:center; margin-bottom:20px;">
-            <span class="badge-sage" style="margin-bottom:6px;">Live Student Studio Showcase</span>
-            <h2 style="font-size:24px; font-weight:900; margin:0;">Handmade Pieces Fresh from Campus Workbenches</h2>
+            <span class="badge-sage" style="margin-bottom:6px;">Live Artisan Studio Showcase</span>
+            <h2 style="font-size:24px; font-weight:900; margin:0;">Handmade Pieces Fresh from Artisan Workbenches</h2>
         </div>
 
         <div class="marquee-container">
@@ -700,8 +700,8 @@ get_header();
         <div class="ak-container">
             <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:20px; margin-bottom:36px;">
                 <div>
-                    <span class="badge-terracotta" style="margin-bottom:8px;">Handpicked Campus Creations</span>
-                    <h2 style="font-size:34px; font-weight:900; margin:0; color:#1E293B;">Featured Student Crafts</h2>
+                    <span class="badge-terracotta" style="margin-bottom:8px;">Handpicked Artisan Creations</span>
+                    <h2 style="font-size:34px; font-weight:900; margin:0; color:#1E293B;">Featured Artisan Crafts</h2>
                 </div>
                 <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">
                     View Full Catalog (13+ Crafts) →
@@ -776,10 +776,10 @@ get_header();
     <section style="padding:60px 0; background:#FAF9F6; border-top:1px solid #E7E0D8;">
         <div class="ak-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:36px; align-items:center;">
             <div>
-                <span class="badge-sage" style="margin-bottom:12px;">Our Student-First Model</span>
-                <h2 style="font-size:32px; font-weight:900; color:#1E293B; line-height:1.2;">Every Purchase Funds a Student's Future</h2>
+                <span class="badge-sage" style="margin-bottom:12px;">Our Creator-First Model</span>
+                <h2 style="font-size:32px; font-weight:900; color:#1E293B; line-height:1.2;">Every Purchase Funds a Creator's Future</h2>
                 <p style="font-size:15px; color:#475569; line-height:1.7; margin-top:12px;">
-                    Unlike mass-produced marketplaces, ArtisansKart is built to empower school students and young artisans directly. 65% of every transaction is deposited directly into the creator's education fund.
+                    Unlike mass-produced marketplaces, ArtisansKart is built to empower independent creators and artisans directly. 65% of every transaction is deposited directly into the creator's growth fund.
                 </p>
                 <div style="margin-top:24px;">
                     <a href="<?php echo esc_url(home_url('/about/')); ?>" class="btn-outline">
@@ -793,8 +793,8 @@ get_header();
                         🎓
                     </div>
                     <div>
-                        <h4 style="font-size:16px; font-weight:800; margin:0; color:#1E293B;">School Partner Studios</h4>
-                        <p style="font-size:12px; color:#64748b; margin:0;">Active across 40+ schools in India</p>
+                        <h4 style="font-size:16px; font-weight:800; margin:0; color:#1E293B;">Partner Artisan Studios</h4>
+                        <p style="font-size:12px; color:#64748b; margin:0;">Active across 40+ creative studios in India</p>
                     </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
@@ -827,7 +827,7 @@ get_footer();
   const pageShopPhp = `<?php
 /**
  * Template Name: Shop / Marketplace Page
- * Description: Dedicated full catalog page for all 13 handcrafted student crafts with live category filters, search, and Quick View.
+ * Description: Dedicated full catalog page for all 13 handcrafted artisan crafts with live category filters, search, and Quick View.
  *
  * @package ArtisansKart
  */
@@ -838,10 +838,10 @@ get_header();
         <div style="text-align:center; max-width:680px; margin:0 auto 40px auto;">
             <span class="badge-terracotta" style="margin-bottom:8px;">Campus Artisan Catalog</span>
             <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">
-                Handcrafted Student Shop
+                Handcrafted Artisan Shop
             </h1>
             <p style="font-size:16px; color:#64748b; line-height:1.6;">
-                Browse unique clay pottery, watercolor greeting cards, beaded jewelry, and custom keychains crafted by student creators across India.
+                Browse unique clay pottery, watercolor greeting cards, beaded jewelry, and custom keychains crafted by independent creators across India.
             </p>
         </div>
 
@@ -855,7 +855,7 @@ get_header();
             </div>
 
             <div style="position:relative; width:100%; max-width:280px;">
-                <input type="text" placeholder="Search craft or student..." oninput="searchCrafts(this)" style="width:100%; padding:10px 18px; border-radius:9999px; border:1px solid #E7E0D8; background:#ffffff; font-size:13px; outline:none; font-family:inherit;">
+                <input type="text" placeholder="Search craft or creator..." oninput="searchCrafts(this)" style="width:100%; padding:10px 18px; border-radius:9999px; border:1px solid #E7E0D8; background:#ffffff; font-size:13px; outline:none; font-family:inherit;">
             </div>
         </div>
 
@@ -903,7 +903,7 @@ function artisanskart_create_starter_pages() {
         ['title' => 'Curated Collections', 'slug' => 'collections', 'template' => 'page-collections.php'],
         ['title' => 'How It Works', 'slug' => 'how-it-works', 'template' => 'page-how-it-works.php'],
         ['title' => 'Our Story & About', 'slug' => 'about', 'template' => 'page-about.php'],
-        ['title' => 'Student Maker Portal', 'slug' => 'maker-portal', 'template' => 'page-maker.php'],
+        ['title' => 'Maker Portal', 'slug' => 'maker-portal', 'template' => 'page-maker.php'],
         ['title' => 'Contact & Custom Inquiries', 'slug' => 'contact', 'template' => 'page-contact.php'],
     ];
 
@@ -955,8 +955,8 @@ get_header();
     <div class="ak-container">
         <div style="text-align:center; max-width:680px; margin:0 auto 48px auto;">
             <span class="badge-sage" style="margin-bottom:8px;">Curated Mediums &amp; Themes</span>
-            <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">Curated Student Collections</h1>
-            <p style="font-size:16px; color:#64748b;">Explore themed collections shaped across student ceramic benches, watercolor ateliers, and botanical jewelry studios.</p>
+            <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">Curated Collections</h1>
+            <p style="font-size:16px; color:#64748b;">Explore themed collections shaped across ceramic benches, watercolor ateliers, and botanical jewelry studios.</p>
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:32px;">
             <div class="card-hover" style="padding:28px; display:flex; flex-direction:column; justify-content:space-between;">
@@ -1003,15 +1003,15 @@ get_header();
         <div style="text-align:center; max-width:680px; margin:0 auto 48px auto;">
             <span class="badge-terracotta" style="margin-bottom:8px;">Transparent 5-Step Model</span>
             <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">How ArtisansKart Works</h1>
-            <p style="font-size:16px; color:#64748b;">From the student's campus workbench to your home — here is how every piece is crafted, verified, and delivered with love.</p>
+            <p style="font-size:16px; color:#64748b;">From the artisan's workbench to your home — here is how every piece is crafted, verified, and delivered with love.</p>
         </div>
         <div style="max-width:860px; margin:0 auto; display:flex; flex-direction:column; gap:24px;">
             <div class="card-hover" style="padding:28px 36px; display:flex; gap:24px; align-items:flex-start;">
                 <div style="width:56px; height:56px; border-radius:18px; background:#FDF2EE; color:#C85A32; font-weight:900; font-size:24px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">1</div>
                 <div>
                     <span class="badge-sage">Campus Workshop</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Student Crafts On Demand</h3>
-                    <p style="font-size:14px; color:#64748b; line-height:1.7;">When you place an order, the student artisan is notified immediately to handcraft the piece in their school studio.</p>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Artisan Crafts On Demand</h3>
+                    <p style="font-size:14px; color:#64748b; line-height:1.7;">When you place an order, the artisan is notified immediately to handcraft the piece in their studio.</p>
                 </div>
             </div>
             <div class="card-hover" style="padding:28px 36px; display:flex; gap:24px; align-items:flex-start;">
@@ -1034,8 +1034,8 @@ get_header();
                 <div style="width:56px; height:56px; border-radius:18px; background:#FDF2EE; color:#C85A32; font-weight:900; font-size:24px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">4</div>
                 <div>
                     <span class="badge-terracotta">Direct Impact</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">65% Direct Student Payout</h3>
-                    <p style="font-size:14px; color:#64748b; line-height:1.7;">65% of the purchase price is deposited directly to the student maker for tuition and craft supplies.</p>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">65% Direct Creator Payout</h3>
+                    <p style="font-size:14px; color:#64748b; line-height:1.7;">65% of the purchase price is deposited directly to the creator for their professional development and craft supplies.</p>
                 </div>
             </div>
         </div>
@@ -1054,7 +1054,7 @@ get_header();
         <div style="text-align:center; max-width:720px; margin:0 auto 48px auto;">
             <span class="badge-sage" style="margin-bottom:8px;">Our Purpose &amp; Mission</span>
             <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">Empowering India's Young Creators</h1>
-            <p style="font-size:16px; color:#64748b; line-height:1.6;">ArtisansKart was founded with one clear conviction: talented student artists deserve a direct platform to monetize their skills and fund their education.</p>
+            <p style="font-size:16px; color:#64748b; line-height:1.6;">ArtisansKart was founded with one clear conviction: talented independent artists deserve a direct platform to monetize their skills and fund their creative work.</p>
         </div>
         <div style="background:#ffffff; border:1px solid #E7E0D8; border-radius:28px; padding:48px 36px; text-align:center; max-width:860px; margin:0 auto 48px auto;">
             <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.08em; color:#C85A32;">The ArtisansKart Pledge</span>
@@ -1066,15 +1066,15 @@ get_header();
 
   const makerPhp = `<?php
 /**
- * Template Name: Student Maker Portal
+ * Template Name: Maker Portal
  */
 get_header();
 ?>
 <main id="primary" class="site-main" style="padding:50px 0 80px 0; background:#FAF9F6; min-height:85vh;">
     <div class="ak-container">
         <div style="text-align:center; max-width:680px; margin:0 auto 48px auto;">
-            <span class="badge-terracotta" style="margin-bottom:8px;">Student Creators Guild</span>
-            <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">Student Maker Portal</h1>
+            <span class="badge-terracotta" style="margin-bottom:8px;">Creators Guild</span>
+            <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">Maker Portal</h1>
             <p style="font-size:16px; color:#64748b;">Join ArtisansKart to showcase your creations to art lovers across India.</p>
         </div>
     </div>

@@ -236,7 +236,7 @@ export const ProductDetailPage: React.FC = () => {
       } else {
         list.push(product.id);
         setIsWishlisted(true);
-        showToast(`Saved "${product.title}" to your student craft wishlist!`, 'sparkles');
+        showToast(`Saved "${product.title}" to your craft wishlist!`, 'sparkles');
       }
       localStorage.setItem('artisanskart_wishlist_v1', JSON.stringify(list));
     } catch {}
@@ -313,7 +313,7 @@ export const ProductDetailPage: React.FC = () => {
       try {
         await navigator.share({
           title: `${product.title} — ArtisansKart.in`,
-          text: `Check out this student-crafted "${product.title}" by ${product.maker} on ArtisansKart!`,
+          text: `Check out this handcrafted "${product.title}" by ${product.maker} on ArtisansKart!`,
           url: shareUrl,
         });
       } catch {}
@@ -385,7 +385,7 @@ export const ProductDetailPage: React.FC = () => {
         </div>
         <h1 className="text-3xl font-black text-[#1E293B]">Craft Not Found</h1>
         <p className="text-slate-500 max-w-md mx-auto text-sm">
-          The student piece you are looking for may have been sold or moved to another studio collection.
+          The piece you are looking for may have been sold or moved to another studio collection.
         </p>
         <Link
           to="/marketplace"
@@ -406,9 +406,9 @@ export const ProductDetailPage: React.FC = () => {
       : null;
 
   // Cost split calculations
-  const studentShare = Math.round(activePrice * (makerEarningPercent / 100));
+  const makerShare = Math.round(activePrice * (makerEarningPercent / 100));
   const platformFee = Math.round(activePrice * 0.2);
-  const packagingFee = Math.max(0, activePrice - studentShare - platformFee);
+  const packagingFee = Math.max(0, activePrice - makerShare - platformFee);
 
   // Related products
   const relatedProducts = products
@@ -776,7 +776,7 @@ export const ProductDetailPage: React.FC = () => {
             </span>
 
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-              <Award className="w-3.5 h-3.5" /> Verified Student Work
+              <Award className="w-3.5 h-3.5" /> Verified Handcrafted Work
             </span>
           </div>
 
@@ -891,7 +891,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <Sparkles className="w-4 h-4 text-[#C85A32] shrink-0" />
-              <span className="leading-tight font-medium">Student Handcrafted</span>
+              <span className="leading-tight font-medium">Artisan Handcrafted</span>
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <Truck className="w-4 h-4 text-[#C85A32] shrink-0" />
@@ -927,7 +927,7 @@ export const ProductDetailPage: React.FC = () => {
                   <div
                     style={{ width: `${makerEarningPercent}%` }}
                     className="bg-[#C85A32] transition-all"
-                    title={`Student Maker (${makerEarningPercent}%)`}
+                    title={`Independent Maker (${makerEarningPercent}%)`}
                   />
                   <div
                     style={{ width: '20%' }}
@@ -944,8 +944,8 @@ export const ProductDetailPage: React.FC = () => {
                 {/* Legend */}
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="p-2 rounded-xl bg-white border border-[#e7e0d8]">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Student Maker</div>
-                    <div className="font-black text-[#C85A32] text-sm">{formatINR(studentShare)}</div>
+                    <div className="text-[10px] text-slate-400 uppercase font-bold">Independent Maker</div>
+                    <div className="font-black text-[#C85A32] text-sm">{formatINR(makerShare)}</div>
                     <div className="text-[10px] text-slate-500 font-semibold">{makerEarningPercent}%</div>
                   </div>
                   <div className="p-2 rounded-xl bg-white border border-[#e7e0d8]">
@@ -997,7 +997,7 @@ export const ProductDetailPage: React.FC = () => {
           {activeTab === 'desc' && (
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900">The Artisan's Vision</h3>
-              <p>{product.description || 'Authentic student handcrafted creation created with meticulous care.'}</p>
+              <p>{product.description || 'Authentic artisan handcrafted creation created with meticulous care.'}</p>
               <p>
                 Each piece in our collection is produced on-demand. Minor variations in tone, hand-etched pattern, and natural texture reflect the human hand and make your item uniquely yours.
               </p>
@@ -1036,7 +1036,7 @@ export const ProductDetailPage: React.FC = () => {
 
           {activeTab === 'maker' && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900">Student Artisan Profile</h3>
+              <h3 className="text-lg font-bold text-slate-900">Artisan Profile</h3>
               <div className="p-6 rounded-3xl bg-white border border-[#e7e0d8] shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-5">
                 <div className="w-16 h-16 rounded-full bg-[#C85A32]/10 border border-[#C85A32]/30 flex items-center justify-center font-black text-xl text-[#C85A32]">
                   {product.maker[0]}
@@ -1045,7 +1045,7 @@ export const ProductDetailPage: React.FC = () => {
                   <h4 className="text-base font-black text-[#1E293B]">{product.maker}</h4>
                   <p className="text-xs text-slate-500">{product.cls} • {product.school}</p>
                   <p className="text-xs text-slate-600 pt-1">
-                    Student creator verified on ArtisansKart. {makerEarningPercent}% of each purchase goes directly toward funding the student's tuition, raw craft materials, and creative tools.
+                    Independent creator verified on ArtisansKart. {makerEarningPercent}% of each purchase goes directly toward funding the creator's raw craft materials, and creative tools.
                   </p>
                 </div>
               </div>
@@ -1107,7 +1107,7 @@ export const ProductDetailPage: React.FC = () => {
                     <span className="text-amber-500 font-bold">★★★★★</span>
                   </div>
                   <p className="text-xs text-slate-600">
-                    "Arrived right on time via Delhivery. Knowing the proceeds support a student artisan directly makes it even more meaningful."
+                    "Arrived right on time via Delhivery. Knowing the proceeds support an artisan directly makes it even more meaningful."
                   </p>
                 </div>
               </div>

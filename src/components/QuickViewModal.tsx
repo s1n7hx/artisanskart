@@ -254,7 +254,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
       } else {
         list.push(product.id);
         setIsWishlisted(true);
-        showToast(`Saved "${product.title}" to student wishlist!`, 'sparkles');
+        showToast(`Saved "${product.title}" to wishlist!`, 'sparkles');
       }
       localStorage.setItem('artisanskart_wishlist_v1', JSON.stringify(list));
     } catch {}
@@ -268,7 +268,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
       try {
         await navigator.share({
           title: `${product.title} by ${product.maker}`,
-          text: `Check out this student craft "${product.title}" on ArtisansKart!`,
+          text: `Check out this handcrafted creation "${product.title}" on ArtisansKart!`,
           url: productUrl,
         });
       } catch {}
@@ -585,7 +585,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
-                  <Award className="w-3.5 h-3.5" /> Verified Student Work
+                  <Award className="w-3.5 h-3.5" /> Verified Handcrafted Work
                 </span>
               </div>
 
@@ -614,7 +614,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                     if (onOpenMakerProfile) {
                       onOpenMakerProfile(product.maker);
                     } else {
-                      showToast(`Student Maker: ${product.maker} from ${product.school}`, 'user');
+                      showToast(`Maker: ${product.maker} from ${product.school}`, 'user');
                     }
                   }}
                   className="text-xs font-bold text-[#C85A32] hover:text-[#a04321] hover:underline shrink-0 cursor-pointer"
@@ -651,7 +651,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   </button>
                 </div>
                 <span className="text-[11px] text-slate-400">
-                  (Max {maxStock} per student order)
+                  (Max {maxStock} per order)
                 </span>
               </div>
 
@@ -702,7 +702,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 p-2 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
                   <ShieldCheck className="w-4 h-4 text-[#C85A32] shrink-0" />
-                  <span className="leading-tight font-medium">Student Handcrafted</span>
+                  <span className="leading-tight font-medium">Artisan Handcrafted</span>
                 </div>
                 <div className="flex items-center gap-2 p-2 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
                   <Truck className="w-4 h-4 text-[#C85A32] shrink-0" />
@@ -738,7 +738,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       <div
                         className="h-full bg-[#C85A32] transition-all duration-300"
                         style={{ width: `${makerEarningPercent}%` }}
-                        title={`Student Maker: ${makerEarningPercent}%`}
+                        title={`Maker: ${makerEarningPercent}%`}
                       />
                       <div
                         className="h-full bg-[#1E293B] transition-all duration-300"
@@ -757,7 +757,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       <div className="p-2.5 rounded-xl bg-orange-50/70 border border-orange-200">
                         <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                           <span className="w-2 h-2 rounded-full bg-[#C85A32]" />
-                          <span>Student Maker</span>
+                          <span>Maker</span>
                         </div>
                         <p className="font-bold text-sm text-[#C85A32] mt-0.5">
                           {formatINR(product.price * (makerEarningPercent / 100))}
@@ -846,12 +846,12 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   <p>{product.description}</p>
                   <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-2">
                     <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
-                      Student Artisan Story
+                      Artisan Story
                     </h4>
                     <p className="text-xs text-slate-600">
                       Crafted by <strong>{product.maker}</strong> from {product.school}. Each piece is
                       individually shaped by hand during extracurricular arts and vocational studio sessions.
-                      Every purchase directly supports student educational funds and creative materials.
+                      Every purchase directly supports independent creators and their materials.
                     </p>
                   </div>
                 </div>
@@ -913,7 +913,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       <Clock className="w-5 h-5 text-amber-600 mb-1.5" />
                       <p className="font-bold text-xs text-slate-900">24-48 Hours Dispatch</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Handcrafted or carefully packed by the student maker campus hub.
+                        Handcrafted or carefully packed by the creator.
                       </p>
                     </div>
 
@@ -940,7 +940,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                           ))}
                         </div>
                         <p className="text-xs text-slate-500">
-                          Based on {product.reviews} student craft buyer ratings
+                          Based on {product.reviews} buyer ratings
                         </p>
                       </div>
                     </div>
@@ -965,7 +965,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       </div>
                       <p className="text-xs text-slate-600">
                         "The craftsmanship on this {product.title} is astonishing! Knowing the earnings
-                        reach a hardworking student artist makes it even more special."
+                        reach a hardworking creator makes it even more special."
                       </p>
                     </div>
 
@@ -979,7 +979,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                       </div>
                       <p className="text-xs text-slate-600">
                         "Packaged with biodegradable honeycomb wrap and arrived without a single scratch.
-                        10/10 student craftsmanship!"
+                        10/10 craftsmanship!"
                       </p>
                     </div>
                   </div>

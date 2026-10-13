@@ -92,7 +92,7 @@ export const AdminPortalPage: React.FC = () => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserRole, setNewUserRole] = useState<'admin' | 'maker' | 'customer'>('maker');
   const [newUserStatus, setNewUserStatus] = useState<'approved' | 'pending'>('approved');
-  const [newUserSchool, setNewUserSchool] = useState('');
+  const [newUserStudio, setNewUserStudio] = useState('');
 
   // Local CMS form state
   const [cmsForm, setCmsForm] = useState<HeroContent>({ ...heroContent });
@@ -325,7 +325,7 @@ export const AdminPortalPage: React.FC = () => {
   });
 
   const totalSalesVolume = orders.reduce((sum, o) => sum + o.amount, 0);
-  const studentSharePaid = totalSalesVolume * (makerEarningPercent / 100);
+  const makerSharePaid = totalSalesVolume * (makerEarningPercent / 100);
 
   const isMasterAdmin =
     (currentUser?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() ||
@@ -415,7 +415,7 @@ export const AdminPortalPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <div>
               <span className="text-[11px] text-[#C85A32] block font-semibold">{makerEarningPercent}% Creator Fund</span>
-              <span className="text-2xl font-black text-[#C85A32]">₹{Math.round(studentSharePaid).toLocaleString('en-IN')}</span>
+              <span className="text-2xl font-black text-[#C85A32]">₹{Math.round(makerSharePaid).toLocaleString('en-IN')}</span>
             </div>
             <button
               type="button"
@@ -606,14 +606,14 @@ export const AdminPortalPage: React.FC = () => {
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     {[350, 850, 1500, 3000].map((amt) => {
-                      const studentCut = Math.round(amt * (customPercentInput / 100));
-                      const platformCut = amt - studentCut;
+                      const makerCut = Math.round(amt * (customPercentInput / 100));
+                      const platformCut = amt - makerCut;
                       return (
                         <div key={amt} className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
                           <span className="font-extrabold text-slate-900 block text-xs">₹{amt} Order</span>
                           <div className="text-[11px]">
                             <span className="text-slate-400 block">Creator receives:</span>
-                            <span className="font-black text-[#C85A32]">₹{studentCut}</span>
+                            <span className="font-black text-[#C85A32]">₹{makerCut}</span>
                           </div>
                           <div className="text-[10px] text-slate-400">
                             <span>Platform: ₹{platformCut}</span>
@@ -1101,10 +1101,10 @@ export const AdminPortalPage: React.FC = () => {
                     showToast('Please enter a valid email.', 'alert-circle');
                     return;
                   }
-                  await addNewUserAccount(newUserEmail, newUserName, newUserRole, newUserSchool);
+                  await addNewUserAccount(newUserEmail, newUserName, newUserRole, newUserStudio);
                   setNewUserEmail('');
                   setNewUserName('');
-                  setNewUserSchool('');
+                  setNewUserStudio('');
                   setIsAddingUser(false);
                 }}
                 className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
@@ -1154,8 +1154,8 @@ export const AdminPortalPage: React.FC = () => {
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    value={newUserSchool}
-                    onChange={(e) => setNewUserSchool(e.target.value)}
+                    value={newUserStudio}
+                    onChange={(e) => setNewUserStudio(e.target.value)}
                     placeholder="Studio / Affiliation (Optional)"
                     className="flex-1 px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs focus:outline-hidden focus:border-[#C85A32]"
                   />
@@ -1287,7 +1287,7 @@ export const AdminPortalPage: React.FC = () => {
                         )}
                       </p>
                       {u.school && (
-                        <p className="text-xs text-slate-600 font-medium mt-1">🏫 {u.school}</p>
+                        <p className="text-xs text-slate-600 font-medium mt-1">🏛️ {u.school}</p>
                       )}
                     </div>
 
@@ -1566,7 +1566,7 @@ export const AdminPortalPage: React.FC = () => {
                         </div>
                         <p className="text-xs text-slate-500 font-mono mt-0.5">{maskEmail(applicantEmail)}</p>
                         <p className="text-xs text-slate-700 font-medium mt-1">
-                          🏫 <strong>{app.school}</strong> • Class: <strong>{app.grade_class}</strong>
+                          🏛️ <strong>{app.school}</strong> • Series: <strong>{app.grade_class}</strong>
                         </p>
                       </div>
 

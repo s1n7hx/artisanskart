@@ -406,7 +406,7 @@ export const CheckoutPage: React.FC = () => {
           paymentStatus: 'cod',
           paymentMethod: 'cod',
           trackingAwb: awb,
-          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Campus Dispatch'),
+          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Hub Dispatch'),
           items: orderItemSnapshots,
           makerId: checkoutItems[0]?.product?.makerId,
           makerName: checkoutItems[0]?.product?.maker,
@@ -429,7 +429,7 @@ export const CheckoutPage: React.FC = () => {
         customerName: fullName.trim(),
         customerEmail: email.trim() || 'customer@artisanskart.in',
         customerPhone: phone.trim() || '9999999999',
-        description: `ArtisansKart Order for ${checkoutItems.reduce((s, c) => s + c.qty, 0)} student creations`,
+        description: `ArtisansKart Order for ${checkoutItems.reduce((s, c) => s + c.qty, 0)} handcrafted creations`,
         onSuccess: async (payRes) => {
           const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
           const awb = `SR-RZP-${payRes.razorpayPaymentId.slice(-6).toUpperCase()}`;
@@ -448,7 +448,7 @@ export const CheckoutPage: React.FC = () => {
             paymentStatus: 'paid',
             paymentMethod: 'razorpay',
             trackingAwb: awb,
-            courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Campus Dispatch'),
+            courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Hub Dispatch'),
             items: orderItemSnapshots,
             makerId: checkoutItems[0]?.product?.makerId,
             makerName: checkoutItems[0]?.product?.maker,
@@ -492,10 +492,10 @@ export const CheckoutPage: React.FC = () => {
             Order Confirmed &amp; Dispatched to Studio
           </span>
           <h1 className="text-3xl sm:text-4xl font-black text-[#1E293B]">
-            Thank You for Supporting Student Artists!
+            Thank You for Supporting Independent Artisans!
           </h1>
           <p className="text-slate-500 text-sm max-w-lg mx-auto">
-            Your order has been routed directly to the student maker. Crafting will begin as soon as the studio accepts the specifications.
+            Your order has been routed directly to the artisan. Crafting will begin as soon as the studio accepts the specifications.
           </p>
         </div>
 
@@ -524,7 +524,7 @@ export const CheckoutPage: React.FC = () => {
               <div className="w-1/6 h-full bg-[#C85A32]" />
             </div>
             <p className="text-[11px] text-slate-500">
-              The student maker has 24 hours to confirm the raw materials and commence crafting.
+              The creator has 24 hours to confirm the raw materials and commence crafting.
             </p>
           </div>
 
@@ -543,7 +543,7 @@ export const CheckoutPage: React.FC = () => {
               to="/marketplace"
               className="flex-1 py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#1E293B] text-white hover:bg-slate-800 text-center transition shadow-md"
             >
-              Continue Exploring Student Crafts
+              Continue Exploring Artisan Creations
             </Link>
             <Link
               to="/"
@@ -992,7 +992,7 @@ export const CheckoutPage: React.FC = () => {
                   />
                 </div>
                 <p className="text-slate-500 leading-relaxed text-[11px]">
-                  Pay in cash when the student craft is delivered to your doorstep.
+                  Pay in cash when the handcrafted piece is delivered to your doorstep.
                 </p>
               </div>
             </div>
@@ -1075,7 +1075,7 @@ export const CheckoutPage: React.FC = () => {
                     type="text"
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    placeholder="Coupon code (e.g. STUDENT10)"
+                    placeholder="Coupon code (e.g. MAKER10)"
                     className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32]"
                   />
                   <button
@@ -1145,7 +1145,7 @@ export const CheckoutPage: React.FC = () => {
             </button>
 
             <p className="text-[11px] text-center text-slate-400">
-              By confirming, you agree to ArtisansKart's Terms of Sale (All Sales Final) and Student Creator Guarantee.
+              By confirming, you agree to ArtisansKart's Terms of Sale (All Sales Final) and Artisan Creator Guarantee.
             </p>
           </div>
         </div>
