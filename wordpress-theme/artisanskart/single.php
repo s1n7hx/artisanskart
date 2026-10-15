@@ -21,7 +21,7 @@ get_header();
                     <?php endif; ?>
                 </div>
                 <div>
-                    <span class="badge-terracotta" style="margin-bottom:12px;">Student Handcrafted</span>
+                    <span class="badge-terracotta" style="margin-bottom:12px;">Artisan Handcrafted</span>
                     <h1 style="font-size:32px; font-weight:900; margin:8px 0 16px 0; color:#1E293B;"><?php the_title(); ?></h1>
                     <div style="font-size:15px; color:#475569; line-height:1.7; margin-bottom:24px;">
                         <?php the_content(); ?>

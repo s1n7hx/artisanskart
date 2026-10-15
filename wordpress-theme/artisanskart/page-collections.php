@@ -1,7 +1,7 @@
 <?php
 /**
  * Template Name: Curated Collections Page
- * Description: Dedicated page template for curated student craft collections by medium and material.
+ * Description: Dedicated page template for curated artisan craft collections by medium and material.
  *
  * @package ArtisansKart
  */
@@ -13,10 +13,10 @@ get_header();
         <div style="text-align:center; max-width:680px; margin:0 auto 48px auto;">
             <span class="badge-sage" style="margin-bottom:8px;">Curated Mediums &amp; Themes</span>
             <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">
-                Curated Student Collections
+                Curated Artisan Collections
             </h1>
             <p style="font-size:16px; color:#64748b; line-height:1.6;">
-                Explore themed collections shaped across student ceramic benches, watercolor ateliers, and botanical jewelry studios.
+                Explore themed collections shaped across dedicated ceramic benches, watercolor ateliers, and botanical jewelry studios.
             </p>
         </div>
 
@@ -71,7 +71,7 @@ get_header();
                     <span class="badge-terracotta" style="margin-bottom:8px;">3 Handcrafted Items</span>
                     <h2 style="font-size:24px; font-weight:900; color:#1E293B; margin:4px 0 10px 0;">Beaded &amp; Polymer Accessories</h2>
                     <p style="font-size:14px; color:#64748b; line-height:1.6;">
-                        Braided macrame wristlets, glass seed bead boho bracelets, and delicate oven-baked polymer clay daisy dangles designed by fashion students.
+                        Braided macrame wristlets, glass seed bead boho bracelets, and delicate oven-baked polymer clay daisy dangles designed by independent jewelry artisans.
                     </p>
                 </div>
                 <div style="border-top:1px solid #E7E0D8; padding-top:18px; margin-top:20px; display:flex; align-items:center; justify-content:space-between;">
@@ -91,7 +91,7 @@ get_header();
                     <span class="badge-sage" style="margin-bottom:8px;">2 Handcrafted Items</span>
                     <h2 style="font-size:24px; font-weight:900; color:#1E293B; margin:4px 0 10px 0;">Handmade Keepsakes &amp; Keychains</h2>
                     <p style="font-size:14px; color:#64748b; line-height:1.6;">
-                        Wood-burned birch slices engraved with student pyrography, and crystal UV resin key holders enclosing real pressed wildflower petals.
+                        Wood-burned birch slices engraved with artisan pyrography, and crystal UV resin key holders enclosing real pressed wildflower petals.
                     </p>
                 </div>
                 <div style="border-top:1px solid #E7E0D8; padding-top:18px; margin-top:20px; display:flex; align-items:center; justify-content:space-between;">

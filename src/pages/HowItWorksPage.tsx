@@ -8,10 +8,10 @@ export const HowItWorksPage: React.FC = () => {
   const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
   const [examplePrice, setExamplePrice] = useState<number>(850);
 
-  const studentEarnings = Math.round(examplePrice * (makerEarningPercent / 100));
+  const makerEarnings = Math.round(examplePrice * (makerEarningPercent / 100));
   const remainingShare = 100 - makerEarningPercent;
   const platformFee = Math.round(examplePrice * (remainingShare * 0.55 / 100));
-  const packagingDelivery = examplePrice - studentEarnings - platformFee;
+  const packagingDelivery = examplePrice - makerEarnings - platformFee;
 
   const faqs = [
     {
@@ -125,7 +125,7 @@ export const HowItWorksPage: React.FC = () => {
                 <span className="text-xs uppercase font-bold text-[#E6A373]">{makerEarningPercent}% Direct to Creator</span>
                 <Sparkles className="w-4 h-4 text-[#E6A373]" />
               </div>
-              <p className="text-3xl font-black text-white">₹{studentEarnings.toLocaleString('en-IN')}</p>
+              <p className="text-3xl font-black text-white">₹{makerEarnings.toLocaleString('en-IN')}</p>
               <p className="text-xs text-white/60 mt-2 leading-relaxed">
                 Direct creator compensation for materials, studio time, and craft talent.
               </p>

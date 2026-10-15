@@ -33,7 +33,7 @@ export const MakerPortal: React.FC<MakerPortalProps> = ({
   return (
     <main id="makerPortal" className="px-4 md:px-10 py-10 max-w-7xl mx-auto min-h-screen">
       <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-black text-[#1E293B]">Student Maker Portal</h1>
+        <h1 className="text-3xl md:text-4xl font-black text-[#1E293B]">Maker Portal</h1>
         <p className="text-slate-500 mt-1">Manage your incoming orders and track your craft earnings.</p>
       </div>
 

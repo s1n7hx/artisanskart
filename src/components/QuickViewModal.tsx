@@ -16,7 +16,7 @@ import {
   Check,
   Sparkles,
   User,
-  School,
+  Building2,
   Clock,
   Award,
   Layers,
@@ -25,6 +25,7 @@ import {
   MapPin,
   ExternalLink,
   Star,
+  Trash2,
 } from 'lucide-react';
 import { Product, getProductSlug } from '../types';
 import { useApp } from '../context/AppContext';
@@ -44,7 +45,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   onOpenMakerProfile,
 }) => {
   const navigate = useNavigate();
-  const { products, setQuickViewId, showToast, makerEarningPercent } = useApp();
+  const { products, setQuickViewId, showToast, makerEarningPercent, updateProduct } = useApp();
 
   // Dialog container ref for focus trapping and accessibility
   const modalRef = useRef<HTMLDivElement>(null);
@@ -84,6 +85,33 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
     }
     return list;
   }, [product]);
+
+  const handleRemoveActiveExtra = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!product || galleryImages.length <= 1) return;
+    const updated = galleryImages.filter((_, i) => i !== activeImageIndex);
+    const primary = activeImageIndex === 0 ? (updated[0] || '') : (product.image || updated[0]);
+    updateProduct({
+      ...product,
+      image: primary,
+      images: updated,
+    });
+    setActiveImageIndex(0);
+    showToast('Removed picture from product gallery.', 'trash-2');
+  };
+
+  const handleRemoveAllExtra = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!product || galleryImages.length <= 1) return;
+    const primary = product.image || galleryImages[0];
+    updateProduct({
+      ...product,
+      image: primary,
+      images: [primary],
+    });
+    setActiveImageIndex(0);
+    showToast('Removed all extra pictures! Kept primary photo.', 'trash-2');
+  };
 
   // Reset states when product changes
   useEffect(() => {
@@ -336,29 +364,63 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
           <div className="grid md:grid-cols-12 gap-8 items-start">
             {/* LEFT COLUMN: Gallery with Vertical Thumbnails, Zoom, Badges */}
             <div className="md:col-span-6 flex flex-col-reverse sm:flex-row gap-3.5">
-              {/* Vertical Thumbnail Strip */}
+              {/* Vertical Thumbnail Strip & Remove Extra Photos Button */}
               {galleryImages.length > 1 && (
-                <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-y-auto max-h-[440px] shrink-0 py-1 sm:py-0 select-none">
-                  {galleryImages.map((img, idx) => (
-                    <button
-                      key={`thumb-${idx}`}
-                      onClick={() => {
-                        setActiveImageIndex(idx);
-                        setIsImageLoading(true);
-                      }}
-                      className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
-                        activeImageIndex === idx
-                          ? 'border-[#C85A32] ring-2 ring-[#C85A32]/20 shadow-xs'
-                          : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
-                      }`}
-                    >
-                      <img
-                        src={img}
-                        alt={`${product.title} angle ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-2 shrink-0 select-none">
+                  <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-y-auto max-h-[440px] shrink-0 py-1 sm:py-0">
+                    {galleryImages.map((img, idx) => (
+                      <div key={`thumb-${idx}`} className="relative group shrink-0">
+                        <button
+                          onClick={() => {
+                            setActiveImageIndex(idx);
+                            setIsImageLoading(true);
+                          }}
+                          className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
+                            activeImageIndex === idx
+                              ? 'border-[#C85A32] ring-2 ring-[#C85A32]/20 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <img
+                            src={img}
+                            alt={`${product.title} angle ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </button>
+                        {/* Option to delete this specific picture */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (galleryImages.length <= 1) return;
+                            const updated = galleryImages.filter((_, i) => i !== idx);
+                            const primary = idx === 0 ? (updated[0] || '') : (product.image || updated[0]);
+                            updateProduct({
+                              ...product,
+                              image: primary,
+                              images: updated,
+                            });
+                            setActiveImageIndex(0);
+                            showToast(`Removed photo #${idx + 1} from craft gallery.`, 'trash-2');
+                          }}
+                          title={`Remove photo #${idx + 1}`}
+                          className="absolute -top-1.5 -right-1.5 z-10 w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-md cursor-pointer transition opacity-80 sm:opacity-0 group-hover:opacity-100"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveAllExtra}
+                    title="Remove all extra pictures and keep only primary photo"
+                    className="w-full px-2 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[10px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Remove Extra</span>
+                  </button>
                 </div>
               )}
 
@@ -603,7 +665,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
                   <div className="min-w-0">
                     <p className="text-xs font-bold text-slate-800 truncate">{product.maker}</p>
                     <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
-                      <School className="w-3 h-3 shrink-0" />
+                      <Building2 className="w-3 h-3 shrink-0" />
                       <span>{product.cls}, {product.school}</span>
                     </p>
                   </div>

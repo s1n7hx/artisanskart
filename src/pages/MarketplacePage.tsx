@@ -53,13 +53,13 @@ export const MarketplacePage: React.FC = () => {
       {/* Marketplace Header */}
       <div className="text-center max-w-2xl mx-auto">
         <span className="badge-sage text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">
-          Student Crafts Catalog
+          Artisan Crafts Catalog
         </span>
         <h1 className="text-3xl md:text-5xl font-black text-[#1E293B] mt-3">
           The Marketplace
         </h1>
         <p className="text-slate-500 text-sm md:text-base mt-2 leading-relaxed">
-          Every piece below is crafted on-demand with {makerEarningPercent}% of your purchase credited directly to the student maker.
+          Every piece below is crafted on-demand with {makerEarningPercent}% of your purchase credited directly to the independent maker.
         </p>
       </div>
 
@@ -188,7 +188,7 @@ export const MarketplacePage: React.FC = () => {
           </div>
           <h3 className="text-xl font-bold text-[#1E293B] mb-2">No matching crafts found</h3>
           <p className="text-slate-500 text-sm mb-6">
-            Try adjusting your search keywords or switch category filter to view other student items.
+            Try adjusting your search keywords or switch category filter to view other artisan creations.
           </p>
           <button
             onClick={() => {

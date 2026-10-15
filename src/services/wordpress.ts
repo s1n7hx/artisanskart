@@ -87,13 +87,13 @@ export function transformWordPressItem(item: any, index: number): Product {
     acf.student_maker ||
     meta.maker ||
     item._embedded?.author?.[0]?.name ||
-    'Student Artisan';
+    'Independent Artisan';
 
   const schoolName =
     acf.school ||
     acf.college ||
     meta.school ||
-    'Campus Fine Arts Studio';
+    'Independent Fine Arts Studio';
 
   const gradeClass =
     acf.class ||
@@ -259,7 +259,7 @@ export async function fetchWordPressContent(config: WordPressConfig): Promise<{
       return {
         success: true,
         products: PRODUCTS,
-        error: 'WordPress site returned 0 posts. Showing default student crafts until you publish in WordPress.',
+        error: 'WordPress site returned 0 posts. Showing default artisan crafts until you publish in WordPress.',
       };
     }
 

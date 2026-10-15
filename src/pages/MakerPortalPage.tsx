@@ -32,6 +32,7 @@ import {
   RefreshCw,
   Send,
   Boxes,
+  Trash2,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product, Order, OrderStatus, maskEmail } from '../types';
@@ -255,12 +256,7 @@ export const MakerPortalPage: React.FC = () => {
       : (craftForm.image ? [craftForm.image] : []);
 
     if (effectiveImages.length === 0) {
-      showToast('Please upload at least 2 photographs of your craft.', 'alert-circle');
-      return;
-    }
-
-    if (effectiveImages.length < 2) {
-      showToast('Please upload at least 2 photos from different angles (front, close-up texture, packaging).', 'alert-circle');
+      showToast('Please upload at least 1 photograph of your craft.', 'alert-circle');
       return;
     }
 
@@ -641,36 +637,58 @@ export const MakerPortalPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t flex items-center justify-between text-xs">
+                <div className="pt-2 border-t flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-emerald-700 font-medium flex items-center gap-1">
                     ✓ {p.stock}
                   </span>
-                  <button
-                    onClick={() => {
-                      setEditingCraft(p);
-                      const existingImages = p.images && p.images.length > 0 ? p.images : (p.image ? [p.image] : []);
-                      setCraftForm({
-                        title: p.title,
-                        category: p.category,
-                        price: p.price,
-                        originalPrice: p.originalPrice || p.price,
-                        description: p.description || '',
-                        image: p.image || existingImages[0] || '',
-                        images: existingImages,
-                        stock: p.stock,
-                        inStockCount: p.inStockCount || 10,
-                        materials: p.materials || '',
-                        dimensions: p.dimensions || '',
-                        weight: p.weight || '',
-                        originCity: p.originCity || 'Bengaluru',
-                        isMadeToOrder: p.isMadeToOrder ?? true,
-                      });
-                      setIsAddingCraft(true);
-                    }}
-                    className="font-bold text-[#C85A32] hover:underline cursor-pointer flex items-center gap-1"
-                  >
-                    <Edit className="w-3.5 h-3.5" /> Edit Craft ({pGallery.length} photos)
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {pGallery.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const primary = p.image || pGallery[0];
+                          const updated = {
+                            ...p,
+                            image: primary,
+                            images: [primary],
+                          };
+                          updateProduct(updated);
+                          showToast(`Removed ${pGallery.length - 1} extra photos from "${p.title}"!`, 'trash-2');
+                        }}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer"
+                        title="Remove extra pictures and keep only 1 storefront photo"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Remove Extra</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setEditingCraft(p);
+                        const existingImages = p.images && p.images.length > 0 ? p.images : (p.image ? [p.image] : []);
+                        setCraftForm({
+                          title: p.title,
+                          category: p.category,
+                          price: p.price,
+                          originalPrice: p.originalPrice || p.price,
+                          description: p.description || '',
+                          image: p.image || existingImages[0] || '',
+                          images: existingImages,
+                          stock: p.stock,
+                          inStockCount: p.inStockCount || 10,
+                          materials: p.materials || '',
+                          dimensions: p.dimensions || '',
+                          weight: p.weight || '',
+                          originCity: p.originCity || 'Bengaluru',
+                          isMadeToOrder: p.isMadeToOrder ?? true,
+                        });
+                        setIsAddingCraft(true);
+                      }}
+                      className="font-bold text-[#C85A32] hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <Edit className="w-3.5 h-3.5" /> Edit ({pGallery.length})
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -979,10 +997,10 @@ export const MakerPortalPage: React.FC = () => {
                       image: primary || updatedImages[0] || '',
                     });
                   }}
-                  minImages={2}
+                  minImages={1}
                   maxImages={8}
-                  label="Craft Photographs (At least 2 angles required) *"
-                  helperText="Upload at least 2 photos from your device or web URLs (front, detail, scale). Star any photo to make it the primary storefront picture."
+                  label="Craft Photographs (1 photo required, up to 8)"
+                  helperText="Upload photos from your device or web URLs. Star the primary storefront photo. Any extra pictures can be removed anytime."
                 />
               </div>
 

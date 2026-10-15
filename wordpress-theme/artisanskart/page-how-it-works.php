@@ -1,7 +1,7 @@
 <?php
 /**
  * Template Name: How It Works Page
- * Description: Dedicated page template explaining the student creation journey, 65% revenue share, quality inspection, and eco-packaging.
+ * Description: Dedicated page template explaining the artisan creation journey, 65% revenue share, quality inspection, and eco-packaging.
  *
  * @package ArtisansKart
  */
@@ -16,7 +16,7 @@ get_header();
                 How ArtisansKart Works
             </h1>
             <p style="font-size:16px; color:#64748b; line-height:1.6;">
-                From the student's campus workbench to your home — here is how every piece is crafted, verified, and delivered with love.
+                From the creator's studio workbench to your home — here is how every piece is crafted, verified, and delivered with love.
             </p>
         </div>
 
@@ -28,10 +28,10 @@ get_header();
                     1
                 </div>
                 <div>
-                    <span class="badge-sage" style="margin-bottom:6px;">Campus Workshop</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Student Crafts On Demand</h3>
+                    <span class="badge-sage" style="margin-bottom:6px;">Artisan Workshop</span>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Artisan Crafts On Demand</h3>
                     <p style="font-size:14px; color:#64748b; line-height:1.7;">
-                        When you place an order, the verified student artisan is notified immediately. They hand-pinch, glaze, watercolor, or braid the piece in their school studio or home workbench.
+                        When you place an order, the verified artisan is notified immediately. They hand-pinch, glaze, watercolor, or braid the piece in their dedicated studio or home workshop.
                     </p>
                 </div>
             </div>
@@ -43,9 +43,9 @@ get_header();
                 </div>
                 <div>
                     <span class="badge-terracotta" style="margin-bottom:6px;">Quality Inspection</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Studio Mentor Verification</h3>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Studio Quality Verification</h3>
                     <p style="font-size:14px; color:#64748b; line-height:1.7;">
-                        Art teachers and campus studio leads inspect structural durability, lead-free seals on terracotta, and ensure colors match the photography before packaging.
+                        Experienced craft mentors and atelier leads inspect structural durability, non-toxic seals on terracotta, and ensure colors match the photography before packaging.
                     </p>
                 </div>
             </div>
@@ -59,7 +59,7 @@ get_header();
                     <span class="badge-sage" style="margin-bottom:6px;">100% Plastic-Free</span>
                     <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Eco-Friendly Hand-Wrapping</h3>
                     <p style="font-size:14px; color:#64748b; line-height:1.7;">
-                        Every item is cushioned in shredded recycled kraft paper, tied with natural jute twine, and accompanied by a personalized handwritten thank-you note from the student creator.
+                        Every item is cushioned in shredded recycled kraft paper, tied with natural jute twine, and accompanied by a personalized handwritten thank-you note from the independent creator.
                     </p>
                 </div>
             </div>
@@ -71,9 +71,9 @@ get_header();
                 </div>
                 <div>
                     <span class="badge-terracotta" style="margin-bottom:6px;">Direct Impact</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">65% Direct Student Payout</h3>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">65% Direct Creator Payout</h3>
                     <p style="font-size:14px; color:#64748b; line-height:1.7;">
-                        65% of the craft price goes directly into the verified student's education account, funding their school tuition, fine art brushes, clay kilns, and college savings.
+                        65% of the purchase price is deposited directly to the creator for their professional development and craft supplies.
                     </p>
                 </div>
             </div>
@@ -81,9 +81,9 @@ get_header();
 
         <!-- CTA Box -->
         <div style="max-width:860px; margin:48px auto 0 auto; background:#1E293B; color:#ffffff; border-radius:28px; padding:40px; text-align:center;">
-            <h2 style="font-size:28px; font-weight:900; color:#ffffff; margin:0 0 12px 0;">Ready to Support a Student Artisan?</h2>
+            <h2 style="font-size:28px; font-weight:900; color:#ffffff; margin:0 0 12px 0;">Ready to Support an Independent Artisan?</h2>
             <p style="font-size:15px; color:#cbd5e1; max-width:540px; margin:0 auto 24px auto;">
-                Explore all 13 handcrafted works of clay, art cards, accessories, and keychains today.
+                Explore all handcrafted works of clay, art cards, accessories, and keychains today.
             </p>
             <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">
                 Explore Full Shop →

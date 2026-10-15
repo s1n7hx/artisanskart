@@ -76,7 +76,7 @@ export const Modals: React.FC<ModalsProps> = ({
         customerName: checkoutName || currentUser?.name || 'ArtisansKart Customer',
         customerEmail: currentUser?.email || 'customer@artisanskart.in',
         customerPhone: checkoutPhone || '9999999999',
-        description: `Order for ${cart.reduce((s, c) => s + c.qty, 0)} student craft items`,
+        description: `Order for ${cart.reduce((s, c) => s + c.qty, 0)} artisan craft items`,
         onSuccess: (res) => {
           setIsProcessingPayment(false);
           showToast(`Payment verified! ID: ${res.razorpayPaymentId.slice(0, 14)}...`, 'check-circle');
@@ -120,7 +120,7 @@ export const Modals: React.FC<ModalsProps> = ({
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-2xl font-bold text-[#1E293B]">Sell Your Crafts</h3>
-                <p className="text-sm text-slate-500">Join 150+ student creators earning from their art.</p>
+                <p className="text-sm text-slate-500">Join 150+ independent creators &amp; artisans earning from their crafts.</p>
               </div>
               <button
                 onClick={onCloseMakerSignup}
@@ -142,21 +142,21 @@ export const Modals: React.FC<ModalsProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-medium text-slate-700">School</label>
+                  <label className="text-sm font-medium text-slate-700">Studio / Collective</label>
                   <input
                     required
                     type="text"
                     className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
-                    placeholder="School name"
+                    placeholder="Studio or brand name"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Class</label>
+                  <label className="text-sm font-medium text-slate-700">Experience / Series</label>
                   <input
                     required
                     type="text"
                     className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
-                    placeholder="e.g. Class 10"
+                    placeholder="e.g. Master Artisan / Independent"
                   />
                 </div>
               </div>
@@ -204,7 +204,7 @@ export const Modals: React.FC<ModalsProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-[#1E293B]">Complete Your Order</h3>
-                  <p className="text-xs text-slate-500">Handcrafted by student makers with campus dispatch.</p>
+                  <p className="text-xs text-slate-500">Handcrafted by independent artisans with verified eco dispatch.</p>
                 </div>
               </div>
               <button
@@ -245,7 +245,7 @@ export const Modals: React.FC<ModalsProps> = ({
                   type="text"
                   value={checkoutAddress}
                   onChange={(e) => setCheckoutAddress(e.target.value)}
-                  placeholder="Hostel / House No, Street, Campus / Locality, PIN Code"
+                  placeholder="House / Flat No, Street, Locality, PIN Code"
                   className="w-full px-3 py-2 text-xs rounded-xl border border-[#e7e0d8] focus:border-[#C86D51] outline-hidden bg-slate-50/50"
                 />
               </div>
@@ -283,7 +283,7 @@ export const Modals: React.FC<ModalsProps> = ({
                   <PackageCheck className={`w-4 h-4 shrink-0 mt-0.5 ${paymentMethod === 'cod' ? 'text-[#C86D51]' : 'text-slate-400'}`} />
                   <div>
                     <span className="text-xs font-bold block">Cash on Delivery</span>
-                    <span className="text-[10px] text-slate-500 block leading-tight">Pay on campus delivery</span>
+                    <span className="text-[10px] text-slate-500 block leading-tight">Pay on doorstep delivery</span>
                   </div>
                 </button>
               </div>
@@ -296,7 +296,7 @@ export const Modals: React.FC<ModalsProps> = ({
                 <span id="checkoutItemsTotal" className="font-semibold text-slate-800">{formatINR(total)}</span>
               </div>
               <div className="flex justify-between mb-1 text-slate-600 text-xs">
-                <span>Student Campus Eco Packaging</span>
+                <span>Artisan Eco-Friendly Packaging</span>
                 <span className="text-[#8A9A86] font-semibold">Free</span>
               </div>
               <div className="flex justify-between font-bold border-t border-black/10 pt-2 mt-2 text-base text-[#1E293B]">

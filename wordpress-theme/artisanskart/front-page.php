@@ -14,19 +14,19 @@ get_header();
             <!-- Left Headline Column -->
             <div style="z-index:2;">
                 <span class="badge-sage" style="margin-bottom:16px;">
-                    ✨ Handcrafted by Student Artisans
+                    ✨ Handcrafted by Independent Artisans
                 </span>
                 <h1 class="hero-heading" style="font-size:clamp(40px, 5.5vw, 68px); margin-bottom:20px; font-weight:900;">
                     Crafted by<br>
-                    <span style="color:#C85A32;">Students,</span><br>
+                    <span style="color:#C85A32;">Creators,</span><br>
                     Loved by You
                 </h1>
                 <p style="font-size:18px; color:#475569; margin-bottom:32px; max-width:480px; line-height:1.65;">
-                    Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds a student creator's dream.
+                    Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds an independent creator's journey.
                 </p>
                 <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:44px;">
                     <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">
-                        Explore Student Shop →
+                        Explore Artisan Shop →
                     </a>
                     <a href="<?php echo esc_url(home_url('/how-it-works/')); ?>" class="btn-outline">
                         How It Works
@@ -44,7 +44,7 @@ get_header();
                     </div>
                     <div>
                         <p style="font-size:32px; font-weight:900; color:#1E293B; margin:0;">100%</p>
-                        <p style="font-size:12px; color:#64748b; margin:0; font-weight:700;">Verified Students</p>
+                        <p style="font-size:12px; color:#64748b; margin:0; font-weight:700;">Verified Artisans</p>
                     </div>
                 </div>
             </div>
@@ -150,8 +150,8 @@ get_header();
         <div class="ak-container">
             <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:20px; margin-bottom:36px;">
                 <div>
-                    <span class="badge-terracotta" style="margin-bottom:8px;">Handpicked Campus Creations</span>
-                    <h2 style="font-size:34px; font-weight:900; margin:0; color:#1E293B;">Featured Student Crafts</h2>
+                    <span class="badge-terracotta" style="margin-bottom:8px;">Handpicked Artisan Creations</span>
+                    <h2 style="font-size:34px; font-weight:900; margin:0; color:#1E293B;">Featured Artisan Crafts</h2>
                 </div>
                 <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">
                     View Full Catalog (13+ Crafts) →
@@ -227,10 +227,10 @@ get_header();
     <section style="padding:60px 0; background:#FAF9F6; border-top:1px solid #E7E0D8;">
         <div class="ak-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:36px; align-items:center;">
             <div>
-                <span class="badge-sage" style="margin-bottom:12px;">Our Student-First Model</span>
-                <h2 style="font-size:32px; font-weight:900; color:#1E293B; line-height:1.2;">Every Purchase Funds a Student's Future</h2>
+                <span class="badge-sage" style="margin-bottom:12px;">Our Creator-First Model</span>
+                <h2 style="font-size:32px; font-weight:900; color:#1E293B; line-height:1.2;">Every Purchase Empowers a Creator's Future</h2>
                 <p style="font-size:15px; color:#475569; line-height:1.7; margin-top:12px;">
-                    Unlike mass-produced marketplaces, ArtisansKart is built to empower school students and young artisans directly. 65% of every transaction is deposited directly into the creator's education fund.
+                    Unlike mass-produced marketplaces, ArtisansKart is built to empower independent creators and artisans directly. 65% of every transaction is deposited directly into the creator's growth fund.
                 </p>
                 <div style="margin-top:24px;">
                     <a href="<?php echo esc_url(home_url('/about/')); ?>" class="btn-outline">
@@ -241,11 +241,11 @@ get_header();
             <div style="background:#ffffff; border:1px solid #E7E0D8; border-radius:24px; padding:32px; box-shadow:0 10px 25px rgba(0,0,0,0.04);">
                 <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">
                     <div style="width:48px; height:48px; border-radius:14px; background:#FDF2EE; color:#C85A32; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900;">
-                        🎓
+                        🎨
                     </div>
                     <div>
-                        <h4 style="font-size:16px; font-weight:800; margin:0; color:#1E293B;">School Partner Studios</h4>
-                        <p style="font-size:12px; color:#64748b; margin:0;">Active across 40+ schools in India</p>
+                        <h4 style="font-size:16px; font-weight:800; margin:0; color:#1E293B;">Artisan Partner Studios</h4>
+                        <p style="font-size:12px; color:#64748b; margin:0;">Active across 40+ studios in India</p>
                     </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:16px; margin-bottom:20px;">

@@ -46,7 +46,7 @@ export const CollectionsPage: React.FC = () => {
           Handcrafted Collections
         </h1>
         <p className="text-slate-500 text-base md:text-lg max-w-2xl mx-auto mt-4 leading-relaxed">
-          Thematic craft sets designed and sculpted by student artisans. Scroll through our signature stacking showcases.
+          Thematic craft sets designed and sculpted by independent artisans. Scroll through our signature stacking showcases.
         </p>
       </section>
 
@@ -106,7 +106,7 @@ export const CollectionsPage: React.FC = () => {
                       />
                       <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
                         <span className="text-white text-xs font-semibold">
-                          Artisan Student Original #{idx + 1}
+                          Artisan Original #{idx + 1}
                         </span>
                       </div>
                     </div>
@@ -133,7 +133,7 @@ export const CollectionsPage: React.FC = () => {
           <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8] shadow-xs">
             <h3 className="font-bold text-[#1E293B] text-base mb-2">Natural Terracotta Clay</h3>
             <p className="text-slate-500 text-xs leading-relaxed">
-              Locally sourced riverbed clay, fired at low thermal footprint in college kilns with food-safe non-lead glazes.
+              Locally sourced riverbed clay, fired at low thermal footprint in studio kilns with food-safe non-lead glazes.
             </p>
           </div>
           <div className="bg-white rounded-2xl p-6 border border-[#e7e0d8] shadow-xs">
@@ -164,7 +164,7 @@ export const CollectionsPage: React.FC = () => {
             Looking for an Individual Piece?
           </h2>
           <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
-            Browse our complete catalog with live student maker profiles, reviews, and immediate dispatch status.
+            Browse our complete catalog with live artisan maker profiles, reviews, and immediate dispatch status.
           </p>
           <Link
             to="/marketplace"

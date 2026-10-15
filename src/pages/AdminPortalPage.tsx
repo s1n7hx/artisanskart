@@ -244,12 +244,7 @@ export const AdminPortalPage: React.FC = () => {
       : (newProductForm.image ? [newProductForm.image] : []);
 
     if (effectiveImages.length === 0) {
-      showToast('Please upload at least 2 photographs of this craft.', 'alert-circle');
-      return;
-    }
-
-    if (effectiveImages.length < 2) {
-      showToast('Please add at least 2 photographs from different angles (front, detail, packaging).', 'alert-circle');
+      showToast('Please upload at least 1 photograph of this craft.', 'alert-circle');
       return;
     }
 
@@ -1766,10 +1761,10 @@ export const AdminPortalPage: React.FC = () => {
                       image: primary || imgs[0] || '',
                     });
                   }}
-                  minImages={2}
+                  minImages={1}
                   maxImages={8}
-                  label="Product Photographs (At least 2 angles required) *"
-                  helperText="Upload at least 2 photos from your device or paste web links. Star the primary storefront photo."
+                  label="Product Photographs (1 photo required, up to 8)"
+                  helperText="Upload photos from your device or paste web links. Star the primary storefront photo. Any extra pictures can be removed anytime."
                 />
               </div>
 
@@ -1869,10 +1864,10 @@ export const AdminPortalPage: React.FC = () => {
                       image: primary || imgs[0] || '',
                     });
                   }}
-                  minImages={2}
+                  minImages={1}
                   maxImages={8}
-                  label="Product Photographs (Gallery & Storefront) *"
-                  helperText="Upload, reorder, or remove photos. Click the star to set the storefront primary image."
+                  label="Product Photographs (Gallery & Storefront)"
+                  helperText="Upload, reorder, or remove photos. Click delete or remove extra pictures anytime."
                 />
               </div>
 
@@ -1921,6 +1916,26 @@ export const AdminPortalPage: React.FC = () => {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {p.images && p.images.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const primary = p.image || p.images![0];
+                              const updated: Product = {
+                                ...p,
+                                image: primary,
+                                images: [primary],
+                              };
+                              updateProduct(updated);
+                              showToast(`Removed ${p.images!.length - 1} extra photos from "${p.title}"!`, 'trash-2');
+                            }}
+                            className="px-2 py-1 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                            title={`Remove ${p.images.length - 1} extra photos and keep only primary photo`}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Extra ({p.images.length - 1})</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => setEditingProduct(p)}

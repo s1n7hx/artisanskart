@@ -13,7 +13,7 @@ import {
   Truck,
   ShieldCheck,
   Sparkles,
-  School,
+  Building2,
   User,
   Clock,
   PackageCheck,
@@ -376,6 +376,19 @@ export const ProductDetailPage: React.FC = () => {
     showToast('Primary product image updated!', 'check-circle');
   };
 
+  const handleRemoveAllExtraImages = () => {
+    if (!product || galleryImages.length <= 1) return;
+    const primary = product.image || galleryImages[0];
+    const updated: Product = {
+      ...product,
+      image: primary,
+      images: [primary],
+    };
+    updateProduct(updated);
+    setActiveImageIndex(0);
+    showToast('All extra pictures removed! Kept primary photo.', 'trash-2');
+  };
+
   // If product not found
   if (!product) {
     return (
@@ -445,35 +458,76 @@ export const ProductDetailPage: React.FC = () => {
             LEFT COLUMN: GALLERY WITH THUMBNAILS, SWIPE & LIGHTBOX
         ========================================================= */}
         <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-4 items-start">
-          {/* Vertical / Horizontal Thumbnail Strip */}
-          {galleryImages.length > 1 && (
-            <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-y-auto max-h-[540px] shrink-0 py-1 sm:py-0 select-none w-full sm:w-auto">
-              {galleryImages.map((imgUrl, idx) => (
+          {/* Vertical / Horizontal Thumbnail Strip & Quick Photo Actions */}
+          <div className="flex flex-col gap-2 shrink-0 w-full sm:w-auto">
+            {galleryImages.length > 1 && (
+              <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-y-auto max-h-[540px] shrink-0 py-1 sm:py-0 select-none w-full sm:w-auto">
+                {galleryImages.map((imgUrl, idx) => (
+                  <div key={idx} className="relative group shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (idx !== activeImageIndex) {
+                          setIsImageLoading(true);
+                          setActiveImageIndex(idx);
+                        }
+                      }}
+                      aria-label={`Select angle ${idx + 1}`}
+                      className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition cursor-pointer ${
+                        activeImageIndex === idx
+                          ? 'border-[#C85A32] shadow-sm scale-102 ring-2 ring-[#C85A32]/20'
+                          : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
+                      }`}
+                    >
+                      <img
+                        src={imgUrl}
+                        alt={`${product.title} angle ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                    {/* Direct Option to remove this extra picture */}
+                    {galleryImages.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteGalleryImage(imgUrl);
+                        }}
+                        title={`Remove photo #${idx + 1}`}
+                        className="absolute -top-1.5 -right-1.5 z-10 w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center shadow-md cursor-pointer transition opacity-80 sm:opacity-0 group-hover:opacity-100"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick Action Buttons for Photo Removal */}
+            <div className="flex sm:flex-col gap-1.5 w-full">
+              {galleryImages.length > 1 && (
                 <button
-                  key={idx}
                   type="button"
-                  onClick={() => {
-                    if (idx !== activeImageIndex) {
-                      setIsImageLoading(true);
-                      setActiveImageIndex(idx);
-                    }
-                  }}
-                  aria-label={`Select angle ${idx + 1}`}
-                  className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border-2 shrink-0 transition cursor-pointer ${
-                    activeImageIndex === idx
-                      ? 'border-[#C85A32] shadow-sm scale-102 ring-2 ring-[#C85A32]/20'
-                      : 'border-slate-200 hover:border-slate-400 opacity-70 hover:opacity-100'
-                  }`}
+                  onClick={handleRemoveAllExtraImages}
+                  title="Remove all extra pictures and keep only the primary photo"
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
                 >
-                  <img
-                    src={imgUrl}
-                    alt={`${product.title} angle ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Remove Extra ({galleryImages.length - 1})</span>
                 </button>
-              ))}
+              )}
+              <button
+                type="button"
+                onClick={() => setIsManagePhotosOpen(true)}
+                title="Manage product photographs"
+                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Photos ({galleryImages.length})</span>
+              </button>
             </div>
-          )}
+          </div>
 
           {/* Main Display Stage with Touch Gestures and Hover Zoom */}
           <div
@@ -521,19 +575,17 @@ export const ProductDetailPage: React.FC = () => {
               </>
             )}
 
-            {/* Top Right Actions: Lightbox and Maker Image Management */}
+            {/* Top Right Actions: Lightbox and Image Management */}
             <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-              {isAuthorizedToEdit && (
-                <button
-                  type="button"
-                  onClick={() => setIsManagePhotosOpen(true)}
-                  title="Manage product photographs"
-                  className="px-3 py-1.5 rounded-full bg-[#1E293B] text-white hover:bg-[#C85A32] text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>Edit Photos</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setIsManagePhotosOpen(true)}
+                title="Manage or remove product photographs"
+                className="px-3 py-1.5 rounded-full bg-[#1E293B] text-white hover:bg-[#C85A32] text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>Manage Photos</span>
+              </button>
 
               <button
                 type="button"
@@ -794,7 +846,7 @@ export const ProductDetailPage: React.FC = () => {
               <div className="min-w-0">
                 <p className="text-sm font-bold text-slate-800 truncate">{product.maker}</p>
                 <p className="text-xs text-slate-500 truncate flex items-center gap-1">
-                  <School className="w-3.5 h-3.5 shrink-0" />
+                  <Building2 className="w-3.5 h-3.5 shrink-0" />
                   <span>{product.cls}, {product.school}</span>
                 </p>
               </div>
@@ -1251,6 +1303,22 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* Multi-Photo Manager */}
             <div className="space-y-4">
+              {galleryImages.length > 1 && (
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                  <div className="text-xs text-slate-600">
+                    <strong>{galleryImages.length} pictures</strong> ({galleryImages.length - 1} extra {galleryImages.length - 1 === 1 ? 'picture' : 'pictures'})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveAllExtraImages}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove All Extra Pictures</span>
+                  </button>
+                </div>
+              )}
+
               <MultiImageUploader
                 images={galleryImages}
                 primaryImage={product.image}
@@ -1264,10 +1332,10 @@ export const ProductDetailPage: React.FC = () => {
                   setActiveImageIndex(0);
                   showToast(`Updated craft gallery (${updatedList.length} photographs)!`, 'check-circle');
                 }}
-                minImages={2}
+                minImages={1}
                 maxImages={8}
                 label="Craft Photo Gallery"
-                helperText="Upload new photographs from your device or add image URLs. Drag or use arrows to reorder, and star the primary image."
+                helperText="Upload photos from your device or web URLs. Star the primary image, and use the trash icon or delete button to remove any extra pictures."
               />
             </div>
 

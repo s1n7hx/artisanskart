@@ -24,7 +24,7 @@ export const Footer: React.FC = () => {
             </p>
           </Link>
           <p className="text-sm mt-3 text-white/60 max-w-sm leading-relaxed">
-            A conscious marketplace empowering high school & university craft makers with a fair {makerEarningPercent}% earnings model, eco-friendly delivery, and campus recognition.
+            A conscious marketplace empowering independent creators, homemakers, and skilled artisans with a fair {makerEarningPercent}% earnings model, eco-friendly delivery, and nationwide recognition.
           </p>
           <div className="flex gap-3 mt-5 text-white/70">
             <a
@@ -104,10 +104,10 @@ export const Footer: React.FC = () => {
           </ul>
         </div>
 
-        {/* For Student Makers */}
+        {/* For Independent Makers */}
         <div>
           <p className="font-semibold text-white mb-3 text-sm uppercase tracking-wide">
-            Student Makers
+            Independent Makers
           </p>
           <ul className="space-y-2 text-sm text-white/60">
             <li>
@@ -171,7 +171,7 @@ export const Footer: React.FC = () => {
               </li>
             )}
             <li className="pt-2 text-xs text-white/50">
-              <span className="block text-white/80 font-medium">Student Support:</span>
+              <span className="block text-white/80 font-medium">Artisan &amp; Buyer Support:</span>
               hello@artisanskart.in
             </li>
           </ul>
@@ -179,9 +179,9 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto border-t border-slate-800 mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-white/40">
-        <p>© 2026 ArtisansKart.in — Empowering youth creativity across campuses.</p>
+        <p>© 2026 ArtisansKart.in — Empowering handmade creativity and independent artisans across India.</p>
         <p className="flex items-center gap-1">
-          Crafted with <Heart className="w-3.5 h-3.5 text-[#C85A32] fill-[#C85A32]" /> for student artisans
+          Crafted with <Heart className="w-3.5 h-3.5 text-[#C85A32] fill-[#C85A32]" /> for independent creators &amp; artisans
         </p>
       </div>
     </footer>

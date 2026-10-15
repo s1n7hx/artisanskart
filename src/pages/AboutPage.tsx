@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Flower2, Scissors, Paintbrush, Gift, ArrowRight, Heart, Sparkles, School, ShieldCheck } from 'lucide-react';
+import { Flower2, Scissors, Paintbrush, Gift, ArrowRight, Heart, Sparkles, Building2, ShieldCheck } from 'lucide-react';
 import { ABOUT_TEXT } from '../data';
 import { useApp } from '../context/AppContext';
 
@@ -32,12 +32,12 @@ export const AboutPage: React.FC = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const partnerSchools = [
-    { name: 'Sir J.J. School of Art', city: 'Mumbai', students: '28 Makers', craft: 'Ceramics & Printmaking' },
-    { name: 'Faculty of Fine Arts (MSU)', city: 'Vadodara', students: '22 Makers', craft: 'Terracotta & Glazes' },
-    { name: 'College of Art (Delhi Univ)', city: 'New Delhi', students: '34 Makers', craft: 'Botanical Illustration' },
-    { name: 'Abhinav Kala Mahavidyalaya', city: 'Pune', students: '18 Makers', craft: 'Woodcraft & Macramé' },
-    { name: 'Stella Maris College', city: 'Chennai', students: '19 Makers', craft: 'Handmade Stationery' },
+  const partnerStudios = [
+    { name: 'Sir J.J. Atelier & Studio Guild', city: 'Mumbai', makers: '28 Active Makers', craft: 'Ceramics & Printmaking' },
+    { name: 'Heritage Fine Arts Collective', city: 'Vadodara', makers: '22 Active Makers', craft: 'Terracotta & Glazes' },
+    { name: 'Delhi Independent Craft Atelier', city: 'New Delhi', makers: '34 Active Makers', craft: 'Botanical Illustration' },
+    { name: 'Abhinav Artisan Guild', city: 'Pune', makers: '18 Active Makers', craft: 'Woodcraft & Macramé' },
+    { name: 'Chennai Handcraft Collective', city: 'Chennai', makers: '19 Active Makers', craft: 'Handmade Stationery' },
   ];
 
   return (
@@ -132,7 +132,7 @@ export const AboutPage: React.FC = () => {
 
           <div className="bg-white rounded-3xl p-8 border border-[#e7e0d8] shadow-sm">
             <div className="w-14 h-14 rounded-2xl bg-[#8A9A86]/20 flex items-center justify-center text-[#5c6a58] mb-6">
-              <School className="w-7 h-7" />
+              <Building2 className="w-7 h-7" />
             </div>
             <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Independent Craft Studios</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
@@ -158,7 +158,7 @@ export const AboutPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Partner Schools Showcase */}
+      {/* Partner Studios Showcase */}
       <section className="max-w-7xl mx-auto px-4 md:px-8">
         <div className="bg-white rounded-3xl border border-[#e7e0d8] p-8 md:p-12 shadow-sm">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
@@ -182,7 +182,7 @@ export const AboutPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {partnerSchools.map((s, idx) => (
+            {partnerStudios.map((s, idx) => (
               <div
                 key={idx}
                 className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] flex flex-col justify-between"
@@ -190,7 +190,7 @@ export const AboutPage: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                     <span>{s.city}</span>
-                    <span className="text-[#C85A32] font-semibold">{s.students}</span>
+                    <span className="text-[#C85A32] font-semibold">{s.makers}</span>
                   </div>
                   <h3 className="font-bold text-[#1E293B] text-base">{s.name}</h3>
                 </div>

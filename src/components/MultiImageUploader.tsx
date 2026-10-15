@@ -11,6 +11,7 @@ import {
   Plus,
   CheckCircle2,
   Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import { processAndUploadImage } from '../services/supabase';
 
@@ -30,9 +31,9 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   primaryImage = '',
   onChange,
   maxImages = 8,
-  minImages = 2,
+  minImages = 1,
   label = 'Product Photographs',
-  helperText = 'Upload at least 2 and up to 8 photos. First or starred photo is the primary storefront photo.',
+  helperText = 'Upload 1 or more photos. First or starred photo is the primary storefront photo. Extra photos can be reordered or removed at any time.',
   className = '',
 }) => {
   const [urlInput, setUrlInput] = useState('');
@@ -133,6 +134,12 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
     const updated = currentImages.filter((img) => img !== targetUrl);
     const newPrimary = effectivePrimary === targetUrl ? (updated[0] || '') : effectivePrimary;
     onChange(updated, newPrimary);
+  };
+
+  const handleRemoveAllExtraImages = () => {
+    if (currentImages.length <= 1) return;
+    const primary = effectivePrimary || currentImages[0];
+    onChange([primary], primary);
   };
 
   const handleMove = (index: number, direction: 'left' | 'right') => {
@@ -267,18 +274,23 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
         <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
           <span>
-            <strong>{currentImages.length} of {minImages} minimum photos added.</strong> Please upload at least {minImages} photos (e.g. front angle, close-up texture, packaging) so customers can inspect your craft thoroughly.
+            <strong>Please add at least 1 primary photograph</strong> of your craft to display in the marketplace.
           </span>
         </div>
       ) : (
-        <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between gap-2">
+        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
             <span className="font-medium">
-              Gallery requirement met ({currentImages.length} photos).
+              Ready for catalog ({currentImages.length} {currentImages.length === 1 ? 'photo' : 'photos'}).
             </span>
+            {currentImages.length > 1 && (
+              <span className="text-slate-500 font-normal ml-1">
+                ({currentImages.length - 1} extra {currentImages.length - 1 === 1 ? 'picture' : 'pictures'})
+              </span>
+            )}
           </div>
-          <span className="text-[11px] text-emerald-700">
+          <span className="text-[11px] text-emerald-700 font-semibold">
             ★ Primary: #{currentImages.indexOf(effectivePrimary) + 1}
           </span>
         </div>
@@ -286,10 +298,23 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
 
       {/* Image Gallery Previews Grid with Controls */}
       {currentImages.length > 0 && (
-        <div className="space-y-2 pt-1">
-          <p className="text-xs font-bold text-slate-600">
-            Uploaded Photos ({currentImages.length}) — Click star to set storefront primary, arrows to reorder
-          </p>
+        <div className="space-y-2.5 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-bold text-slate-700">
+              Product Photos ({currentImages.length})
+            </p>
+            {currentImages.length > 1 && (
+              <button
+                type="button"
+                onClick={handleRemoveAllExtraImages}
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 transition cursor-pointer"
+                title="Remove all extra pictures and keep only the primary photo"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Remove All Extra Pictures ({currentImages.length - 1})</span>
+              </button>
+            )}
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {currentImages.map((imgUrl, index) => {
@@ -316,6 +341,16 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                         <Star className="w-3 h-3 fill-white" /> Primary
                       </span>
                     )}
+
+                    {/* Persistent Remove Button (Top-Right) */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(imgUrl)}
+                      title={isPrimary ? 'Remove photo' : 'Remove extra picture'}
+                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center shadow-md cursor-pointer transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
 
                     {/* Quick Action Overlay */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2">
@@ -356,9 +391,9 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                         type="button"
                         onClick={() => handleRemoveImage(imgUrl)}
                         title="Remove Photo"
-                        className="p-1.5 rounded-full bg-red-600 text-white hover:bg-red-700 shadow-md cursor-pointer transition"
+                        className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 shadow-md cursor-pointer transition"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -366,17 +401,26 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                   {/* Photo Bottom Bar */}
                   <div className="p-2 flex items-center justify-between text-[11px] bg-slate-50 border-t border-slate-100">
                     <span className="font-bold text-slate-500">#{index + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleSetPrimary(imgUrl)}
-                      className={`text-[10px] font-bold cursor-pointer transition ${
-                        isPrimary
-                          ? 'text-[#C85A32]'
-                          : 'text-slate-400 hover:text-slate-700'
-                      }`}
-                    >
-                      {isPrimary ? '★ Primary' : 'Make Primary'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {!isPrimary && (
+                        <button
+                          type="button"
+                          onClick={() => handleSetPrimary(imgUrl)}
+                          className="text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                        >
+                          Make Primary
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(imgUrl)}
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer flex items-center gap-0.5"
+                        title="Remove picture"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

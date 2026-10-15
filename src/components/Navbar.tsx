@@ -65,7 +65,7 @@ export const Navbar: React.FC = () => {
               ArtisansKart<span className="text-[#C85A32]">.in</span>
             </p>
             <span className="hidden sm:inline-block badge-sage text-[10px] px-2 py-0.5 rounded-full font-medium tracking-wide">
-              Handcrafted by Student Artisans
+              Handcrafted by Independent Artisans
             </span>
           </div>
         </NavLink>
@@ -78,7 +78,7 @@ export const Navbar: React.FC = () => {
             type="text"
             value={searchTerm}
             onChange={handleSearchChange}
-            placeholder="Search crafts, makers, schools..."
+            placeholder="Search crafts, makers, studios..."
             className="w-full pl-9 pr-3 py-2 rounded-full bg-white/80 border border-[#e7e0d8] text-sm placeholder:text-slate-400 transition focus:bg-white focus:border-[#C85A32] focus:outline-hidden"
           />
         </div>
@@ -271,7 +271,7 @@ export const Navbar: React.FC = () => {
           type="text"
           value={searchTerm}
           onChange={handleSearchChange}
-          placeholder="Search products, makers, schools..."
+          placeholder="Search products, makers, studios..."
           className="w-full pl-9 pr-3 py-2.5 rounded-full bg-white border border-[#e7e0d8] text-sm placeholder:text-slate-400 focus:outline-hidden focus:border-[#C85A32] shadow-xs"
         />
       </div>

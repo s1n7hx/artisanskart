@@ -73,7 +73,7 @@ export const Marquee: React.FC = () => {
   return (
     <section
       id="marqueeSection"
-      aria-label="Student Craft Showcase"
+      aria-label="Artisan Craft Showcase"
       className="relative bg-[#FAF9F6] py-4 sm:py-6 overflow-hidden select-none border-y border-[#e7e0d8]/80"
     >
       {/* Edge gradient fade masks */}

@@ -61,7 +61,7 @@ export const LoginPage: React.FC = () => {
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C85A32]/10 text-[#C85A32] text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Fair-Trade Student Marketplace</span>
+            <span>Fair-Trade Artisan Marketplace</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Sign in to ArtisansKart

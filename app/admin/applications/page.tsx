@@ -203,7 +203,7 @@ export default function AdminMakerApplicationsPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by student name, email, school, or class..."
+              placeholder="Search by creator name, email, studio, or craft category..."
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 text-xs focus:outline-hidden focus:border-[#C85A32] bg-[#FAF9F6]"
             />
           </div>
@@ -225,7 +225,7 @@ export default function AdminMakerApplicationsPage() {
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
             <h3 className="text-base font-bold text-slate-800">All caught up!</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
-              There are currently no pending maker applications awaiting administrative review. New student submissions will appear here automatically.
+              There are currently no pending maker applications awaiting administrative review. New artisan submissions will appear here automatically.
             </p>
           </div>
         ) : (

@@ -21,15 +21,15 @@
                 </div>
             </div>
             <div>
-                <h4 style="font-size:14px; font-weight:800; color:#ffffff; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Student Creator Pledge</h4>
+                <h4 style="font-size:14px; font-weight:800; color:#ffffff; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Artisan Creator Pledge</h4>
                 <p style="font-size:13px; color:#cbd5e1; line-height:1.7;">
-                    65% of all proceeds go directly into verified student creator accounts. Every piece is 100% made to order with plastic-free, recyclable packaging.
+                    65% of all proceeds go directly into verified independent creator accounts. Every piece is 100% made to order with plastic-free, recyclable packaging.
                 </p>
             </div>
         </div>
         <div class="ak-container" style="border-top:1px solid #334155; margin-top:48px; padding-top:24px; font-size:13px; color:#94a3b8; display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px;">
-            <span>&copy; <?php echo date('Y'); ?> ArtisansKart.in • Handcrafted with Pride by Student Creators across India</span>
-            <span>Crafted for Student Entrepreneurs</span>
+            <span>&copy; <?php echo date('Y'); ?> ArtisansKart.in • Handcrafted with Pride by Independent Artisans across India</span>
+            <span>Crafted for Independent Creators</span>
         </div>
     </footer>
 
@@ -112,8 +112,8 @@ function openCraftModal(id) {
     document.getElementById('modalImg').src = item.image;
     document.getElementById('modalCat').innerText = item.category;
     document.getElementById('modalTitle').innerText = item.title;
-    document.getElementById('modalMaker').innerText = '🎨 ' + (item.maker || 'Student Maker');
-    document.getElementById('modalSchool').innerText = (item.cls || 'Class 10') + ', ' + (item.school || 'Campus Studio');
+    document.getElementById('modalMaker').innerText = '🎨 ' + (item.maker || 'Artisan Maker');
+    document.getElementById('modalSchool').innerText = (item.cls || 'Artisan Series') + ', ' + (item.school || 'Independent Studio Guild');
     document.getElementById('modalDesc').innerText = item.description;
     document.getElementById('modalPrice').innerText = '₹' + item.price;
 

@@ -62,7 +62,7 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
       <div className="text-center mb-8">
         <h2 className="fade-in text-3xl md:text-5xl font-black text-[#1E293B]">The Marketplace</h2>
         <p className="fade-in text-slate-500 mt-2 max-w-2xl mx-auto">
-          Every craft below is made-on-demand by talented student artisans. Descriptions and details can be managed via WordPress or the Live Content Hub without touching code.
+          Every craft below is made-on-demand by talented independent artisans. Descriptions and details can be managed via WordPress or the Live Content Hub without touching code.
         </p>
 
         {/* Content Management Quick Bar */}

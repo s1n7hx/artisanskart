@@ -321,7 +321,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
       reviews: 1,
       maker: 'Artisan',
       cls: 'Fine Arts',
-      school: 'Campus Art Studio',
+      school: 'Independent Art Studio',
       image: 'https://images.pexels.com/photos/18646120/pexels-photo-18646120.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940',
       stock: 'Made on Demand',
       source: 'custom',
@@ -1200,6 +1200,28 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                             />
                           )}
                         </div>
+                        {currentProduct && currentProduct.images && currentProduct.images.length > 1 && (
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-xs text-slate-500 font-medium">
+                              This craft currently has {currentProduct.images.length} gallery photos.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated: Product = {
+                                  ...currentProduct,
+                                  image: editImage,
+                                  images: [editImage],
+                                };
+                                updateProduct(updated);
+                                showToast(`Removed ${currentProduct.images!.length - 1} extra photos from "${editTitle}"!`, 'trash-2');
+                              }}
+                              className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1 rounded-xl transition cursor-pointer"
+                            >
+                              Remove Extra Pictures ({currentProduct.images.length - 1})
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Category & Stock */}
@@ -1233,11 +1255,11 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Student Maker & School Details */}
+                      {/* Artisan Maker & Studio Details */}
                       <div className="grid sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                            Student Maker
+                            Artisan / Maker
                           </label>
                           <input
                             type="text"
@@ -1249,26 +1271,26 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                            Class / Dept
+                            Series / Edition
                           </label>
                           <input
                             type="text"
                             value={editCls}
                             onChange={(e) => setEditCls(e.target.value)}
                             className="w-full px-3.5 py-2.5 rounded-xl border border-[#e7e0d8] text-sm focus:border-[#C85A32] focus:outline-hidden"
-                            placeholder="e.g. Class 10 / B.Des"
+                            placeholder="e.g. Master Artisan / Series 1"
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                            School / College
+                            Studio / Collective
                           </label>
                           <input
                             type="text"
                             value={editSchool}
                             onChange={(e) => setEditSchool(e.target.value)}
                             className="w-full px-3.5 py-2.5 rounded-xl border border-[#e7e0d8] text-sm focus:border-[#C85A32] focus:outline-hidden"
-                            placeholder="e.g. DPS RK Puram"
+                            placeholder="e.g. Fine Arts Studio Guild"
                           />
                         </div>
                       </div>

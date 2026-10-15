@@ -71,7 +71,7 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
     amount: amount,
     currency: currency || 'INR',
     name: 'ArtisansKart.in',
-    description: options.description || 'Handcrafted Student Crafts Purchase',
+    description: options.description || 'Handcrafted Artisan Crafts Purchase',
     image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=256&q=80',
     order_id: orderId,
     prefill: {

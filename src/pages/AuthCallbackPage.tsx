@@ -119,7 +119,7 @@ export const AuthCallbackPage: React.FC = () => {
             showToast('Master Author verified! Welcome to the Admin Portal.', 'shield-check');
             navigate('/admin', { replace: true });
           } else if (assignedRole === 'maker') {
-            showToast(`Welcome back, Student Maker ${userAccount.name}!`, 'sparkles');
+            showToast(`Welcome back, Maker ${userAccount.name}!`, 'sparkles');
             navigate(next || '/maker', { replace: true });
           } else {
             showToast(`Signed in successfully as ${userAccount.name}`, 'check-circle-2');

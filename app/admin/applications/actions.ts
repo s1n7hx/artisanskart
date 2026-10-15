@@ -80,7 +80,7 @@ export async function getPendingApplications(): Promise<ApplicationRecord[]> {
     return {
       ...app,
       applicant_email: applicant?.email || 'Unknown email',
-      applicant_name: applicant?.full_name || 'Student Applicant',
+      applicant_name: applicant?.full_name || 'Artisan Applicant',
     };
   });
 }

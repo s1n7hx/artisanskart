@@ -8,11 +8,11 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-ArtisansKart is a modern, handcrafted marketplace theme powered by student artisans with headless WordPress REST API support and Gutenberg live description editing.
+ArtisansKart is a modern, handcrafted marketplace theme powered by independent artisans with headless WordPress REST API support and Gutenberg live description editing.
 
 == Description ==
 
-ArtisansKart connects campus makers, fine arts students, and craft lovers directly. Built with React and full WordPress REST API integration, you can manage crafts, prices, maker names, and descriptions directly from WordPress Gutenberg editor.
+ArtisansKart connects independent makers, artisans, and craft lovers directly. Built with React and full WordPress REST API integration, you can manage crafts, prices, maker names, and descriptions directly from WordPress Gutenberg editor.
 
 == Installation ==
 
@@ -20,14 +20,14 @@ ArtisansKart connects campus makers, fine arts students, and craft lovers direct
 2. In your WordPress Admin Dashboard, navigate to **Appearance > Themes > Add New > Upload Theme**.
 3. Choose `artisanskart-theme.zip` and click **Install Now**.
 4. Click **Activate**.
-5. Go to **Student Crafts > All Crafts** in your WordPress admin menu to edit descriptions, add new items, or adjust prices!
+5. Go to **Artisan Crafts > All Crafts** in your WordPress admin menu to edit descriptions, add new items, or adjust prices!
 
 == Frequently Asked Questions ==
 
 = How do I edit product descriptions? =
-Go to WordPress Admin > "Student Crafts" (or "Posts"), click "Edit" on any craft, edit the description directly in Gutenberg, and click Update. The storefront immediately reflects your changes!
+Go to WordPress Admin > "Artisan Crafts" (or "Posts"), click "Edit" on any craft, edit the description directly in Gutenberg, and click Update. The storefront immediately reflects your changes!
 
-= Where do I configure student maker info and pricing? =
+= Where do I configure maker info and pricing? =
 Under the post editor, use the custom fields `price`, `maker`, `school`, `stock`, `rating`.
 
 == Changelog ==
