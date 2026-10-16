@@ -24,7 +24,7 @@ export const HowItWorksPage: React.FC = () => {
     },
     {
       q: 'What if a delicate ceramic or clay item arrives broken?',
-      a: 'We use double-layered honeycomb paper wrap and heavy-duty corrugated cartons. In the rare event of damage during transit, we provide an immediate free remake or a 100% hassle-free refund.',
+      a: 'We use professional, shock-resistant protective packaging. In the rare event of damage during transit, we provide an immediate free remake or a 100% hassle-free refund.',
     },
     {
       q: 'Can creators balance their schedule while selling on ArtisansKart?',
@@ -133,12 +133,12 @@ export const HowItWorksPage: React.FC = () => {
 
             <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
               <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-[#8A9A86]">15% Eco Dispatch</span>
+                <span className="text-xs uppercase font-bold text-[#8A9A86]">Packaging Fee</span>
                 <Truck className="w-4 h-4 text-[#8A9A86]" />
               </div>
               <p className="text-3xl font-black text-white">₹{packagingDelivery.toLocaleString('en-IN')}</p>
               <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Zero-plastic biodegradable honeycomb wrapping, rigid carton boxes, and doorstep tracked courier.
+                Professional protective packaging and doorstep tracked courier.
               </p>
             </div>
 

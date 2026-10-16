@@ -218,19 +218,23 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       });
     }
 
-    // Shipping computation
-    const shippingFee = itemsTotal >= 499 ? 0 : 49;
+    // Packaging fee computation (Fixed: Small < 1kg = ₹30, Big >= 1kg = ₹60)
+    let packagingFee = 0;
+    for (const item of items) {
+      const weight = Number(item.weightKg || 0.5);
+      packagingFee += weight < 1 ? 30 : 60;
+    }
 
     // Secure server-authoritative coupon evaluation
     const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
 
-    const finalPayable = Math.max(0, itemsTotal + shippingFee - discountAmount);
+    const finalPayable = Math.max(0, itemsTotal + packagingFee - discountAmount);
 
     return res.json({
       valid: true,
       itemsTotal,
-      shippingFee,
+      packagingFee,
       discountAmount,
       totalAmount: finalPayable,
       validatedItems,
@@ -239,6 +243,7 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       currency: 'INR',
       pincodeServiceable: Boolean(pincode && pincode.length === 6),
     });
+
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Validation failed.' });
   }
@@ -376,16 +381,22 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
       itemsTotal += price * qty;
     }
 
+    // Packaging fee computation (Fixed: Small < 1kg = ₹30, Big >= 1kg = ₹60)
+    let packagingFee = 0;
+    for (const item of items) {
+      const weight = Number(item.weightKg || 0.5);
+      packagingFee += weight < 1 ? 30 : 60;
+    }
+
     const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
-    const shippingFee = itemsTotal >= 499 ? 0 : 49;
-    const grandTotal = Math.max(0, itemsTotal - discountAmount + shippingFee);
+    const grandTotal = Math.max(0, itemsTotal - discountAmount + packagingFee);
 
     return res.json({
       success: true,
       itemsTotal,
       discountAmount,
-      shippingFee,
+      packagingFee,
       grandTotal,
       couponApplied: discountAmount > 0 ? couponResult.code : null,
       couponMessage: couponResult.message || '',

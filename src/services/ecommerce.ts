@@ -690,7 +690,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     paymentStatus: (orderData.paymentStatus || 'paid') as PaymentStatus,
     paymentMethod: (orderData.paymentMethod || 'razorpay') as PaymentMethod,
     trackingAwb: orderData.trackingAwb || `SR-AK-${Math.floor(100000 + Math.random() * 900000)}`,
-    courierName: orderData.courierName || 'BlueDart / Delhivery Eco',
+    courierName: orderData.courierName || 'BlueDart / Delhivery',
     createdAt: new Date().toISOString(),
     items: orderData.items || [],
     makerId: orderData.makerId || orderData.items?.[0]?.makerId,

@@ -1025,7 +1025,7 @@ get_header();
                 <div style="width:56px; height:56px; border-radius:18px; background:#F1EDE8; color:#1E293B; font-weight:900; font-size:24px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">3</div>
                 <div>
                     <span class="badge-sage">100% Plastic-Free</span>
-                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Eco-Friendly Hand-Wrapping</h3>
+                    <h3 style="font-size:20px; font-weight:800; color:#1E293B; margin:4px 0 8px 0;">Hand-Wrapping</h3>
                     <p style="font-size:14px; color:#64748b; line-height:1.7;">Every item is cushioned in recycled kraft paper, tied with jute twine, and packed with a handwritten note.</p>
                 </div>
             </div>

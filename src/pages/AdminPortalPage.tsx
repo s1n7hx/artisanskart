@@ -707,8 +707,8 @@ export const AdminPortalPage: React.FC = () => {
 
                 <div className="p-3 bg-white rounded-xl border border-slate-200 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">Packaging Standard</span>
-                  <p className="font-black text-slate-900 text-sm">Eco Protective Cushioning</p>
-                  <p className="text-[10px] text-slate-500">100% biodegradable corrugated wrap.</p>
+                  <p className="font-black text-slate-900 text-sm">Protective Cushioning</p>
+                  <p className="text-[10px] text-slate-500">Secure protective corrugated wrap.</p>
                 </div>
               </div>
             </div>

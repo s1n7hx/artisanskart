@@ -347,7 +347,7 @@ export async function createShipmentOrder(params: {
     mode: 'simulation',
     orderNumber,
     awb,
-    courierName: 'Delhivery Surface (Eco-Packaging)',
+    courierName: 'Delhivery Surface',
     status: 'AWB_ASSIGNED',
     trackingUrl: `https://shiprocket.co/tracking/${awb}`,
     pickupScheduled: 'Next business day at Fulfillment Hub',

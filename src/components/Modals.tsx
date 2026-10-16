@@ -204,7 +204,7 @@ export const Modals: React.FC<ModalsProps> = ({
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-[#1E293B]">Complete Your Order</h3>
-                  <p className="text-xs text-slate-500">Handcrafted by independent artisans with verified eco dispatch.</p>
+                  <p className="text-xs text-slate-500">Handcrafted by independent artisans with professional packaging.</p>
                 </div>
               </div>
               <button
@@ -296,7 +296,7 @@ export const Modals: React.FC<ModalsProps> = ({
                 <span id="checkoutItemsTotal" className="font-semibold text-slate-800">{formatINR(total)}</span>
               </div>
               <div className="flex justify-between mb-1 text-slate-600 text-xs">
-                <span>Artisan Eco-Friendly Packaging</span>
+                <span>Artisan Packaging</span>
                 <span className="text-[#8A9A86] font-semibold">Free</span>
               </div>
               <div className="flex justify-between font-bold border-t border-black/10 pt-2 mt-2 text-base text-[#1E293B]">

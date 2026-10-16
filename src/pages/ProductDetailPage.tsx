@@ -115,7 +115,7 @@ export const ProductDetailPage: React.FC = () => {
     }
     return [
       { id: 'standard', name: 'Standard Edition', inStock: true },
-      { id: 'gift-box', name: 'Eco Gift Box Packaging (+₹50)', price: (product.price || 299) + 50, inStock: true },
+      { id: 'gift-box', name: 'Gift Box Packaging (+₹50)', price: (product.price || 299) + 50, inStock: true },
     ];
   }, [product]);
 
@@ -950,7 +950,7 @@ export const ProductDetailPage: React.FC = () => {
             </div>
             <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#FAF9F6] border border-[#e7e0d8]">
               <Leaf className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="leading-tight font-medium">Eco Packaging</span>
+              <span className="leading-tight font-medium">Packaging</span>
             </div>
           </div>
 
@@ -1121,7 +1121,7 @@ export const ProductDetailPage: React.FC = () => {
                     <PackageCheck className="w-4 h-4 text-emerald-600" /> Safe Transit Packaging
                   </h4>
                   <p className="text-xs text-slate-600">
-                    Each handcrafted piece is bubble-wrapped and packed with recycled, shock-resistant material to reach you safely.
+                    Each handcrafted piece is carefully wrapped and packed with shock-resistant material to reach you safely.
                   </p>
                 </div>
               </div>

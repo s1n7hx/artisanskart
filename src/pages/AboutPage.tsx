@@ -78,7 +78,7 @@ export const AboutPage: React.FC = () => {
             </div>
             <h3 className="text-2xl font-bold text-[#1E293B] mb-3">{makerEarningPercent}% Direct Split</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Creators receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and secure platform fulfillment.
+              Creators receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers packaging, courier logistics, and secure platform fulfillment.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
               Direct transfer upon delivery confirmation.
@@ -104,7 +104,7 @@ export const AboutPage: React.FC = () => {
             </div>
             <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Zero Plastic Pledge</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Every parcel uses honeycomb craft paper, water-activated paper tape, and plant-starch mailer bags. We leave zero toxic footprint.
+              Every parcel uses durable protective packaging to ensure safe delivery. We leave zero toxic footprint.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
               100% compostable packaging supplied to creators.

@@ -282,9 +282,8 @@ export const CheckoutPage: React.FC = () => {
 
   // Pricing calculations
   const itemsSubtotal = checkoutItems.reduce((sum, item) => sum + item.subtotal, 0);
-  const shippingFee = itemsSubtotal >= 499 || itemsSubtotal === 0 ? 0 : 49;
+  const [shippingFee, setShippingFee] = useState(0);
   const grandTotal = Math.max(0, itemsSubtotal + shippingFee - couponDiscount);
-
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
   // Coupon handling
@@ -400,7 +399,7 @@ export const CheckoutPage: React.FC = () => {
           shippingAddress: shippingAddressObj,
           amount: verifiedTotal,
           itemsTotal: itemsSubtotal,
-          shippingFee,
+          packagingFee,
           discountAmount: couponDiscount,
           status: 'awaiting_maker_acceptance',
           paymentStatus: 'cod',
@@ -442,7 +441,7 @@ export const CheckoutPage: React.FC = () => {
             shippingAddress: shippingAddressObj,
             amount: verifiedTotal,
             itemsTotal: itemsSubtotal,
-            shippingFee,
+            packagingFee,
             discountAmount: couponDiscount,
             status: 'awaiting_maker_acceptance',
             paymentStatus: 'paid',
@@ -828,7 +827,7 @@ export const CheckoutPage: React.FC = () => {
                     </div>
                     {courierResult.serviceable && (
                       <span className="text-[10px] font-bold bg-white text-blue-800 px-2.5 py-1 rounded-full border border-blue-200 shrink-0">
-                        {shippingFee === 0 ? 'Free Shipping' : '₹49 Eco-Delivery'}
+                        {packagingFee === 0 ? 'Free Packaging' : `₹${packagingFee} Packaging Fee`}
                       </span>
                     )}
                   </div>
@@ -1104,7 +1103,7 @@ export const CheckoutPage: React.FC = () => {
               )}
 
               <div className="flex items-center justify-between">
-                <span>Shipping Charges</span>
+                <span>Packaging Fee</span>
                 <span className="font-bold text-slate-900">
                   {shippingFee === 0 ? (
                     <span className="text-emerald-700">FREE</span>
