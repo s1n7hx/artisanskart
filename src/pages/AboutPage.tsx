@@ -1,44 +1,27 @@
-import React, { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { Flower2, Scissors, Paintbrush, Gift, ArrowRight, Heart, Sparkles, Building2, ShieldCheck } from 'lucide-react';
-import { ABOUT_TEXT } from '../data';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Sparkles, Heart, ShieldCheck, ArrowRight, Flower2, Scissors, Palette, Award, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const AboutPage: React.FC = () => {
   const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
-  const pRef = useRef<HTMLParagraphElement>(null);
-  const chars = ABOUT_TEXT.split('');
+  const navigate = useNavigate();
 
+  // Scroll reveal effect
   useEffect(() => {
-    const p = pRef.current;
-    if (!p) return;
-    const spans = p.querySelectorAll<HTMLSpanElement>('span');
-
     const onScroll = () => {
-      const rect = p.getBoundingClientRect();
-      const vh = window.innerHeight;
-      const start = vh * 0.85;
-      const end = vh * 0.2;
-      let progress = (start - rect.top) / (start - end);
-      progress = Math.max(0, Math.min(1, progress));
-      const revealCount = Math.floor(progress * spans.length);
-      spans.forEach((s, i) => {
-        s.style.opacity = i < revealCount ? '1' : '0.2';
+      const elements = document.querySelectorAll('.fade-in');
+      elements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight * 0.9) {
+          el.classList.add('visible');
+        }
       });
     };
-
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  const partnerStudios = [
-    { name: 'Sir J.J. Atelier & Studio Guild', city: 'Mumbai', makers: '28 Active Makers', craft: 'Ceramics & Printmaking' },
-    { name: 'Heritage Fine Arts Collective', city: 'Vadodara', makers: '22 Active Makers', craft: 'Terracotta & Glazes' },
-    { name: 'Delhi Independent Craft Atelier', city: 'New Delhi', makers: '34 Active Makers', craft: 'Botanical Illustration' },
-    { name: 'Abhinav Artisan Guild', city: 'Pune', makers: '18 Active Makers', craft: 'Woodcraft & Macramé' },
-    { name: 'Chennai Handcraft Collective', city: 'Chennai', makers: '19 Active Makers', craft: 'Handmade Stationery' },
-  ];
 
   return (
     <div className="space-y-20 py-8">
@@ -55,57 +38,29 @@ export const AboutPage: React.FC = () => {
         </p>
       </section>
 
-      {/* Interactive Char-by-Char Scroll Reveal Section with Floating Icons */}
+      {/* Interactive Floating Icons Section */}
       <section className="relative bg-[#FAF9F6] border-y border-[#e7e0d8] px-5 md:px-10 py-24 overflow-hidden">
-        {/* Floating artisanal icons */}
-        <div
-          className="float-icon absolute top-10 left-[8%] md:left-[12%] text-[#C85A32] select-none pointer-events-auto p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8] hover:scale-125 transition-transform"
-          aria-hidden="true"
-        >
+        <div className="float-icon absolute top-10 left-[8%] md:left-[12%] text-[#C85A32] select-none pointer-events-none p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8]">
           <Flower2 className="w-8 h-8 md:w-10 md:h-10" />
         </div>
-        <div
-          className="float-icon float-delay-1 absolute top-20 right-[8%] md:right-[14%] text-[#8A9A86] select-none pointer-events-auto p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8] hover:scale-125 transition-transform"
-          aria-hidden="true"
-        >
+        <div className="float-icon absolute bottom-10 right-[8%] md:right-[12%] text-[#8A9A86] select-none pointer-events-none p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8]" style={{ animationDelay: '1s' }}>
           <Scissors className="w-8 h-8 md:w-10 md:h-10" />
         </div>
-        <div
-          className="float-icon float-delay-2 absolute bottom-12 left-[10%] md:left-[18%] text-[#E6A373] select-none pointer-events-auto p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8] hover:scale-125 transition-transform"
-          aria-hidden="true"
-        >
-          <Paintbrush className="w-8 h-8 md:w-10 md:h-10" />
-        </div>
-        <div
-          className="float-icon float-delay-3 absolute bottom-10 right-[10%] md:right-[16%] text-[#1E293B] select-none pointer-events-auto p-4 rounded-2xl bg-white/80 shadow-md border border-[#e7e0d8] hover:scale-125 transition-transform"
-          aria-hidden="true"
-        >
-          <Gift className="w-8 h-8 md:w-10 md:h-10" />
-        </div>
 
-        <div className="max-w-4xl mx-auto text-center relative z-10">
-          <p className="text-xs uppercase tracking-widest text-[#C85A32] font-bold mb-4">
-            Scroll to Reveal Our Manifesto
-          </p>
-          <p
-            ref={pRef}
-            id="charRevealPara"
-            className="text-2xl sm:text-3xl md:text-5xl font-black leading-tight select-none text-[#1E293B]"
-          >
-            {chars.map((ch, idx) => (
-              <span
-                key={idx}
-                className="transition-opacity duration-150 inline"
-                style={{ opacity: 0.2 }}
-              >
-                {ch}
-              </span>
-            ))}
+        <div className="max-w-3xl mx-auto text-center space-y-6 relative z-10">
+          <span className="badge-terracotta text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
+            Our Manifesto
+          </span>
+          <h2 className="text-3xl md:text-5xl font-black text-[#1E293B] leading-tight">
+            "Handmade is a dialogue between human hands and patient materials."
+          </h2>
+          <p className="text-slate-600 text-base md:text-lg leading-relaxed">
+            In an era of mass-produced inventory and automated warehouses, ArtisansKart celebrates the slow, deliberate work of individual makers. Every crochet stitch, ceramic glaze, and watercolor stroke carries the distinct signature of its creator.
           </p>
         </div>
       </section>
 
-      {/* 3 Core Pillars */}
+      {/* Three Guiding Pillars */}
       <section className="max-w-7xl mx-auto px-4 md:px-8">
         <div className="text-center max-w-xl mx-auto mb-14">
           <span className="badge-terracotta text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
@@ -123,23 +78,23 @@ export const AboutPage: React.FC = () => {
             </div>
             <h3 className="text-2xl font-bold text-[#1E293B] mb-3">{makerEarningPercent}% Direct Split</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              Creators receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and verified drop-off hubs.
+              Creators receive {makerEarningPercent}% of the total order value. The remaining {100 - makerEarningPercent}% covers sustainable carton packaging, courier logistics, and secure platform fulfillment.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
-              Direct UPI transfer every Friday upon delivery confirmation.
+              Direct transfer upon delivery confirmation.
             </div>
           </div>
 
           <div className="bg-white rounded-3xl p-8 border border-[#e7e0d8] shadow-sm">
             <div className="w-14 h-14 rounded-2xl bg-[#8A9A86]/20 flex items-center justify-center text-[#5c6a58] mb-6">
-              <Building2 className="w-7 h-7" />
+              <Palette className="w-7 h-7" />
             </div>
-            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Independent Craft Studios</h3>
+            <h3 className="text-2xl font-bold text-[#1E293B] mb-3">Independent Craft Focus</h3>
             <p className="text-slate-500 text-sm leading-relaxed mb-4">
-              We collaborate directly with independent design studios, artisan guilds, and homemaker collectives, setting up verified studio drop-off lockers.
+              We collaborate directly with independent makers, home crafters, and skilled artisans, providing a dedicated digital showcase for their handmade originals.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
-              Partnered with 12+ premier art and artisan guilds.
+              Supporting independent makers pan-India.
             </div>
           </div>
 
@@ -152,53 +107,8 @@ export const AboutPage: React.FC = () => {
               Every parcel uses honeycomb craft paper, water-activated paper tape, and plant-starch mailer bags. We leave zero toxic footprint.
             </p>
             <div className="bg-[#FAF9F6] p-3 rounded-xl text-xs font-semibold text-slate-700">
-              100% compostable packaging supplied free to makers.
+              100% compostable packaging supplied to creators.
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Partner Studios Showcase */}
-      <section className="max-w-7xl mx-auto px-4 md:px-8">
-        <div className="bg-white rounded-3xl border border-[#e7e0d8] p-8 md:p-12 shadow-sm">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-            <div>
-              <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
-                Creator Guilds
-              </span>
-              <h2 className="text-2xl md:text-3xl font-black text-[#1E293B] mt-2">
-                Active Partner Studios &amp; Guilds
-              </h2>
-              <p className="text-slate-500 text-sm mt-1">
-                Independent makers and artisans enrolled across these studios actively fulfill handcrafted orders.
-              </p>
-            </div>
-            <button
-              onClick={() => setIsMakerSignupOpen(true)}
-              className="btn-terracotta text-xs md:text-sm font-semibold px-5 py-2.5 rounded-full self-start md:self-auto cursor-pointer"
-            >
-              Add Your Studio
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {partnerStudios.map((s, idx) => (
-              <div
-                key={idx}
-                className="p-5 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span>{s.city}</span>
-                    <span className="text-[#C85A32] font-semibold">{s.makers}</span>
-                  </div>
-                  <h3 className="font-bold text-[#1E293B] text-base">{s.name}</h3>
-                </div>
-                <div className="mt-4 pt-3 border-t border-[#e7e0d8]/60 text-xs text-slate-500">
-                  Specialty: <span className="font-medium text-slate-700">{s.craft}</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
@@ -210,7 +120,7 @@ export const AboutPage: React.FC = () => {
             Ready to Support Independent Makers &amp; Artisans?
           </h2>
           <p className="text-white/70 max-w-xl mx-auto text-sm md:text-base mb-8">
-            Every piece arrives with a handwritten note from the creator and details on the craft technique used.
+            Every piece arrives with details on the craft technique used and direct credit to the independent maker.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link
