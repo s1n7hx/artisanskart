@@ -1,7 +1,7 @@
 <?php
 /**
  * Template Name: Home Page (Front Page)
- * Description: Dedicated homepage template with Hero Collage, Sliding Marquee, Featured Showcase, and Student-First impact banner.
+ * Description: Dedicated homepage template with Hero Collage, Sliding Marquee, Featured Showcase, and Creator-First impact banner.
  *
  * @package ArtisansKart
  */
@@ -17,9 +17,8 @@ get_header();
                     ✨ Handcrafted by Independent Artisans
                 </span>
                 <h1 class="hero-heading" style="font-size:clamp(40px, 5.5vw, 68px); margin-bottom:20px; font-weight:900;">
-                    Crafted by<br>
-                    <span style="color:#C85A32;">Creators,</span><br>
-                    Loved by You
+                    Made by Creators.<br>
+                    <span style="color:#C85A32;">Chosen by You.</span>
                 </h1>
                 <p style="font-size:18px; color:#475569; margin-bottom:32px; max-width:480px; line-height:1.65;">
                     Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds an independent creator's journey.
@@ -80,7 +79,7 @@ get_header();
                     <span style="width:24px; height:24px; border-radius:50%; background:#dcfce7; color:#16a34a; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12px;">✓</span>
                     <div>
                         <span style="font-size:11px; font-weight:800; color:#1E293B; display:block;">Zero Machine Copies</span>
-                        <span style="font-size:10px; color:#64748b;">100% Student Handcrafted</span>
+                        <span style="font-size:10px; color:#64748b;">100% Artisan Handcrafted</span>
                     </div>
                 </div>
             </div>
@@ -90,8 +89,8 @@ get_header();
     <!-- 2. SLIDING PHOTOS MARQUEE SECTION -->
     <section style="padding:40px 0 48px 0; background:#FAF9F6; border-top:1px solid #E7E0D8; border-bottom:1px solid #E7E0D8; overflow:hidden;">
         <div class="ak-container" style="text-align:center; margin-bottom:20px;">
-            <span class="badge-sage" style="margin-bottom:6px;">Live Student Studio Showcase</span>
-            <h2 style="font-size:24px; font-weight:900; margin:0;">Handmade Pieces Fresh from Campus Workbenches</h2>
+            <span class="badge-sage" style="margin-bottom:6px;">Live Artisan Studio Showcase</span>
+            <h2 style="font-size:24px; font-weight:900; margin:0;">Handmade Pieces Fresh from Independent Workbenches</h2>
         </div>
 
         <!-- Marquee Row 1 (Sliding Left) -->

@@ -47,14 +47,12 @@ export const MakerPortalPage: React.FC = () => {
     currentUser,
     userRole,
     userStatus,
-    addNewProduct,
-    updateProduct,
     showToast,
     setIsAuthModalOpen,
     makerEarningPercent,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'products' | 'studio'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'studio'>('orders');
 
   // Filter orders strictly assigned to this maker or products by this maker
   const makerOrders = useMemo(() => {
@@ -104,45 +102,6 @@ export const MakerPortalPage: React.FC = () => {
   const [studioAddress, setStudioAddress] = useState('ArtisansKart Innovation Hub, New Delhi');
   const [studioPhone, setStudioPhone] = useState(currentUser?.email || '9876543210');
   const [isSavingStudio, setIsSavingStudio] = useState(false);
-
-  // New Craft Form State
-  const [isAddingCraft, setIsAddingCraft] = useState(false);
-  const [editingCraft, setEditingCraft] = useState<Product | null>(null);
-  const [customCategory, setCustomCategory] = useState('');
-  const [craftForm, setCraftForm] = useState<{
-    title: string;
-    category: string;
-    price: number;
-    originalPrice: number;
-    description: string;
-    image: string;
-    images: string[];
-    stock: string;
-    inStockCount: number;
-    materials: string;
-    dimensions: string;
-    weight: string;
-    originCity: string;
-    isMadeToOrder: boolean;
-  }>({
-    title: '',
-    category: 'Crochet',
-    price: 349,
-    originalPrice: 449,
-    description: '',
-    image: 'https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80',
-    images: [
-      'https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80',
-      'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1200&q=80',
-    ],
-    stock: 'In Stock • Made on Demand',
-    inStockCount: 15,
-    materials: 'Premium milk cotton yarn, natural fibres',
-    dimensions: '25 cm height × 15 cm width',
-    weight: '350g',
-    originCity: 'Bengaluru',
-    isMadeToOrder: true,
-  });
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -239,89 +198,7 @@ export const MakerPortalPage: React.FC = () => {
     }, 400);
   };
 
-  // Product submission
-  const handleSaveCraft = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!craftForm.title || !craftForm.title.trim()) {
-      showToast('Please provide a title for your handcrafted piece.', 'alert-circle');
-      return;
-    }
-    if (!craftForm.price || Number(craftForm.price) <= 0) {
-      showToast('Please provide a valid selling price greater than ₹0.', 'alert-circle');
-      return;
-    }
 
-    const effectiveImages = Array.isArray(craftForm.images) && craftForm.images.length > 0
-      ? craftForm.images
-      : (craftForm.image ? [craftForm.image] : []);
-
-    if (effectiveImages.length === 0) {
-      showToast('Please upload at least 1 photograph of your craft.', 'alert-circle');
-      return;
-    }
-
-    const primaryPhoto = craftForm.image && effectiveImages.includes(craftForm.image)
-      ? craftForm.image
-      : effectiveImages[0];
-
-    const resolvedCategory =
-      craftForm.category === 'Other'
-        ? customCategory.trim() || 'Other Crafts'
-        : craftForm.category;
-
-    if (editingCraft) {
-      const updated: Product = {
-        ...editingCraft,
-        title: craftForm.title.trim(),
-        category: resolvedCategory,
-        price: Number(craftForm.price),
-        originalPrice: craftForm.originalPrice ? Number(craftForm.originalPrice) : undefined,
-        description: craftForm.description,
-        image: primaryPhoto,
-        images: effectiveImages,
-        materials: craftForm.materials,
-        dimensions: craftForm.dimensions,
-        weight: craftForm.weight,
-        originCity: craftForm.originCity,
-        isMadeToOrder: craftForm.isMadeToOrder,
-        stock: craftForm.stock,
-      };
-      updateProduct(updated);
-      showToast(`Craft "${updated.title}" updated with ${effectiveImages.length} photos!`, 'sparkles');
-      setEditingCraft(null);
-      setIsAddingCraft(false);
-      return;
-    }
-
-    const newCraft: Product = {
-      id: Date.now(),
-      title: craftForm.title.trim(),
-      category: resolvedCategory,
-      price: Number(craftForm.price),
-      originalPrice: craftForm.originalPrice ? Number(craftForm.originalPrice) : undefined,
-      rating: 0,
-      reviews: 0,
-      maker: currentUser?.name || 'Independent Maker',
-      cls: currentUser?.grade || 'Artisan Series',
-      school: currentUser?.school || 'Independent Studio',
-      image: primaryPhoto,
-      images: effectiveImages,
-      stock: craftForm.stock,
-      inStockCount: craftForm.inStockCount,
-      materials: craftForm.materials,
-      dimensions: craftForm.dimensions,
-      weight: craftForm.weight,
-      originCity: craftForm.originCity,
-      pickupPincode: studioPickupPin,
-      isMadeToOrder: craftForm.isMadeToOrder,
-      description: craftForm.description || 'Authentic handcrafted artisan piece.',
-      source: 'custom',
-    };
-
-    addNewProduct(newCraft);
-    showToast(`Craft "${newCraft.title}" published with ${effectiveImages.length} photos!`, 'sparkles');
-    setIsAddingCraft(false);
-  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
@@ -352,16 +229,6 @@ export const MakerPortalPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('products')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'products' ? 'bg-[#1E293B] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>My Crafts ({makerProducts.length})</span>
-          </button>
-
-          <button
             onClick={() => setActiveTab('studio')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
               activeTab === 'studio' ? 'bg-[#1E293B] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
@@ -370,6 +237,17 @@ export const MakerPortalPage: React.FC = () => {
             <MapPin className="w-3.5 h-3.5" />
             <span>Studio Pickup</span>
           </button>
+        </div>
+      </div>
+
+      {/* Platform Role Security Policy Banner */}
+      <div className="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3 text-xs text-amber-900 shadow-2xs">
+        <ShieldCheck className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+        <div>
+          <span className="font-extrabold uppercase tracking-wide text-amber-950">Administrative Catalog Control Policy</span>
+          <p className="mt-0.5 text-amber-800 leading-relaxed">
+            Product listings, pricing, and photography are exclusively managed by platform administrators. Approved makers have dedicated authority to view and accept customer orders, adjust preparation timelines, and dispatch handcrafted parcels.
+          </p>
         </div>
       </div>
 
@@ -399,12 +277,12 @@ export const MakerPortalPage: React.FC = () => {
 
         <div className="p-5 rounded-3xl bg-white border border-[#e7e0d8] shadow-xs space-y-1">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase">
-            <span>Published Crafts</span>
-            <Boxes className="w-4 h-4 text-[#5c6a58]" />
+            <span>Completed Orders</span>
+            <Package className="w-4 h-4 text-emerald-600" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{makerProducts.length} Live</div>
+          <div className="text-2xl font-black text-slate-900">{completed.length} Delivered</div>
           <p className="text-[11px] text-slate-500">
-            Available on ArtisansKart Pan-India storefront
+            Successfully fulfilled by your artisan studio
           </p>
         </div>
       </div>
@@ -928,133 +806,6 @@ export const MakerPortalPage: React.FC = () => {
         </div>
       )}
 
-      {/* CREATE / EDIT CRAFT MODAL */}
-      {isAddingCraft && (
-        <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-5 shadow-2xl border max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-black text-slate-900">
-                {editingCraft ? 'Edit Handcrafted Piece' : 'Add New Craft'}
-              </h3>
-              <button onClick={() => setIsAddingCraft(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCraft} className="space-y-4 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Craft Title *</label>
-                <input
-                  type="text"
-                  required
-                  value={craftForm.title}
-                  onChange={(e) => setCraftForm({ ...craftForm, title: e.target.value })}
-                  placeholder="e.g. Hand-carved Terracotta Diya Set"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-bold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Category *</label>
-                  <select
-                    value={craftForm.category}
-                    onChange={(e) => setCraftForm({ ...craftForm, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold bg-white"
-                  >
-                    <option value="Crochet">Crochet</option>
-                    <option value="Clay Crafts">Clay Crafts</option>
-                    <option value="Hand-painted Cards">Hand-painted Cards</option>
-                    <option value="Paintings">Paintings</option>
-                    <option value="Accessories">Accessories</option>
-                    <option value="Keychains">Keychains</option>
-                    <option value="Other">Other Category</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Selling Price (₹) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={craftForm.price}
-                    onChange={(e) => setCraftForm({ ...craftForm, price: Number(e.target.value) })}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Multi-Photo Gallery Uploader */}
-              <div className="space-y-1">
-                <MultiImageUploader
-                  images={craftForm.images || (craftForm.image ? [craftForm.image] : [])}
-                  primaryImage={craftForm.image}
-                  onChange={(updatedImages, primary) => {
-                    setCraftForm({
-                      ...craftForm,
-                      images: updatedImages,
-                      image: primary || updatedImages[0] || '',
-                    });
-                  }}
-                  minImages={1}
-                  maxImages={8}
-                  label="Craft Photographs (1 photo required, up to 8)"
-                  helperText="Upload photos from your device or web URLs. Star the primary storefront photo. Any extra pictures can be removed anytime."
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Materials Used</label>
-                  <input
-                    type="text"
-                    value={craftForm.materials}
-                    onChange={(e) => setCraftForm({ ...craftForm, materials: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Dimensions</label>
-                  <input
-                    type="text"
-                    value={craftForm.dimensions}
-                    onChange={(e) => setCraftForm({ ...craftForm, dimensions: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Craft Story &amp; Description</label>
-                <textarea
-                  rows={3}
-                  value={craftForm.description}
-                  onChange={(e) => setCraftForm({ ...craftForm, description: e.target.value })}
-                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsAddingCraft(false)}
-                  className="px-4 py-2 rounded-xl font-semibold text-slate-600 hover:bg-slate-100"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#C85A32] text-white font-bold hover:bg-[#b04a25]"
-                >
-                  Save &amp; Publish Craft
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

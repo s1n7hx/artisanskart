@@ -56,7 +56,7 @@ function artisanskart_create_starter_pages() {
             'content'  => '<!-- ArtisansKart About Page Template -->'
         ],
         [
-            'title'    => 'Student Maker Portal',
+            'title'    => 'Artisan Maker Portal',
             'slug'     => 'maker-portal',
             'template' => 'page-maker.php',
             'content'  => '<!-- ArtisansKart Maker Portal Template -->'

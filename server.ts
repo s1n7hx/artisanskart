@@ -109,7 +109,7 @@ export function evaluateCoupon(code: string, subtotal: number): { valid: boolean
     };
   }
 
-  if (clean === 'MAKER10' || clean === 'STUDENT10') {
+  if (clean === 'MAKER10' || clean === 'ARTISAN10') {
     const minOrder = 299;
     if (subtotal < minOrder) {
       return {

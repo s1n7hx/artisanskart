@@ -568,9 +568,8 @@ get_header();
                     ✨ Handcrafted by Artisans
                 </span>
                 <h1 class="hero-heading" style="font-size:clamp(40px, 5.5vw, 68px); margin-bottom:20px; font-weight:900;">
-                    Crafted by<br>
-                    <span style="color:#C85A32;">Artisans,</span><br>
-                    Loved by You
+                    Made by Creators.<br>
+                    <span style="color:#C85A32;">Chosen by You.</span>
                 </h1>
                 <p style="font-size:18px; color:#475569; margin-bottom:32px; max-width:480px; line-height:1.65;">
                     Discover one-of-a-kind clay crafts, hand-painted cards, accessories &amp; keychains — every purchase directly funds a creator's dream.

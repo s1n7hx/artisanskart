@@ -45,17 +45,18 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({
   onOpenMakerProfile,
 }) => {
   const navigate = useNavigate();
-  const { products, setQuickViewId, showToast, makerEarningPercent, updateProduct } = useApp();
+  const { products, setQuickViewId, showToast, makerEarningPercent } = useApp();
 
-  // Dialog container ref for focus trapping and accessibility
-  const modalRef = useRef<HTMLDivElement>(null);
-  const bottomTabsRef = useRef<HTMLDivElement>(null);
+  // User requirement: "when some one will click on any product it will directly open the full screen not the preview one"
+  useEffect(() => {
+    if (product) {
+      onClose();
+      navigate(`/product/${product.id}`);
+    }
+  }, [product, navigate, onClose]);
 
-  // Gallery state
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [isImageLoading, setIsImageLoading] = useState(true);
-  const [isZoomed, setIsZoomed] = useState(false);
-  const [zoomCoords, setZoomCoords] = useState({ x: 50, y: 50 });
+  if (!product) return null;
+  return null;
 
   // Interactive controls state
   const [quantity, setQuantity] = useState(1);

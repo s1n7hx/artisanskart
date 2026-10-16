@@ -1,7 +1,7 @@
 <?php
 /**
  * Template Name: Contact Page
- * Description: Dedicated page template for general contact, custom student craft orders, and school exhibition requests.
+ * Description: Dedicated page template for general contact, custom artisan craft orders, and studio exhibition requests.
  *
  * @package ArtisansKart
  */
@@ -26,7 +26,7 @@ get_header();
                 <div>
                     <h2 style="font-size:22px; font-weight:900; color:#1E293B; margin-bottom:16px;">Campus Hubs &amp; Support</h2>
                     <p style="font-size:14px; color:#64748b; line-height:1.7; margin-bottom:24px;">
-                        ArtisansKart connects student studios across Delhi NCR, Maharashtra, Rajasthan, and Karnataka.
+                        ArtisansKart connects artisan studios across Delhi NCR, Maharashtra, Rajasthan, and Karnataka.
                     </p>
                     <div style="display:flex; flex-direction:column; gap:16px; font-size:14px;">
                         <div>
@@ -45,9 +45,9 @@ get_header();
                 </div>
 
                 <div style="background:#FAF9F6; border:1px solid #E7E0D8; border-radius:18px; padding:18px; margin-top:24px;">
-                    <span style="font-size:12px; font-weight:800; color:#8A9A86; display:block;">Student Trust Guarantee</span>
+                    <span style="font-size:12px; font-weight:800; color:#8A9A86; display:block;">Artisan Trust Guarantee</span>
                     <p style="font-size:12px; color:#64748b; margin:4px 0 0 0;">
-                        100% of handmade orders are insured and tracked from the student's campus bench to your doorstep.
+                        100% of handmade orders are insured and tracked from the artisan's studio workbench to your doorstep.
                     </p>
                 </div>
             </div>
@@ -55,7 +55,7 @@ get_header();
             <!-- Contact Form -->
             <div style="background:#ffffff; border:1px solid #E7E0D8; border-radius:28px; padding:36px;">
                 <h2 style="font-size:22px; font-weight:900; color:#1E293B; margin-bottom:16px;">Send a Message</h2>
-                <form onsubmit="event.preventDefault(); alert('Thank you! Your message has been sent to our student support team.');" style="display:flex; flex-direction:column; gap:14px;">
+                <form onsubmit="event.preventDefault(); alert('Thank you! Your message has been sent to our artisan support team.');" style="display:flex; flex-direction:column; gap:14px;">
                     <div>
                         <label style="font-size:12px; font-weight:800; color:#1E293B; display:block; margin-bottom:4px;">Your Name</label>
                         <input type="text" required placeholder="Full Name" style="width:100%; padding:10px 14px; border:1px solid #E7E0D8; border-radius:12px; font-size:13px; outline:none; font-family:inherit;">

@@ -112,7 +112,8 @@ export const HomePage: React.FC = () => {
           {spotlightProducts.map((p) => (
             <div
               key={p.id}
-              className="fade-in group bg-white rounded-3xl overflow-hidden border border-[#e7e0d8] shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col"
+              onClick={() => navigate(`/product/${p.id}`)}
+              className="fade-in group bg-white rounded-3xl overflow-hidden border border-[#e7e0d8] shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col cursor-pointer"
             >
               <div className="relative aspect-square overflow-hidden bg-slate-100">
                 <img
@@ -121,12 +122,6 @@ export const HomePage: React.FC = () => {
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
-                <button
-                  onClick={() => setQuickViewId(p.id)}
-                  className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-xs text-xs font-semibold px-3 py-1.5 rounded-full shadow-md text-[#1E293B] hover:bg-[#1E293B] hover:text-white transition cursor-pointer"
-                >
-                  Quick View
-                </button>
                 <span className="absolute top-3 left-3 badge-sage text-[11px] px-2.5 py-0.5 rounded-full font-medium">
                   {p.category}
                 </span>

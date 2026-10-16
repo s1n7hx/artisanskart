@@ -84,16 +84,10 @@ export const ProductDetailPage: React.FC = () => {
 
   const reviewsSectionRef = useRef<HTMLDivElement>(null);
 
-  // Determine authorized maker or admin permission
+  // Determine authorized admin permission (only admins can add, change, delete products or edit/delete photos)
   const isAuthorizedToEdit = useMemo(() => {
-    if (!product) return false;
-    if (userRole === 'master_admin' || userRole === 'admin') return true;
-    if (userRole === 'maker') {
-      if (product.makerId && currentUser?.id && product.makerId === currentUser.id) return true;
-      if (currentUser?.name && product.maker.toLowerCase().includes(currentUser.name.toLowerCase())) return true;
-    }
-    return false;
-  }, [product, userRole, currentUser]);
+    return userRole === 'master_admin' || userRole === 'admin';
+  }, [userRole]);
 
   // Compile full gallery photos with fallbacks
   const galleryImages = useMemo(() => {
@@ -330,8 +324,12 @@ export const ProductDetailPage: React.FC = () => {
     reviewsSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Gallery management actions for authorized makers and admins
+  // Gallery management actions strictly restricted to authorized platform admins
   const handleAddGalleryImage = (url: string) => {
+    if (!isAuthorizedToEdit) {
+      showToast('Admin authority required to add photographs.', 'shield-alert');
+      return;
+    }
     if (!product || !url) return;
     const currentList = product.images && Array.isArray(product.images) ? [...product.images] : [product.image];
     if (!currentList.includes(url)) {
@@ -347,6 +345,10 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleDeleteGalleryImage = (imgUrl: string) => {
+    if (!isAuthorizedToEdit) {
+      showToast('Admin authority required to remove photographs.', 'shield-alert');
+      return;
+    }
     if (!product) return;
     const currentList = galleryImages.filter((img) => img !== imgUrl);
     if (currentList.length === 0) {
@@ -364,6 +366,10 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleSetPrimaryImage = (imgUrl: string) => {
+    if (!isAuthorizedToEdit) {
+      showToast('Admin authority required to change primary photograph.', 'shield-alert');
+      return;
+    }
     if (!product) return;
     const rest = galleryImages.filter((img) => img !== imgUrl);
     const updated: Product = {
@@ -377,6 +383,10 @@ export const ProductDetailPage: React.FC = () => {
   };
 
   const handleRemoveAllExtraImages = () => {
+    if (!isAuthorizedToEdit) {
+      showToast('Admin authority required to remove photographs.', 'shield-alert');
+      return;
+    }
     if (!product || galleryImages.length <= 1) return;
     const primary = product.image || galleryImages[0];
     const updated: Product = {
@@ -485,8 +495,8 @@ export const ProductDetailPage: React.FC = () => {
                         className="w-full h-full object-cover"
                       />
                     </button>
-                    {/* Direct Option to remove this extra picture */}
-                    {galleryImages.length > 1 && (
+                    {/* Direct Option to remove this extra picture (Admins only) */}
+                    {isAuthorizedToEdit && galleryImages.length > 1 && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -504,29 +514,31 @@ export const ProductDetailPage: React.FC = () => {
               </div>
             )}
 
-            {/* Quick Action Buttons for Photo Removal */}
-            <div className="flex sm:flex-col gap-1.5 w-full">
-              {galleryImages.length > 1 && (
+            {/* Quick Action Buttons for Photo Removal (Admins only) */}
+            {isAuthorizedToEdit && (
+              <div className="flex sm:flex-col gap-1.5 w-full">
+                {galleryImages.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveAllExtraImages}
+                    title="Remove all extra pictures and keep only the primary photo"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove Extra ({galleryImages.length - 1})</span>
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleRemoveAllExtraImages}
-                  title="Remove all extra pictures and keep only the primary photo"
-                  className="w-full px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer shadow-2xs"
+                  onClick={() => setIsManagePhotosOpen(true)}
+                  title="Manage product photographs"
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Remove Extra ({galleryImages.length - 1})</span>
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Photos ({galleryImages.length})</span>
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setIsManagePhotosOpen(true)}
-                title="Manage product photographs"
-                className="w-full px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold flex items-center justify-center gap-1 transition cursor-pointer"
-              >
-                <Edit className="w-3.5 h-3.5" />
-                <span>Photos ({galleryImages.length})</span>
-              </button>
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Main Display Stage with Touch Gestures and Hover Zoom */}
@@ -577,15 +589,17 @@ export const ProductDetailPage: React.FC = () => {
 
             {/* Top Right Actions: Lightbox and Image Management */}
             <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsManagePhotosOpen(true)}
-                title="Manage or remove product photographs"
-                className="px-3 py-1.5 rounded-full bg-[#1E293B] text-white hover:bg-[#C85A32] text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <Edit className="w-3.5 h-3.5" />
-                <span>Manage Photos</span>
-              </button>
+              {isAuthorizedToEdit && (
+                <button
+                  type="button"
+                  onClick={() => setIsManagePhotosOpen(true)}
+                  title="Manage or remove product photographs"
+                  className="px-3 py-1.5 rounded-full bg-[#1E293B] text-white hover:bg-[#C85A32] text-xs font-bold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>Manage Photos</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -1275,9 +1289,9 @@ export const ProductDetailPage: React.FC = () => {
       )}
 
       {/* =========================================================
-          MAKER & ADMIN IMAGE MANAGEMENT MODAL (Supabase Storage)
+          ADMIN ONLY IMAGE MANAGEMENT MODAL (Supabase Storage)
       ========================================================= */}
-      {isManagePhotosOpen && (
+      {isAuthorizedToEdit && isManagePhotosOpen && (
         <div
           role="dialog"
           aria-modal="true"

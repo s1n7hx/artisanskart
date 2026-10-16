@@ -15,7 +15,7 @@ get_header();
                 ArtisansKart Journal
             </h1>
             <p style="font-size:16px; color:#64748b; line-height:1.6;">
-                Stories from student workshops, craft techniques, and campus studio spotlights.
+                Stories from artisan workshops, craft techniques, and campus studio spotlights.
             </p>
         </div>
 
@@ -50,8 +50,8 @@ get_header();
                 <div style="grid-column: 1 / -1; text-align:center; padding:60px 20px; background:#ffffff; border-radius:24px; border:1px solid #E7E0D8;">
                     <div style="font-size:48px; margin-bottom:12px;">🎨</div>
                     <h2 style="font-size:22px; font-weight:800; color:#1E293B;">Welcome to ArtisansKart</h2>
-                    <p style="font-size:14px; color:#64748b; margin:8px 0 20px 0;">Explore handcrafted student pottery, cards, and accessories in the shop.</p>
-                    <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">Visit Student Shop →</a>
+                    <p style="font-size:14px; color:#64748b; margin:8px 0 20px 0;">Explore handcrafted artisan pottery, cards, and accessories in the shop.</p>
+                    <a href="<?php echo esc_url(home_url('/shop/')); ?>" class="btn-terracotta">Visit Artisan Shop →</a>
                 </div>
             <?php endif; ?>
         </div>

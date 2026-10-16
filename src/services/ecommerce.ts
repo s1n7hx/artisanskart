@@ -450,14 +450,14 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     };
   }
 
-  if (clean === 'STUDENT10') {
+  if (clean === 'MAKER10' || clean === 'ARTISAN10') {
     const minOrder = 299;
     if (subtotal < minOrder) {
       return {
         isValid: false,
         code: clean,
         discountAmount: 0,
-        message: `STUDENT10 requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+        message: `${clean} requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
       };
     }
     const discount = Math.min(100, Math.round(subtotal * 0.1));
@@ -465,7 +465,7 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
       isValid: true,
       code: clean,
       discountAmount: discount,
-      message: `10% Student craft discount applied (₹${discount} saved)!`,
+      message: `10% Independent Maker discount applied (₹${discount} saved)!`,
     };
   }
 
@@ -488,14 +488,14 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     };
   }
 
-  if (clean === 'CAMPUSCRAFT') {
+  if (clean === 'STUDIOCRAFT') {
     const minOrder = 499;
     if (subtotal < minOrder) {
       return {
         isValid: false,
         code: clean,
         discountAmount: 0,
-        message: `CAMPUSCRAFT requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
+        message: `STUDIOCRAFT requires a minimum order of ₹${minOrder}. Current: ₹${subtotal}.`,
       };
     }
     const discount = Math.min(150, Math.round(subtotal * 0.15));
@@ -503,7 +503,7 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
       isValid: true,
       code: clean,
       discountAmount: discount,
-      message: `15% Campus Craft discount applied (₹${discount} saved)!`,
+      message: `15% Studio Craft discount applied (₹${discount} saved)!`,
     };
   }
 
@@ -511,7 +511,7 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     isValid: false,
     code: clean,
     discountAmount: 0,
-    message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399), STUDENT10 (min ₹299).',
+    message: 'Invalid or expired coupon code. Available offers: WELCOME10 (min ₹499), CREATOR50 (min ₹399), MAKER10 (min ₹299).',
   };
 }
 

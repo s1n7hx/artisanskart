@@ -108,12 +108,57 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_PRODUCTS_KEY = 'artisanskart_custom_products_v1';
-const LOCAL_STORAGE_HERO_KEY = 'artisanskart_hero_content_v1';
+const LOCAL_STORAGE_HERO_KEY = 'artisanskart_hero_content_v4';
 const LOCAL_STORAGE_ANIMATION_KEY = 'artisanskart_animation_settings_v1';
 const LOCAL_STORAGE_USER_KEY = 'artisanskart_current_user_v1';
 const LOCAL_STORAGE_USERS_LIST_KEY = 'artisanskart_all_users_v1';
 
 export const MASTER_ADMIN_EMAIL = 'ssumollah@gmail.com';
+
+export function sanitizeHeroContent(raw: Partial<HeroContent> | null | undefined): HeroContent {
+  if (!raw) return DEFAULT_HERO_CONTENT;
+  const merged: HeroContent = { ...DEFAULT_HERO_CONTENT, ...raw };
+
+  const rawCombined = `${merged.headlineLine1 || ''} ${merged.headlineLine2 || ''} ${merged.headlineLine3 || ''}`;
+  const hasLegacyOrStudentHeadlines =
+    /student/i.test(rawCombined) ||
+    /crafted\s*by/i.test(rawCombined) ||
+    /loved\s*by/i.test(rawCombined) ||
+    /school/i.test(rawCombined) ||
+    /campus/i.test(rawCombined);
+
+  let h1 = merged.headlineLine1 || DEFAULT_HERO_CONTENT.headlineLine1;
+  let h2 = merged.headlineLine2 || DEFAULT_HERO_CONTENT.headlineLine2;
+  let h3 = merged.headlineLine3 || '';
+
+  if (hasLegacyOrStudentHeadlines) {
+    h1 = 'Made by Creators.';
+    h2 = 'Chosen by You.';
+    h3 = '';
+  } else {
+    h1 = (h1 || '').replace(/students?/gi, 'Creators').replace(/campus/gi, 'Studio');
+    h2 = (h2 || '').replace(/students?,?/gi, 'Creators,').replace(/students?/gi, 'Creators').replace(/campus/gi, 'Studio');
+    h3 = (h3 || '').replace(/students?/gi, 'Creators').replace(/campus/gi, 'Studio');
+  }
+
+  const cleanText = (s?: string) =>
+    (s || '')
+      .replace(/\bstudents\b/gi, 'creators')
+      .replace(/\bstudent\b/gi, 'artisan')
+      .replace(/\bcampus\b/gi, 'studio')
+      .replace(/\bcollege\b/gi, 'guild')
+      .replace(/crafted\s+by\s+students?,?/gi, 'Made by Creators.')
+      .replace(/loved\s+by\s+you\.?/gi, 'Chosen by You.');
+
+  return {
+    ...merged,
+    badgeText: cleanText(merged.badgeText) || DEFAULT_HERO_CONTENT.badgeText,
+    headlineLine1: h1,
+    headlineLine2: h2,
+    headlineLine3: h3,
+    subhead: cleanText(merged.subhead) || DEFAULT_HERO_CONTENT.subhead,
+  };
+}
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Session starts verified from localStorage or verified via Supabase OAuth
@@ -476,9 +521,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [heroContent, setHeroContent] = useState<HeroContent>(() => {
     try {
+      localStorage.removeItem('artisanskart_hero_content_v1');
+      localStorage.removeItem('artisanskart_hero_content_v2');
+      localStorage.removeItem('artisanskart_hero_content_v3');
       const saved = localStorage.getItem(LOCAL_STORAGE_HERO_KEY);
       if (saved) {
-        return { ...DEFAULT_HERO_CONTENT, ...JSON.parse(saved) };
+        const sanitized = sanitizeHeroContent(JSON.parse(saved));
+        localStorage.setItem(LOCAL_STORAGE_HERO_KEY, JSON.stringify(sanitized));
+        return sanitized;
       }
     } catch (e) {}
     return DEFAULT_HERO_CONTENT;
@@ -508,7 +558,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const remoteHero = await fetchHeroCmsContent();
         if (remoteHero) {
-          setHeroContent(remoteHero);
+          const sanitized = sanitizeHeroContent(remoteHero);
+          setHeroContent(sanitized);
+          localStorage.setItem(LOCAL_STORAGE_HERO_KEY, JSON.stringify(sanitized));
+          // If remote in Supabase contained student references or old headlines, fix it in Supabase immediately!
+          const rawHeroStr = JSON.stringify(remoteHero);
+          if (
+            /student/i.test(rawHeroStr) ||
+            /crafted\s*by/i.test(rawHeroStr) ||
+            /loved\s*by/i.test(rawHeroStr)
+          ) {
+            saveHeroCmsContent(sanitized).catch(() => {});
+          }
+        } else {
+          saveHeroCmsContent(DEFAULT_HERO_CONTENT).catch(() => {});
         }
         const remotePlatform = await fetchPlatformSettings();
         if (remotePlatform?.makerEarningPercent) {
@@ -733,7 +796,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateHeroContent = (partial: Partial<HeroContent>) => {
     setHeroContent((prev) => {
-      const next = { ...prev, ...partial };
+      const next = sanitizeHeroContent({ ...prev, ...partial });
       try {
         localStorage.setItem(LOCAL_STORAGE_HERO_KEY, JSON.stringify(next));
       } catch (e) {}
@@ -749,10 +812,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resetHeroToDefault = () => {
     setHeroContent(DEFAULT_HERO_CONTENT);
     try {
+      localStorage.removeItem('artisanskart_hero_content_v1');
       localStorage.removeItem(LOCAL_STORAGE_HERO_KEY);
+      localStorage.setItem(LOCAL_STORAGE_HERO_KEY, JSON.stringify(DEFAULT_HERO_CONTENT));
     } catch (e) {}
     saveHeroCmsContent(DEFAULT_HERO_CONTENT).catch(() => {});
-    showToast('Hero photos reset to default', 'rotate-ccw');
+    showToast('Hero headlines reset to default', 'rotate-ccw');
   };
 
   const updateAnimationSettings = (partial: Partial<AnimationSettings>) => {
@@ -776,7 +841,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWpConfig((prev) => ({ ...prev, ...partial }));
   };
 
+  const canManageProducts = userRole === 'admin' || userRole === 'master_admin';
+
   const updateProduct = (updated: Product) => {
+    if (!canManageProducts) {
+      showToast('Admin authority required to edit products or photographs.', 'shield-alert');
+      return;
+    }
     setProducts((prev) => {
       const next = prev.map((p) => (p.id === updated.id ? updated : p));
       try {
@@ -792,6 +863,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addNewProduct = (newProd: Product) => {
+    if (!canManageProducts) {
+      showToast('Admin authority required to add new products.', 'shield-alert');
+      return;
+    }
     setProducts((prev) => {
       const next = [newProd, ...prev];
       try {
@@ -807,6 +882,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteProduct = (id: number) => {
+    if (!canManageProducts) {
+      showToast('Admin authority required to delete products.', 'shield-alert');
+      return;
+    }
     setProducts((prev) => {
       const next = prev.filter((p) => p.id !== id);
       try {
@@ -901,7 +980,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const cartCount = cart.reduce((s, c) => s + c.qty, 0);
-  const quickViewProduct = products.find((p) => p.id === quickViewId) || null;
+
+  const handleSetQuickViewId = (id: number | null) => {
+    if (id !== null) {
+      // User requirement: "when some one will click on any product it will directly open the full screen not the preview one"
+      window.location.href = `/product/${id}`;
+      return;
+    }
+    setQuickViewId(null);
+  };
 
   return (
     <AppContext.Provider
@@ -919,8 +1006,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addToCart,
         changeQty,
         removeFromCart,
-        quickViewProduct,
-        setQuickViewId,
+        quickViewProduct: null,
+        setQuickViewId: handleSetQuickViewId,
         isCartOpen,
         setIsCartOpen,
         isMakerSignupOpen,

@@ -127,6 +127,40 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
     return () => observer.disconnect();
   }, []);
 
+  // Storefront protection: guarantee "Students," or "Crafted by Students" or "Loved by You" NEVER renders
+  const rawH1 = heroContent.headlineLine1 || '';
+  const rawH2 = heroContent.headlineLine2 || '';
+  const rawH3 = heroContent.headlineLine3 || '';
+
+  const combined = `${rawH1} ${rawH2} ${rawH3}`.toLowerCase();
+  const isOldStudentHeadline =
+    combined.includes('student') ||
+    combined.includes('crafted by') ||
+    combined.includes('loved by') ||
+    combined.includes('campus') ||
+    combined.includes('school');
+
+  const sanitizeLine = (text: string) =>
+    (text || '')
+      .replace(/students?/gi, 'Creators')
+      .replace(/crafted\s+by\s+students?,?/gi, 'Made by Creators.')
+      .replace(/crafted\s+by/gi, 'Made by')
+      .replace(/loved\s+by\s+you\.?/gi, 'Chosen by You.')
+      .replace(/campus/gi, 'Studio')
+      .replace(/college/gi, 'Guild');
+
+  const displayH1 = isOldStudentHeadline ? 'Made by Creators.' : sanitizeLine(rawH1);
+  const displayH2 = isOldStudentHeadline ? 'Chosen by You.' : sanitizeLine(rawH2);
+  const displayH3 = isOldStudentHeadline ? '' : sanitizeLine(rawH3);
+
+  const displayBadge = (heroContent.badgeText || '')
+    .replace(/students?/gi, 'Artisans')
+    .replace(/campus/gi, 'Studio');
+
+  const displaySubhead = (heroContent.subhead || '')
+    .replace(/students?/gi, 'independent creators')
+    .replace(/campus/gi, 'artisan studio');
+
   return (
     <section id="home" className="relative min-h-[92vh] flex flex-col justify-center overflow-hidden px-4 md:px-10 pt-10 pb-16">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(200,90,50,0.10),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(138,154,134,0.16),transparent_50%)]" />
@@ -134,23 +168,31 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
       <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-10 items-center">
         <div>
           <div className="fade-in inline-flex items-center gap-2 badge-sage px-4 py-1.5 rounded-full text-xs font-semibold mb-6">
-            <BadgeCheck className="w-3.5 h-3.5" /> {heroContent.badgeText}
+            <BadgeCheck className="w-3.5 h-3.5" /> {displayBadge}
           </div>
           <h1
             className="fade-in hero-heading font-black uppercase leading-[0.95] tracking-tight text-[13vw] md:text-[4.2vw]"
             style={{ transitionDelay: '120ms' }}
           >
-            {heroContent.headlineLine1}
-            <br />
-            {heroContent.headlineLine2}
-            <br />
-            {heroContent.headlineLine3}
+            {displayH1}
+            {displayH2 && (
+              <>
+                <br />
+                {displayH2}
+              </>
+            )}
+            {displayH3 && (
+              <>
+                <br />
+                {displayH3}
+              </>
+            )}
           </h1>
           <p
             className="fade-in mt-6 max-w-md text-slate-600 font-light text-base md:text-lg"
             style={{ transitionDelay: '250ms' }}
           >
-            {heroContent.subhead}
+            {displaySubhead}
           </p>
           <div className="fade-in mt-8 flex flex-wrap items-center gap-3" style={{ transitionDelay: '350ms' }}>
             <button

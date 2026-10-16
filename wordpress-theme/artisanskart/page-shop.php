@@ -1,7 +1,7 @@
 <?php
 /**
  * Template Name: Shop / Marketplace Page
- * Description: Dedicated full catalog page for all 13 handcrafted student crafts with live category filters, search, and Quick View.
+ * Description: Dedicated full catalog page for all 13 handcrafted artisan crafts with live category filters, search, and Quick View.
  *
  * @package ArtisansKart
  */
@@ -11,12 +11,12 @@ get_header();
     <div class="ak-container">
         <!-- Page Header -->
         <div style="text-align:center; max-width:680px; margin:0 auto 40px auto;">
-            <span class="badge-terracotta" style="margin-bottom:8px;">Campus Artisan Catalog</span>
+            <span class="badge-terracotta" style="margin-bottom:8px;">Artisan Catalog</span>
             <h1 style="font-size:clamp(32px, 4vw, 48px); font-weight:900; color:#1E293B; margin:6px 0 12px 0;">
-                Handcrafted Student Shop
+                Handcrafted Artisan Shop
             </h1>
             <p style="font-size:16px; color:#64748b; line-height:1.6;">
-                Browse unique clay pottery, watercolor greeting cards, beaded jewelry, and custom keychains crafted by student creators across India.
+                Browse unique clay pottery, watercolor greeting cards, beaded jewelry, and custom keychains crafted by independent creators across India.
             </p>
         </div>
 
@@ -33,7 +33,7 @@ get_header();
 
             <!-- Instant Search Input -->
             <div style="position:relative; width:100%; max-width:280px;">
-                <input type="text" placeholder="Search craft or student..." oninput="searchCrafts(this)" style="width:100%; padding:10px 18px; border-radius:9999px; border:1px solid #E7E0D8; background:#ffffff; font-size:13px; outline:none; font-family:inherit;">
+                <input type="text" placeholder="Search craft or artisan..." oninput="searchCrafts(this)" style="width:100%; padding:10px 18px; border-radius:9999px; border:1px solid #E7E0D8; background:#ffffff; font-size:13px; outline:none; font-family:inherit;">
             </div>
         </div>
 

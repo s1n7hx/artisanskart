@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Product } from '../types';
 
 export const Marquee: React.FC = () => {
-  const { products, setQuickViewId, animationSettings } = useApp();
+  const navigate = useNavigate();
+  const { products, animationSettings } = useApp();
 
   // Distribute all real platform products across 2 horizontal rows.
   // When a new product is added to the platform, it is prepended to `products`,
@@ -55,7 +57,7 @@ export const Marquee: React.FC = () => {
     return (
       <div
         key={`${product.id}-${keySuffix}`}
-        onClick={() => setQuickViewId(product.id)}
+        onClick={() => navigate(`/product/${product.id}`)}
         title={product.title}
         className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl sm:rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 mr-3.5 sm:mr-4 border border-[#e7e0d8]/60 bg-white"
         style={{ width: '270px', height: '185px' }}

@@ -66,15 +66,15 @@ export const ContactPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
-                    Campus Partnerships
+                    Studio &amp; Guild Partnerships
                   </h3>
                   <a
-                    href="mailto:campus@artisanskart.in"
+                    href="mailto:partners@artisanskart.in"
                     className="text-base font-bold text-[#1E293B] hover:text-[#C85A32] transition"
                   >
-                    campus@artisanskart.in
+                    partners@artisanskart.in
                   </a>
-                  <p className="text-xs text-slate-500 mt-0.5">For fine art clubs &amp; design depts</p>
+                  <p className="text-xs text-slate-500 mt-0.5">For independent ateliers &amp; maker collectives</p>
                 </div>
               </div>
 
@@ -87,9 +87,9 @@ export const ContactPage: React.FC = () => {
                     Central Packaging Hub
                   </h3>
                   <p className="text-sm font-bold text-[#1E293B]">
-                    Studio 4B, University Enclave
+                    Studio 4B, Artisan Enclave
                   </p>
-                  <p className="text-xs text-slate-500 mt-0.5">North Campus, New Delhi 110007</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Artisan Hub, New Delhi 110007</p>
                 </div>
               </div>
             </div>
@@ -112,7 +112,7 @@ export const ContactPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-8 md:p-10 border border-[#e7e0d8] shadow-xs">
             <h2 className="text-2xl font-bold text-[#1E293B] mb-2">Send Us a Message</h2>
             <p className="text-slate-500 text-sm mb-8">
-              Fill out the details below and we will route your inquiry to the appropriate campus coordinator.
+              Fill out the details below and we will route your inquiry to the appropriate artisan coordinator.
             </p>
 
             {submitted && (
@@ -150,7 +150,7 @@ export const ContactPage: React.FC = () => {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="e.g. ananya@college.edu"
+                    placeholder="e.g. ananya@artisanstudio.in"
                     className="w-full px-4 py-3 rounded-xl border border-[#e7e0d8] text-sm focus:border-[#C85A32] focus:outline-hidden"
                   />
                 </div>
@@ -169,7 +169,7 @@ export const ContactPage: React.FC = () => {
                   <option value="General Question">General Question</option>
                   <option value="Order Status">Order Tracking / Status</option>
                   <option value="Maker Application">Maker Application</option>
-                  <option value="Campus Partnership">College / Campus Partnership</option>
+                  <option value="Studio Partnership">Studio / Creator Guild Partnership</option>
                   <option value="Bulk Gifting">Bulk / Corporate Craft Gifting</option>
                 </select>
               </div>
@@ -184,7 +184,7 @@ export const ContactPage: React.FC = () => {
                   rows={5}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Tell us about what you need, your order ID, or your college art club..."
+                  placeholder="Tell us about what you need, your order ID, or your artisan craft collective..."
                   className="w-full px-4 py-3 rounded-xl border border-[#e7e0d8] text-sm focus:border-[#C85A32] focus:outline-hidden"
                 />
               </div>

@@ -20,7 +20,7 @@
                     <span style="font-size:22px; font-weight:900; color:#1E293B; line-height:1; display:block; letter-spacing:-0.02em;">
                         ArtisansKart
                     </span>
-                    <span style="font-size:10px; font-weight:700; color:#C85A32; text-transform:uppercase; letter-spacing:0.06em;">Student Artisan Marketplace</span>
+                    <span style="font-size:10px; font-weight:700; color:#C85A32; text-transform:uppercase; letter-spacing:0.06em;">Artisan Marketplace</span>
                 </div>
             </a>
 

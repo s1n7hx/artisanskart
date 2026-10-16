@@ -172,11 +172,11 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onQuickView(p.id);
+                      navigate(`/product/${p.id}`);
                     }}
                     className="text-xs font-semibold text-[#1E293B] underline decoration-[#C85A32] underline-offset-4 hover:text-[#C85A32] cursor-pointer"
                   >
-                    Quick View
+                    View Details
                   </button>
                 </div>
 
