@@ -136,9 +136,7 @@ export const MarketplacePage: React.FC = () => {
                 <span className="absolute top-3 left-3 badge-sage text-[11px] px-2.5 py-0.5 rounded-full font-medium">
                   {p.category}
                 </span>
-                <span className="absolute top-3 right-3 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-xs">
-                  {p.stock} left
-                </span>
+
               </div>
 
               <div className="p-5 flex flex-col flex-1">

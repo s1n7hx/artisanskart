@@ -116,9 +116,7 @@ export const Marketplace: React.FC<MarketplaceProps> = ({
               <div>
                 <div className="relative">
                   <img src={p.image} alt={p.title} className="w-full h-52 object-cover group-hover:scale-102 transition duration-300" />
-                  <span className="absolute top-3 left-3 badge-sage text-[10px] font-bold px-2.5 py-1 rounded-full">
-                    {p.stock}
-                  </span>
+
 
                   {p.images && p.images.length > 1 && (
                     <span className="absolute bottom-2.5 right-2.5 bg-black/65 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-sm">

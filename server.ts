@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 import {
   getShiprocketToken,
   checkCourierServiceability,
@@ -18,6 +19,10 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const supabaseAdmin = createClient(
+  process.env.VITE_SUPABASE_URL || 'https://xhzphnfzuutduztukiln.supabase.co',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
+);
 
 // Body parsing
 app.use(express.json());
@@ -792,10 +797,55 @@ app.post('/api/shipping/test-shiprocket-auth', async (_req: Request, res: Respon
 // -------------------------------------------------------------
 // API Route 8: Webhook receiver for Shiprocket Tracking Updates
 // -------------------------------------------------------------
-app.post('/api/shipping/webhook', (req: Request, res: Response) => {
-  const payload = req.body;
-  console.log('📦 Shiprocket Webhook event received:', payload?.current_status, payload?.awb);
+app.post('/api/shipping/webhook', async (req: Request, res: Response) => {
+  const { current_status, awb, order_number } = req.body;
+  if (!order_number) return res.status(400).json({ error: 'Missing order_number' });
+
+  let newStatus: string = 'in_transit';
+  if (current_status === 'PICKEDUP') newStatus = 'picked_up';
+  else if (current_status === 'SHIPPED') newStatus = 'in_transit';
+  else if (current_status === 'OUTFORDELIVERY') newStatus = 'out_for_delivery';
+  else if (current_status === 'DELIVERED') newStatus = 'delivered';
+
+  await supabaseAdmin
+    .from('orders')
+    .update({ status: newStatus, tracking_awb: awb, updated_at: new Date().toISOString() })
+    .eq('order_number', order_number);
+
+  console.log('📦 Shiprocket Webhook event processed:', current_status, awb, order_number);
   return res.json({ received: true });
+});
+
+// -------------------------------------------------------------
+// API Route 8b: Webhook receiver for Razorpay Payment Updates
+// -------------------------------------------------------------
+app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
+  const signature = req.headers['x-razorpay-signature'] as string;
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  
+  if (!secret || !signature) return res.status(401).send('Unauthorized');
+
+  const generatedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(req.body))
+    .digest('hex');
+
+  if (generatedSignature !== signature) return res.status(400).send('Invalid signature');
+
+  if (req.body.event === 'payment.captured') {
+    const payment = req.body.payload.payment.entity;
+    const orderNumber = payment.notes?.order_number;
+
+    if (orderNumber) {
+      await supabaseAdmin
+        .from('orders')
+        .update({ payment_status: 'paid', updated_at: new Date().toISOString() })
+        .eq('order_number', orderNumber);
+      console.log('✅ Payment captured for order:', orderNumber);
+    }
+  }
+
+  return res.json({ status: 'ok' });
 });
 
 // -------------------------------------------------------------
@@ -852,7 +902,7 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
     const fromStatus = (currentStatus || 'order_placed').toLowerCase();
     const targetStatus = newStatus.toLowerCase();
 
-    // Check allowed transition unless actor is master_admin (who can perform administrative override)
+    // Check allowed transition unless actor is master_admin
     const isMasterAdmin = actorRole === 'master_admin';
     const allowedTargets = ALLOWED_ORDER_TRANSITIONS[fromStatus] || [];
 
@@ -862,6 +912,14 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
         allowedNextSteps: allowedTargets,
       });
     }
+
+    // Persist to Database
+    const { error: dbError } = await supabaseAdmin
+      .from('orders')
+      .update({ status: targetStatus, updated_at: new Date().toISOString() })
+      .eq('order_number', orderNumber || orderId);
+
+    if (dbError) throw dbError;
 
     const auditEntry = {
       id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

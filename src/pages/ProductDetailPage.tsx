@@ -826,21 +826,6 @@ export const ProductDetailPage: React.FC = () => {
 
           {/* Status Badges */}
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border whitespace-nowrap ${
-                inStock
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-red-50 text-red-700 border-red-200'
-              }`}
-            >
-              <PackageCheck className="w-3.5 h-3.5" />
-              {product.inStockCount !== undefined ? `In Stock (${product.inStockCount} left)` : 'In Stock'}
-            </span>
-
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
-              <Clock className="w-3.5 h-3.5" /> Made on Demand ({product.prepTimeDays || 2}-3 Days Prep)
-            </span>
-
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
               <Award className="w-3.5 h-3.5" /> Verified Handcrafted Work
             </span>
