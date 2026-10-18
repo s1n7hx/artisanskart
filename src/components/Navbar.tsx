@@ -105,6 +105,9 @@ export const Navbar: React.FC = () => {
             <NavLink to="/contact" className={navLinkClass}>
               Contact
             </NavLink>
+            <NavLink to="/track" className={navLinkClass}>
+              Track Order
+            </NavLink>
             <NavLink to="/login" className={navLinkClass}>
               Sign In
             </NavLink>
@@ -334,6 +337,13 @@ export const Navbar: React.FC = () => {
               className={mobileNavLinkClass}
             >
               <span>Contact</span>
+            </NavLink>
+            <NavLink
+              to="/track"
+              onClick={() => setMobileMenuOpen(false)}
+              className={mobileNavLinkClass}
+            >
+              <span className="text-[#C85A32]">Track Order</span>
             </NavLink>
             <NavLink
               to="/login"

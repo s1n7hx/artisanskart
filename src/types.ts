@@ -97,12 +97,14 @@ export type OrderStatus =
   | 'delivered'
   | 'maker_rejected'
   | 'acceptance_timed_out'
-  | 'cancellation_requested'
   | 'cancelled'
   | 'shipment_failed'
   | 'delivery_exception'
+  | 'ndr'
+  | 'rto'
   | 'return_requested'
   | 'returned'
+  | 'payment_failed'
   // Legacy compatibility:
   | 'new'
   | 'ready'
@@ -201,7 +203,7 @@ export interface PincodeIntelligence {
   codAvailable: boolean;
   message: string;
   originPincode: string;
-  verifiedSource: 'official_postal_shiprocket' | 'shiprocket_api' | 'verified_postal_registry';
+  verifiedSource: 'official_postal_nimbuspost' | 'nimbuspost_api' | 'official_postal_shiprocket' | 'shiprocket_api' | 'verified_postal_registry';
   localities?: string[];
   postOffices?: PostalOfficeRecord[];
 }
@@ -225,11 +227,14 @@ export interface Order {
   trackingAwb?: string;
   courierName?: string;
   shipmentId?: string;
+  nimbuspostOrderId?: string | number;
+  nimbuspostShipmentId?: string | number;
   estimatedDelivery?: string;
   createdAt?: string;
   updatedAt?: string;
   itemsTotal?: number;
   shippingFee?: number;
+  packagingFee?: number;
   discountAmount?: number;
   // Professional maker & shipment fields
   makerId?: string;

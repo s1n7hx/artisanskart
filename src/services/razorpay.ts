@@ -14,6 +14,7 @@ declare global {
 
 export interface RazorpayPaymentOptions {
   amount: number; // in INR
+  orderNumber?: string;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -35,7 +36,12 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       amount: options.amount,
-      notes: options.notes,
+      orderNumber: options.orderNumber,
+      receipt: options.orderNumber || `rcpt_${Date.now()}`,
+      notes: {
+        order_number: options.orderNumber || '',
+        ...(options.notes || {}),
+      },
     }),
   });
 
@@ -99,6 +105,7 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
             razorpayOrderId: paymentResponse.razorpay_order_id,
             razorpayPaymentId: paymentResponse.razorpay_payment_id,
             razorpaySignature: paymentResponse.razorpay_signature,
+            orderNumber: options.orderNumber,
           }),
         });
 

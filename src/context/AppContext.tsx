@@ -62,6 +62,7 @@ interface AppContextType {
   markReady: (id: number) => void;
   markCompleted: (id: number) => void;
   confirmCheckout: () => void;
+  refreshOrders: () => Promise<void>;
 
   // Authentication & RBAC
   currentUser: UserAccount | null;
@@ -771,7 +772,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_ANIMATION_SETTINGS;
   });
 
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>(() => {
+    try {
+      const saved = localStorage.getItem('artisanskart_all_orders_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return INITIAL_ORDERS;
+  });
+
+  const refreshOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`*, order_items (*)`)
+        .order('created_at', { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        const mappedList: Order[] = data.map((d: any) => {
+          const items = Array.isArray(d.order_items)
+            ? d.order_items.map((i: any) => ({
+                productId: i.product_id,
+                title: i.title,
+                imageUrl: i.image_url,
+                unitPrice: Number(i.unit_price),
+                quantity: i.quantity,
+                subtotal: Number(i.subtotal),
+                makerName: i.maker_name,
+                makerId: i.maker_id,
+                productionStatus: i.production_status,
+              }))
+            : [];
+
+          return {
+            id: d.id,
+            orderNumber: d.order_number,
+            city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
+            product: items.map((i: any) => i.title).join(', ') || 'Handmade Creation',
+            qty: items.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
+            deadline: d.estimated_delivery || '3-5 business days',
+            status: d.status,
+            amount: Number(d.total_amount || d.amount || 0),
+            itemsTotal: Number(d.items_total || 0),
+            shippingFee: Number(d.shipping_fee || 0),
+            discountAmount: Number(d.discount_amount || 0),
+            customerName: d.customer_name,
+            customerEmail: d.customer_email,
+            customerPhone: d.customer_phone,
+            shippingAddress: d.shipping_address,
+            paymentStatus: d.payment_status,
+            paymentMethod: d.payment_method,
+            trackingAwb: d.tracking_awb,
+            courierName: d.courier_name || 'NimbusPost Express Partner',
+            createdAt: d.created_at,
+            makerId: d.maker_id,
+            items,
+          };
+        });
+
+        setOrders(mappedList);
+        try {
+          localStorage.setItem('artisanskart_all_orders_v2', JSON.stringify(mappedList));
+        } catch {}
+        return;
+      }
+    } catch (e) {}
+
+    // Fallback to local storage
+    try {
+      const saved = localStorage.getItem('artisanskart_all_orders_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) setOrders(parsed);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    refreshOrders();
+  }, [currentUser?.id, userRole]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -976,6 +1057,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCart([]);
+    refreshOrders().catch(() => {});
     showToast('Order placed! Your maker will begin crafting.', 'party-popper');
   };
 
@@ -1020,6 +1102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markReady,
         markCompleted,
         confirmCheckout,
+        refreshOrders,
 
         // Authentication & RBAC
         currentUser,

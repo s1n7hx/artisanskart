@@ -50,6 +50,7 @@ export const MakerPortalPage: React.FC = () => {
     showToast,
     setIsAuthModalOpen,
     makerEarningPercent,
+    refreshOrders,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'orders' | 'studio'>('orders');
@@ -70,10 +71,6 @@ export const MakerPortalPage: React.FC = () => {
       return false;
     });
 
-    // If logged in maker has no live orders yet, show pending studio demo orders for demonstration
-    if (list.length === 0 && orders.length > 0) {
-      return orders.slice(0, 3);
-    }
     return list;
   }, [orders, currentUser]);
 
@@ -173,6 +170,7 @@ export const MakerPortalPage: React.FC = () => {
         showToast(`Order #${order.orderNumber || order.id} moved to "${getStatusBadge(newStatus).label}"!`, 'check-circle');
         setActionModalType(null);
         setSelectedOrderForAction(null);
+        refreshOrders().catch(() => {});
       } else {
         showToast(res.error || 'Status transition not permitted.', 'alert-circle');
       }

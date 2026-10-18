@@ -29,6 +29,7 @@ import {
 import { useApp } from '../context/AppContext';
 import { Product, CustomerAddress, OrderItemSnapshot, PostalLookupResult, CourierServiceabilityResult } from '../types';
 import { initiateRazorpayPayment } from '../services/razorpay';
+import { OrderTimeline } from '../components/OrderTimeline';
 import {
   fetchCustomerAddresses,
   saveCustomerAddress,
@@ -282,8 +283,17 @@ export const CheckoutPage: React.FC = () => {
 
   // Pricing calculations
   const itemsSubtotal = checkoutItems.reduce((sum, item) => sum + item.subtotal, 0);
+
+  // Fixed packaging fee based on item weight: Small (<1kg) = ₹30, Big (>=1kg) = ₹60
+  const packagingFee = useMemo(() => {
+    return checkoutItems.reduce((acc, item) => {
+      const weight = Number(item.product?.weightKg || 0.5);
+      return acc + (weight < 1 ? 30 : 60);
+    }, 0);
+  }, [checkoutItems]);
+
   const [shippingFee, setShippingFee] = useState(0);
-  const grandTotal = Math.max(0, itemsSubtotal + shippingFee - couponDiscount);
+  const grandTotal = Math.max(0, itemsSubtotal + packagingFee + shippingFee - couponDiscount);
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
   // Coupon handling
@@ -307,7 +317,7 @@ export const CheckoutPage: React.FC = () => {
     showToast('Coupon removed.', 'tag');
   };
 
-  // Order Submission with Server Validation
+  // Order Submission with Server Validation & Pre-payment Database Persistence
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -342,6 +352,7 @@ export const CheckoutPage: React.FC = () => {
             title: ci.product?.title,
             price: ci.product?.price,
             maker: ci.product?.maker,
+            weightKg: ci.product?.weightKg || 0.5,
           })),
           couponCode: appliedCoupon,
           pincode,
@@ -386,11 +397,11 @@ export const CheckoutPage: React.FC = () => {
         productionStatus: 'pending',
       }));
 
+      const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+      const awb = `NP-${Math.floor(100000 + Math.random() * 900000)}`;
+
       // A. COD Payment Flow
       if (paymentMethod === 'cod') {
-        const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-        const awb = `SR-COD-${Math.floor(100000 + Math.random() * 900000)}`;
-
         const orderRecord = await createOrderRecord({
           orderNumber: orderNum,
           customerName: fullName.trim(),
@@ -405,7 +416,7 @@ export const CheckoutPage: React.FC = () => {
           paymentStatus: 'cod',
           paymentMethod: 'cod',
           trackingAwb: awb,
-          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Hub Dispatch'),
+          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'NimbusPost Express Partner' : 'Standard Hub Dispatch'),
           items: orderItemSnapshots,
           makerId: checkoutItems[0]?.product?.makerId,
           makerName: checkoutItems[0]?.product?.maker,
@@ -423,40 +434,52 @@ export const CheckoutPage: React.FC = () => {
       }
 
       // B. Razorpay Prepaid Payment Flow
+      // Pre-persist order in database before launching payment gateway to prevent zombie payments
+      const initialPrepaidOrder = await createOrderRecord({
+        orderNumber: orderNum,
+        customerName: fullName.trim(),
+        customerEmail: email.trim(),
+        customerPhone: phone.trim(),
+        shippingAddress: shippingAddressObj,
+        amount: verifiedTotal,
+        itemsTotal: itemsSubtotal,
+        packagingFee,
+        discountAmount: couponDiscount,
+        status: 'order_placed',
+        paymentStatus: 'pending',
+        paymentMethod: 'razorpay',
+        trackingAwb: awb,
+        courierName: courierResult?.courierName || (courierResult?.serviceable ? 'NimbusPost Express Partner' : 'Standard Hub Dispatch'),
+        items: orderItemSnapshots,
+        makerId: checkoutItems[0]?.product?.makerId,
+        makerName: checkoutItems[0]?.product?.maker,
+        pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
+      });
+
       await initiateRazorpayPayment({
         amount: verifiedTotal,
+        orderNumber: orderNum,
         customerName: fullName.trim(),
         customerEmail: email.trim() || 'customer@artisanskart.in',
         customerPhone: phone.trim() || '9999999999',
-        description: `ArtisansKart Order for ${checkoutItems.reduce((s, c) => s + c.qty, 0)} handcrafted creations`,
+        description: `ArtisansKart Order #${orderNum} for ${checkoutItems.reduce((s, c) => s + c.qty, 0)} handcrafted creations`,
+        notes: {
+          order_number: orderNum,
+        },
         onSuccess: async (payRes) => {
-          const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-          const awb = `SR-RZP-${payRes.razorpayPaymentId.slice(-6).toUpperCase()}`;
+          const updatedAwb = `NP-${payRes.razorpayPaymentId.slice(-6).toUpperCase()}`;
 
-          const orderRecord = await createOrderRecord({
+          const confirmedRecord = await createOrderRecord({
+            ...initialPrepaidOrder,
             orderNumber: orderNum,
-            customerName: fullName.trim(),
-            customerEmail: email.trim(),
-            customerPhone: phone.trim(),
-            shippingAddress: shippingAddressObj,
-            amount: verifiedTotal,
-            itemsTotal: itemsSubtotal,
-            packagingFee,
-            discountAmount: couponDiscount,
-            status: 'awaiting_maker_acceptance',
             paymentStatus: 'paid',
-            paymentMethod: 'razorpay',
-            trackingAwb: awb,
-            courierName: courierResult?.courierName || (courierResult?.serviceable ? 'Verified Partner Courier' : 'Standard Hub Dispatch'),
-            items: orderItemSnapshots,
-            makerId: checkoutItems[0]?.product?.makerId,
-            makerName: checkoutItems[0]?.product?.maker,
-            pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
+            status: 'awaiting_maker_acceptance',
+            trackingAwb: updatedAwb,
           });
 
           setCompletedOrderNumber(orderNum);
-          setCompletedTrackingAwb(awb);
-          setCompletedOrderSnapshot(orderRecord);
+          setCompletedTrackingAwb(updatedAwb);
+          setCompletedOrderSnapshot(confirmedRecord);
           confirmCheckout();
           setIsProcessing(false);
           setOrderComplete(true);
@@ -506,25 +529,36 @@ export const CheckoutPage: React.FC = () => {
               <p className="text-xl font-black text-[#1E293B] font-mono">{completedOrderNumber}</p>
             </div>
             <div className="text-left sm:text-right">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Shiprocket Tracking AWB</span>
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Courier Tracking AWB (NimbusPost)</span>
               <p className="text-sm font-bold text-[#C85A32] font-mono">{completedTrackingAwb}</p>
             </div>
           </div>
 
           {/* Workflow Status Timeline */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-bold text-slate-700">Artisan Production Workflow:</span>
-              <span className="font-semibold text-[#C85A32] bg-[#C85A32]/10 px-2.5 py-0.5 rounded-full">
-                Step 1: Awaiting Maker Acceptance
-              </span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-              <div className="w-1/6 h-full bg-[#C85A32]" />
-            </div>
-            <p className="text-[11px] text-slate-500">
-              The creator has 24 hours to confirm the raw materials and commence crafting.
-            </p>
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Live Production &amp; Delivery Timeline</h3>
+            <OrderTimeline
+              order={
+                completedOrderSnapshot || {
+                  id: Date.now(),
+                  orderNumber: completedOrderNumber,
+                  status: 'awaiting_maker_acceptance',
+                  trackingAwb: completedTrackingAwb,
+                  courierName: 'NimbusPost Express Partner',
+                  amount: completedOrderSnapshot?.amount || grandTotal,
+                  itemsTotal: itemsSubtotal,
+                  product: checkoutItems.map((c) => c.product?.title).join(', '),
+                  qty: checkoutItems.reduce((s, c) => s + c.qty, 0),
+                  city: `${city}, ${state}`,
+                  deadline: '3-4 business days',
+                  shippingFee: 0,
+                  discountAmount: couponDiscount,
+                  customerName: fullName,
+                  paymentStatus: paymentMethod === 'cod' ? 'cod' : 'paid',
+                  paymentMethod: paymentMethod,
+                }
+              }
+            />
           </div>
 
           {/* Shipping Address Review */}
@@ -539,16 +573,22 @@ export const CheckoutPage: React.FC = () => {
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <Link
+              to={`/track/${completedOrderNumber}`}
+              className="flex-1 py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#C85A32] text-white hover:bg-[#b04a25] text-center transition shadow-md"
+            >
+              Track Order Live ({completedOrderNumber})
+            </Link>
+            <Link
               to="/marketplace"
               className="flex-1 py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-bold bg-[#1E293B] text-white hover:bg-slate-800 text-center transition shadow-md"
             >
-              Continue Exploring Artisan Creations
+              Continue Exploring Creations
             </Link>
             <Link
               to="/"
-              className="flex-1 py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-50 text-center transition"
+              className="py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-50 text-center transition"
             >
-              Back to Home
+              Home
             </Link>
           </div>
         </div>
@@ -1105,10 +1145,10 @@ export const CheckoutPage: React.FC = () => {
               <div className="flex items-center justify-between">
                 <span>Packaging Fee</span>
                 <span className="font-bold text-slate-900">
-                  {shippingFee === 0 ? (
+                  {packagingFee === 0 ? (
                     <span className="text-emerald-700">FREE</span>
                   ) : (
-                    formatINR(shippingFee)
+                    formatINR(packagingFee)
                   )}
                 </span>
               </div>

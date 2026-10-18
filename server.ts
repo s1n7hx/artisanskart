@@ -5,11 +5,11 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import {
-  getShiprocketToken,
+  getNimbusPostToken,
   checkCourierServiceability,
   createShipmentOrder,
-  getShiprocketIntegrationStatus,
-} from './src/server/shiprocket';
+  getNimbusPostIntegrationStatus,
+} from './src/server/nimbuspost';
 
 dotenv.config({ path: '.env.local', override: true });
 dotenv.config();
@@ -24,8 +24,14 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
 );
 
-// Body parsing
-app.use(express.json());
+// Body parsing with raw buffer capture for cryptographic webhook signature verification
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // -------------------------------------------------------------
@@ -254,7 +260,8 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
   try {
-    const { amount, receipt, notes } = req.body;
+    const { amount, receipt, notes, orderNumber } = req.body;
+    const targetOrderNumber = orderNumber || notes?.order_number;
     const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
     const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
@@ -263,6 +270,14 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     if (keyId && keySecret) {
       // Real Razorpay API call
       const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+      const orderNotes: Record<string, string> = {
+        platform: 'ArtisansKart',
+        ...(notes || {}),
+      };
+      if (targetOrderNumber) {
+        orderNotes.order_number = String(targetOrderNumber);
+      }
+
       const response = await fetch('https://api.razorpay.com/v1/orders', {
         method: 'POST',
         headers: {
@@ -272,8 +287,8 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
         body: JSON.stringify({
           amount: amountInPaise,
           currency: 'INR',
-          receipt: receipt || `rcpt_${Date.now()}`,
-          notes: notes || {},
+          receipt: receipt || targetOrderNumber || `rcpt_${Date.now()}`,
+          notes: orderNotes,
         }),
       });
 
@@ -282,23 +297,46 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
         throw new Error(data.error?.description || data.error?.message || data.message || 'Razorpay order creation failed');
       }
 
+      // Link Razorpay order ID to internal order if exists
+      if (targetOrderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_gateway_order_id: data.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', targetOrderNumber);
+      }
+
       return res.json({
         gateway: 'razorpay',
         orderId: data.id,
         amount: data.amount,
         currency: 'INR',
         keyId,
+        orderNumber: targetOrderNumber,
       });
     }
 
     // Safe Test Gateway Simulation
     const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    if (targetOrderNumber) {
+      await supabaseAdmin
+        .from('orders')
+        .update({
+          payment_gateway_order_id: mockOrderId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('order_number', targetOrderNumber);
+    }
+
     return res.json({
       gateway: 'test_gateway',
       orderId: mockOrderId,
       amount: amountInPaise,
       currency: 'INR',
       keyId: 'rzp_test_artisanskart_hub',
+      orderNumber: targetOrderNumber,
       message: 'Running in safe Indian test gateway mode. Real UPI, NetBanking, Card simulation available.',
     });
   } catch (err: any) {
@@ -307,11 +345,11 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API Route 3: Verify Payment Signature
+// API Route 3: Verify Payment Signature & Persist to Database
 // -------------------------------------------------------------
-app.post('/api/payment/verify', (req: Request, res: Response) => {
+app.post('/api/payment/verify', async (req: Request, res: Response) => {
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (keySecret && razorpaySignature) {
@@ -320,8 +358,34 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
         .digest('hex');
 
-      if (generatedSignature !== razorpaySignature) {
+      const sigBuf = Buffer.from(razorpaySignature, 'utf-8');
+      const genBuf = Buffer.from(generatedSignature, 'utf-8');
+
+      if (sigBuf.length !== genBuf.length || !crypto.timingSafeEqual(sigBuf, genBuf)) {
         return res.status(400).json({ verified: false, error: 'Invalid payment signature.' });
+      }
+
+      // Authoritative database update upon verified payment
+      if (orderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_gateway_payment_id: razorpayPaymentId,
+            status: 'awaiting_maker_acceptance',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+      } else if (razorpayOrderId) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_gateway_payment_id: razorpayPaymentId,
+            status: 'awaiting_maker_acceptance',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('payment_gateway_order_id', razorpayOrderId);
       }
 
       return res.json({ verified: true, paymentId: razorpayPaymentId });
@@ -329,9 +393,21 @@ app.post('/api/payment/verify', (req: Request, res: Response) => {
 
     // In test mode: verify order was received
     if (razorpayOrderId) {
+      const simulatedPaymentId = razorpayPaymentId || `pay_test_${Date.now()}`;
+      if (orderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_gateway_payment_id: simulatedPaymentId,
+            status: 'awaiting_maker_acceptance',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+      }
       return res.json({
         verified: true,
-        paymentId: razorpayPaymentId || `pay_test_${Date.now()}`,
+        paymentId: simulatedPaymentId,
         mode: 'test_verified',
       });
     }
@@ -753,12 +829,18 @@ app.post('/api/shipping/create-shipment', async (req: Request, res: Response) =>
 // API Route 6: Integration Config Status Checker
 // Safe inspection of Shiprocket & Razorpay without exposing secrets
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// API Route 6: Integration Config Status Checker
+// Safe inspection of NimbusPost & Razorpay without exposing secrets
+// -------------------------------------------------------------
 app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
-  const shiprocketStatus = getShiprocketIntegrationStatus();
+  const nimbusStatus = getNimbusPostIntegrationStatus();
   const hasRazorpay = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
 
   return res.json({
-    shiprocket: shiprocketStatus,
+    shipping: nimbusStatus,
+    shiprocket: nimbusStatus, // backward compat for UI consumers
+    nimbuspost: nimbusStatus,
     razorpay: {
       configured: hasRazorpay,
       mode: hasRazorpay ? 'live' : 'test_gateway',
@@ -768,36 +850,36 @@ app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API Route 7: Diagnostic Test for Shiprocket Authentication
-// Triggers live login on-demand to test SHIPROCKET_EMAIL & SHIPROCKET_PASSWORD
+// API Route 7: Diagnostic Test for Courier Authentication
 // -------------------------------------------------------------
-app.post('/api/shipping/test-shiprocket-auth', async (_req: Request, res: Response) => {
+app.post(['/api/shipping/test-shiprocket-auth', '/api/shipping/test-nimbuspost-auth'], async (_req: Request, res: Response) => {
   try {
-    const email = process.env.SHIPROCKET_EMAIL?.trim();
-    const hasPassword = Boolean(process.env.SHIPROCKET_PASSWORD?.trim());
+    const hasToken = Boolean(process.env.NIMBUSPOST_TOKEN?.trim());
+    const email = process.env.NIMBUSPOST_EMAIL?.trim();
+    const hasPassword = Boolean(process.env.NIMBUSPOST_PASSWORD?.trim());
 
-    if (!email || !hasPassword) {
+    if (!hasToken && (!email || !hasPassword)) {
       return res.status(400).json({
         success: false,
-        message: 'SHIPROCKET_EMAIL and SHIPROCKET_PASSWORD must be configured in environment variables (.env.local or production secrets).',
-        status: getShiprocketIntegrationStatus(),
+        message: 'NIMBUSPOST_EMAIL and NIMBUSPOST_PASSWORD (or NIMBUSPOST_TOKEN) must be configured in environment variables.',
+        status: getNimbusPostIntegrationStatus(),
       });
     }
 
-    const token = await getShiprocketToken(true); // force fresh login to test
-    const status = getShiprocketIntegrationStatus();
+    const token = await getNimbusPostToken(true);
+    const status = getNimbusPostIntegrationStatus();
 
     if (token) {
       return res.json({
         success: true,
-        message: 'Successfully authenticated with Shiprocket official API! Token acquired and securely cached for 9 days.',
+        message: 'Successfully authenticated with NimbusPost logistics network! Token acquired and cached.',
         status,
       });
     }
 
     return res.status(401).json({
       success: false,
-      message: status.lastError || 'Shiprocket authentication failed. Please verify your email and password.',
+      message: status.lastError || 'Logistics authentication failed. Please check your credentials.',
       status,
     });
   } catch (err: any) {
@@ -806,78 +888,203 @@ app.post('/api/shipping/test-shiprocket-auth', async (_req: Request, res: Respon
 });
 
 // -------------------------------------------------------------
-// API Route 8: Webhook receiver for Shiprocket Tracking Updates
+// API Route 8: Webhook receiver for Courier Logistics Updates
+// Automatically syncs parcel statuses (picked up, shipped, out for delivery, delivered)
 // -------------------------------------------------------------
 app.post('/api/shipping/webhook', async (req: Request, res: Response) => {
-  const { current_status, awb, order_number } = req.body;
-  if (!order_number) return res.status(400).json({ error: 'Missing order_number' });
+  try {
+    const { current_status, status, awb, awb_number, order_number, order_id } = req.body;
+    const targetOrderNumber = order_number || order_id;
+    const targetAwb = awb || awb_number;
+    const rawStatus = String(current_status || status || '').toUpperCase();
 
-  let newStatus: string = 'in_transit';
-  if (current_status === 'PICKEDUP') newStatus = 'picked_up';
-  else if (current_status === 'SHIPPED') newStatus = 'in_transit';
-  else if (current_status === 'OUTFORDELIVERY') newStatus = 'out_for_delivery';
-  else if (current_status === 'DELIVERED') newStatus = 'delivered';
+    if (!targetOrderNumber && !targetAwb) {
+      return res.status(400).json({ error: 'Missing order_number or awb' });
+    }
 
-  await supabaseAdmin
-    .from('orders')
-    .update({ status: newStatus, tracking_awb: awb, updated_at: new Date().toISOString() })
-    .eq('order_number', order_number);
+    let newStatus: string | null = null;
+    if (rawStatus.includes('PICK') || rawStatus === 'PICKEDUP' || rawStatus === 'PICKED_UP') {
+      newStatus = 'picked_up';
+    } else if (rawStatus.includes('TRANSIT') || rawStatus.includes('SHIP') || rawStatus === 'SHIPPED') {
+      newStatus = 'in_transit';
+    } else if (rawStatus.includes('OUT') || rawStatus === 'OUTFORDELIVERY') {
+      newStatus = 'out_for_delivery';
+    } else if (rawStatus.includes('DELIVER') || rawStatus === 'DELIVERED') {
+      newStatus = 'delivered';
+    } else if (rawStatus.includes('CANCEL')) {
+      newStatus = 'cancelled';
+    } else if (rawStatus.includes('RTO') || rawStatus.includes('RETURN')) {
+      newStatus = 'delivery_exception';
+    }
 
-  console.log('📦 Shiprocket Webhook event processed:', current_status, awb, order_number);
-  return res.json({ received: true });
+    if (newStatus) {
+      const updatePayload: Record<string, any> = {
+        status: newStatus,
+        updated_at: new Date().toISOString(),
+      };
+      if (targetAwb) updatePayload.tracking_awb = targetAwb;
+
+      if (targetOrderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update(updatePayload)
+          .eq('order_number', targetOrderNumber);
+      } else if (targetAwb) {
+        await supabaseAdmin
+          .from('orders')
+          .update(updatePayload)
+          .eq('tracking_awb', targetAwb);
+      }
+
+      console.log(`📦 [Shipping Webhook] Order ${targetOrderNumber || targetAwb} status updated to ${newStatus}`);
+    }
+
+    return res.json({ received: true, mappedStatus: newStatus || 'unmapped' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // -------------------------------------------------------------
+// In-Memory Idempotency Cache for Webhook Events
+// -------------------------------------------------------------
+const processedWebhookEvents = new Set<string>();
+
+// -------------------------------------------------------------
 // API Route 8b: Webhook receiver for Razorpay Payment Updates
+// Uses raw request body buffer for cryptographic HMAC-SHA256 signature verification
 // -------------------------------------------------------------
 app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
   const signature = req.headers['x-razorpay-signature'] as string;
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-  
-  if (!secret || !signature) return res.status(401).send('Unauthorized');
+
+  if (!secret || !signature) {
+    console.warn('⚠️ [Razorpay Webhook] Missing secret or signature header.');
+    return res.status(401).send('Unauthorized');
+  }
+
+  // Use raw request buffer captured in middleware for authentic byte-level verification
+  const rawBody = (req as any).rawBody;
+  const payloadToVerify = rawBody || JSON.stringify(req.body);
 
   const generatedSignature = crypto
     .createHmac('sha256', secret)
-    .update(JSON.stringify(req.body))
+    .update(payloadToVerify)
     .digest('hex');
 
-  if (generatedSignature !== signature) return res.status(400).send('Invalid signature');
+  const sigBuf = Buffer.from(signature, 'utf-8');
+  const genBuf = Buffer.from(generatedSignature, 'utf-8');
 
-  if (req.body.event === 'payment.captured') {
-    const payment = req.body.payload.payment.entity;
-    const orderNumber = payment.notes?.order_number;
-
-    if (orderNumber) {
-      await supabaseAdmin
-        .from('orders')
-        .update({ payment_status: 'paid', updated_at: new Date().toISOString() })
-        .eq('order_number', orderNumber);
-      console.log('✅ Payment captured for order:', orderNumber);
-    }
+  if (sigBuf.length !== genBuf.length || !crypto.timingSafeEqual(sigBuf, genBuf)) {
+    console.error('❌ [Razorpay Webhook] Signature verification failed');
+    return res.status(400).send('Invalid signature');
   }
 
-  return res.json({ status: 'ok' });
+  const event = req.body.event;
+  const eventId = req.headers['x-razorpay-event-id'] as string || `${event}_${Date.now()}`;
+
+  // Idempotency check: prevent duplicate event processing
+  if (processedWebhookEvents.has(eventId)) {
+    return res.json({ status: 'ok', deduplicated: true });
+  }
+  processedWebhookEvents.add(eventId);
+  if (processedWebhookEvents.size > 2000) {
+    const firstKey = processedWebhookEvents.values().next().value;
+    if (firstKey) processedWebhookEvents.delete(firstKey);
+  }
+
+  console.log(`🔔 [Razorpay Webhook] Verified event: ${event}`);
+
+  try {
+    if (event === 'payment.captured' || event === 'order.paid') {
+      const payment = req.body.payload?.payment?.entity;
+      const orderNumber = payment?.notes?.order_number;
+      const rzpOrderId = payment?.order_id;
+      const paymentId = payment?.id;
+
+      if (orderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_gateway_payment_id: paymentId,
+            status: 'awaiting_maker_acceptance',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+        console.log(`✅ [Razorpay Webhook] Order #${orderNumber} marked PAID`);
+      } else if (rzpOrderId) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'paid',
+            payment_gateway_payment_id: paymentId,
+            status: 'awaiting_maker_acceptance',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('payment_gateway_order_id', rzpOrderId);
+        console.log(`✅ [Razorpay Webhook] Gateway Order #${rzpOrderId} marked PAID`);
+      }
+    } else if (event === 'payment.failed') {
+      const payment = req.body.payload?.payment?.entity;
+      const orderNumber = payment?.notes?.order_number;
+      const rzpOrderId = payment?.order_id;
+
+      if (orderNumber) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'failed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+      } else if (rzpOrderId) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'failed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('payment_gateway_order_id', rzpOrderId);
+      }
+    } else if (event === 'refund.processed') {
+      const refund = req.body.payload?.refund?.entity;
+      const paymentId = refund?.payment_id;
+      if (paymentId) {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'refunded',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('payment_gateway_payment_id', paymentId);
+      }
+    }
+  } catch (err: any) {
+    console.error('❌ [Razorpay Webhook Processing Error]:', err.message);
+  }
+
+  return res.json({ status: 'ok', received: true });
 });
 
 // -------------------------------------------------------------
 // API Route 9: Enforce Server-Side Order Lifecycle Transitions
-// Validates permitted status transitions, logs actor history,
-// and triggers Shiprocket shipment booking upon 'ready_to_ship'.
+// Validates permitted status transitions, logs actor history into order_status_history
 // -------------------------------------------------------------
 const ALLOWED_ORDER_TRANSITIONS: Record<string, string[]> = {
-  order_placed: ['awaiting_maker_acceptance', 'cancelled'],
+  order_placed: ['awaiting_maker_acceptance', 'accepted', 'cancelled'],
   new: ['awaiting_maker_acceptance', 'accepted', 'cancelled'], // legacy compat
   awaiting_maker_acceptance: ['accepted', 'maker_rejected', 'acceptance_timed_out', 'cancelled'],
   accepted: ['in_production', 'cancelled'],
-  in_production: ['quality_check', 'cancellation_requested'],
+  in_production: ['quality_check', 'ready_to_pack', 'cancellation_requested'],
   quality_check: ['ready_to_pack', 'in_production'],
-  ready_to_pack: ['packed'],
+  ready_to_pack: ['packed', 'ready_to_ship'],
   ready: ['packed', 'ready_to_ship'], // legacy compat
   packed: ['ready_to_ship'],
-  ready_to_ship: ['shipment_booked', 'shipment_failed'],
-  shipment_booked: ['picked_up', 'shipment_failed'],
+  ready_to_ship: ['shipment_booked', 'in_transit', 'shipment_failed'],
+  shipment_booked: ['picked_up', 'in_transit', 'shipment_failed'],
   picked_up: ['in_transit', 'delivery_exception'],
-  in_transit: ['out_for_delivery', 'delivery_exception'],
+  in_transit: ['out_for_delivery', 'delivery_exception', 'delivered'],
   out_for_delivery: ['delivered', 'delivery_exception'],
   delivered: ['completed'],
   completed: [],
@@ -924,18 +1131,52 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
       });
     }
 
-    // Persist to Database
+    const targetRef = orderNumber || orderId;
+
+    // 1. Persist updated status to orders table
     const { error: dbError } = await supabaseAdmin
       .from('orders')
-      .update({ status: targetStatus, updated_at: new Date().toISOString() })
-      .eq('order_number', orderNumber || orderId);
+      .update({
+        status: targetStatus,
+        rejection_reason: rejectionReason,
+        confirmed_prep_days: confirmedPrepDays,
+        parcel_weight_kg: parcelWeightKg,
+        parcel_dimensions: parcelDimensions,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('order_number', targetRef);
 
-    if (dbError) throw dbError;
+    if (dbError) {
+      console.warn('[Order Lifecycle Database Warning]:', dbError.message);
+    }
+
+    // 2. Persist audit trail into order_status_history table
+    try {
+      const { data: matchedOrder } = await supabaseAdmin
+        .from('orders')
+        .select('id')
+        .eq('order_number', targetRef)
+        .maybeSingle();
+
+      if (matchedOrder?.id) {
+        await supabaseAdmin.from('order_status_history').insert({
+          order_id: matchedOrder.id,
+          from_status: fromStatus,
+          to_status: targetStatus,
+          actor_name: actorName || 'System',
+          actor_role: actorRole || 'system',
+          note: note || `Status transitioned from ${fromStatus} to ${targetStatus}`,
+          created_at: new Date().toISOString(),
+        });
+      }
+    } catch (auditErr: any) {
+      console.warn('[Order Lifecycle Audit History Warning]:', auditErr.message);
+    }
 
     const auditEntry = {
       id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       orderId,
-      orderNumber,
+      orderNumber: targetRef,
       fromStatus,
       toStatus: targetStatus,
       actorName: actorName || 'System',
@@ -948,12 +1189,12 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
       confirmedPrepDays,
     };
 
-    console.log(`[Order Lifecycle] ${orderNumber || orderId}: ${fromStatus} -> ${targetStatus} by ${actorName || actorRole}`);
+    console.log(`[Order Lifecycle] ${targetRef}: ${fromStatus} -> ${targetStatus} by ${actorName || actorRole}`);
 
     return res.json({
       success: true,
       orderId,
-      orderNumber,
+      orderNumber: targetRef,
       previousStatus: fromStatus,
       status: targetStatus,
       auditEntry,

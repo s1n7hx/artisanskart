@@ -16,6 +16,7 @@ import { PendingApprovalPage } from './pages/PendingApprovalPage';
 import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
+import { OrderTrackingPage } from './pages/OrderTrackingPage';
 
 import { MakerRouteGuard, AdminRouteGuard } from './components/RouteGuards';
 
@@ -32,6 +33,10 @@ export default function App() {
             <Route path="marketplace" element={<MarketplacePage />} />
             <Route path="product/:slug" element={<ProductDetailPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="track" element={<OrderTrackingPage />} />
+            <Route path="track/:orderNumber" element={<OrderTrackingPage />} />
+            <Route path="order/:orderNumber" element={<OrderTrackingPage />} />
+            <Route path="orders" element={<OrderTrackingPage />} />
             <Route
               path="maker"
               element={

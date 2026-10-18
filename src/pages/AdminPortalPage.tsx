@@ -70,6 +70,7 @@ export const AdminPortalPage: React.FC = () => {
     setIsAuthModalOpen,
     makerEarningPercent,
     updateMakerEarningPercent,
+    refreshOrders,
   } = useApp();
 
   const navigate = useNavigate();
@@ -1981,7 +1982,7 @@ export const AdminPortalPage: React.FC = () => {
             </span>
           </div>
 
-          {/* Shiprocket Logistics & Courier Integration Status */}
+          {/* NimbusPost Logistics & Courier Integration Status */}
           <div className="p-5 rounded-2xl bg-gradient-to-r from-orange-50/80 to-amber-50/50 border border-orange-200/80 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -1990,7 +1991,7 @@ export const AdminPortalPage: React.FC = () => {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-slate-900">Shiprocket Logistics Integration</h3>
+                    <h3 className="text-sm font-bold text-slate-900">NimbusPost Logistics Integration</h3>
                     <span
                       className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                         shippingStatus?.configured
@@ -2006,7 +2007,7 @@ export const AdminPortalPage: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Official API: Auto-login with <code className="text-[#C85A32] font-bold">SHIPROCKET_EMAIL</code> &amp; <code className="text-[#C85A32] font-bold">SHIPROCKET_PASSWORD</code>. Token cached server-side for 9 days.
+                    Official API: Auto-login with <code className="text-[#C85A32] font-bold">NIMBUSPOST_EMAIL</code> &amp; <code className="text-[#C85A32] font-bold">NIMBUSPOST_PASSWORD</code> (or <code className="text-[#C85A32] font-bold">NIMBUSPOST_TOKEN</code>).
                   </p>
                 </div>
               </div>
@@ -2019,7 +2020,7 @@ export const AdminPortalPage: React.FC = () => {
                   className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 text-[#C85A32] ${isTestingShiprocket ? 'animate-spin' : ''}`} />
-                  <span>{isTestingShiprocket ? 'Authenticating...' : 'Test Shiprocket Auth'}</span>
+                  <span>{isTestingShiprocket ? 'Authenticating...' : 'Test Logistics Auth'}</span>
                 </button>
               </div>
             </div>
@@ -2027,20 +2028,22 @@ export const AdminPortalPage: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
               <div className="bg-white/80 p-2.5 rounded-xl border border-orange-100">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Auth Mechanism</span>
-                <span className="font-semibold text-slate-800">Auto-login (No manual token entry)</span>
+                <span className="font-semibold text-slate-800">
+                  {shippingStatus?.tokenConfigured ? 'Direct API Token' : 'Auto-login & 7-day Token Cache'}
+                </span>
               </div>
               <div className="bg-white/80 p-2.5 rounded-xl border border-orange-100">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Server Cache Status</span>
                 <span className="font-semibold text-slate-800">
                   {shippingStatus?.tokenCached
-                    ? `Token Cached (${shippingStatus.tokenExpiresInHours ?? 216}h left)`
+                    ? 'Token Cached & Active'
                     : 'Ready on first request'}
                 </span>
               </div>
               <div className="bg-white/80 p-2.5 rounded-xl border border-orange-100">
-                <span className="text-[10px] uppercase font-bold text-slate-400 block">Configured Account</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Carrier Network</span>
                 <span className="font-semibold text-slate-800 truncate block">
-                  {shippingStatus?.emailMasked || (shippingStatus?.configured ? 'Configured' : 'None (.env.local)')}
+                  {shippingStatus?.companyName || (shippingStatus?.configured ? 'NimbusPost Partner Network' : 'Delhivery / BlueDart / DTDC')}
                 </span>
               </div>
             </div>
@@ -2285,6 +2288,7 @@ export const AdminPortalPage: React.FC = () => {
                           if (res.success) {
                             showToast(`Status updated to "${targetOverrideStatus}" with audit log!`, 'check-circle');
                             setSelectedAdminOrder(null);
+                            refreshOrders().catch(() => {});
                           } else {
                             showToast(res.error || 'Failed to update status', 'alert-circle');
                           }
