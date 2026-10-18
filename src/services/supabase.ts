@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { HeroContent, Product, Order, UserRole, UserStatus } from '../types';
+import { PRODUCTS } from '../data';
 
 const SUPABASE_URL =
   import.meta.env.VITE_SUPABASE_URL ||
@@ -610,9 +611,7 @@ export async function fetchSupabaseProducts(): Promise<Product[] | null> {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) return null;
-
-    return data.map((item) => {
+    const mappedRemote = (data && !error) ? data.map((item) => {
       const gallery = Array.isArray(item.gallery_images) && item.gallery_images.length > 0
         ? item.gallery_images.filter(Boolean)
         : (item.image_url ? [item.image_url] : []);
@@ -641,11 +640,15 @@ export async function fetchSupabaseProducts(): Promise<Product[] | null> {
         slug: item.slug,
         makerId: item.maker_id,
         originalPrice: item.original_price ? Number(item.original_price) : undefined,
-        source: 'custom',
+        source: 'custom' as const,
       };
-    });
+    }) : [];
+
+    const existingIds = new Set(mappedRemote.map(p => p.id));
+    const missingDefaults = PRODUCTS.filter(p => !existingIds.has(p.id));
+    return [...mappedRemote, ...missingDefaults];
   } catch (err) {
-    return null;
+    return PRODUCTS;
   }
 }
 

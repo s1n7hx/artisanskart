@@ -53,7 +53,7 @@ export const MakerPortalPage: React.FC = () => {
     refreshOrders,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'studio'>('orders');
+
 
   // Filter orders strictly assigned to this maker or products by this maker
   const makerOrders = useMemo(() => {
@@ -93,12 +93,6 @@ export const MakerPortalPage: React.FC = () => {
   const [parcelWeightInput, setParcelWeightInput] = useState<number>(0.6);
   const [parcelDimensionsInput, setParcelDimensionsInput] = useState<string>('20×15×10 cm');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-
-  // Studio Pickup Location settings
-  const [studioPickupPin, setStudioPickupPin] = useState('110016');
-  const [studioAddress, setStudioAddress] = useState('ArtisansKart Innovation Hub, New Delhi');
-  const [studioPhone, setStudioPhone] = useState(currentUser?.email || '9876543210');
-  const [isSavingStudio, setIsSavingStudio] = useState(false);
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -181,23 +175,6 @@ export const MakerPortalPage: React.FC = () => {
     }
   };
 
-  // Save studio pickup details
-  const handleSaveStudioSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSavingStudio(true);
-    setTimeout(() => {
-      localStorage.setItem('artisanskart_maker_studio_pickup', JSON.stringify({
-        pin: studioPickupPin,
-        address: studioAddress,
-        phone: studioPhone,
-      }));
-      setIsSavingStudio(false);
-      showToast('Studio pickup address updated for Shiprocket couriers!', 'check-circle');
-    }, 400);
-  };
-
-
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8">
       {/* Studio Header */}
@@ -214,28 +191,7 @@ export const MakerPortalPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center gap-1.5 bg-[#FAF9F6] p-1.5 rounded-2xl border border-[#e7e0d8]">
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'orders' ? 'bg-[#1E293B] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5" />
-            <span>Orders ({makerOrders.length})</span>
-          </button>
 
-          <button
-            onClick={() => setActiveTab('studio')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'studio' ? 'bg-[#1E293B] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <MapPin className="w-3.5 h-3.5" />
-            <span>Studio Pickup</span>
-          </button>
-        </div>
       </div>
 
       {/* Platform Role Security Policy Banner */}
@@ -286,7 +242,6 @@ export const MakerPortalPage: React.FC = () => {
       </div>
 
       {/* TAB 1: 13-STAGE ORDER LIFECYCLE WORKFLOW */}
-      {activeTab === 'orders' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black text-[#1E293B]">
@@ -447,68 +402,10 @@ export const MakerPortalPage: React.FC = () => {
             </div>
           )}
         </div>
-      )}
 
 
-      {/* TAB 3: STUDIO PICKUP LOCATION SETTINGS */}
-      {activeTab === 'studio' && (
-        <div className="max-w-2xl bg-white rounded-3xl p-6 sm:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
-          <div className="border-b pb-4">
-            <h2 className="text-lg font-black text-[#1E293B] flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-[#C85A32]" />
-              Artisan Studio Pickup Address
-            </h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Used by Shiprocket to dispatch couriers directly to your maker workshop or studio locker.
-            </p>
-          </div>
 
-          <form onSubmit={handleSaveStudioSettings} className="space-y-4 text-xs">
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Studio Pickup PIN Code *</label>
-              <input
-                type="text"
-                required
-                maxLength={6}
-                value={studioPickupPin}
-                onChange={(e) => setStudioPickupPin(e.target.value.replace(/\D/g, ''))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32] font-mono text-sm font-bold"
-              />
-              <p className="text-[11px] text-slate-400">Default Fulfillment Hub: 110016 (New Delhi)</p>
-            </div>
 
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Workshop / Studio Address Line *</label>
-              <textarea
-                rows={2}
-                required
-                value={studioAddress}
-                onChange={(e) => setStudioAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32]"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700">Contact Phone / Pickup Coordinator *</label>
-              <input
-                type="text"
-                required
-                value={studioPhone}
-                onChange={(e) => setStudioPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32]"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSavingStudio}
-              className="py-3 px-6 rounded-2xl bg-[#1E293B] hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer shadow-md disabled:opacity-50"
-            >
-              {isSavingStudio ? 'Saving...' : 'Save Studio Coordinates'}
-            </button>
-          </form>
-        </div>
-      )}
 
       {/* ACTION MODAL: ACCEPT ORDER (CONFIRM PREPARATION TIME) */}
       {actionModalType === 'accept' && selectedOrderForAction && (

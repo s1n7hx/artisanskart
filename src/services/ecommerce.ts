@@ -88,10 +88,16 @@ export async function lookupPostalPincode(pincode: string): Promise<PostalLookup
     };
   }
 
+  // 1. Try backend API with 5-second timeout
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     const res = await fetch(`/api/postal/lookup/${cleanPin}`, {
       headers: { Accept: 'application/json' },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     const data = await res.json().catch(() => ({}));
 
@@ -109,24 +115,92 @@ export async function lookupPostalPincode(pincode: string): Promise<PostalLookup
       };
     }
 
-    return {
-      success: false,
-      pincode: cleanPin,
-      localities: [],
-      postOffices: [],
-      errorCode: data.errorCode || (res.status === 404 ? 'PINCODE_NOT_FOUND' : 'LOOKUP_FAILED'),
-      message: data.message || (res.status === 404 ? 'PIN code not found in postal registry.' : 'Postal directory lookup failed.'),
-    };
+    if (res.status === 404) {
+      return {
+        success: false,
+        pincode: cleanPin,
+        localities: [],
+        postOffices: [],
+        errorCode: 'PINCODE_NOT_FOUND',
+        message: 'PIN code not found in postal registry.',
+      };
+    }
   } catch (err: any) {
-    return {
-      success: false,
-      pincode: cleanPin,
-      localities: [],
-      postOffices: [],
-      errorCode: 'LOOKUP_FAILED',
-      message: 'Network error connecting to postal directory. Please retry.',
-    };
+    // Backend lookup failed or timed out, proceed to fallback API
   }
+
+  // 2. Fallback API: Direct call to https://api.postalpincode.in/pincode/{cleanPin} with 5s timeout
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const directRes = await fetch(`https://api.postalpincode.in/pincode/${cleanPin}`, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (directRes.ok) {
+      const postalData = await directRes.json();
+      if (Array.isArray(postalData) && postalData[0]) {
+        const entry = postalData[0];
+        if (entry.Status === 'Success' && Array.isArray(entry.PostOffice) && entry.PostOffice.length > 0) {
+          const offices = entry.PostOffice;
+          const deliveryOffice = offices.find((o: any) => o.DeliveryStatus === 'Delivery') || offices[0];
+          const district = (deliveryOffice.District || offices[0].District || '').trim();
+          const state = (deliveryOffice.State || offices[0].State || '').trim();
+          const country = (deliveryOffice.Country || offices[0].Country || 'India').trim();
+
+          const localities = Array.from(
+            new Set(offices.map((o: any) => (o.Name || '').trim()).filter(Boolean))
+          ) as string[];
+
+          const primaryLocality = deliveryOffice.Name ? deliveryOffice.Name.trim() : (localities[0] || district);
+
+          const postOffices = offices.map((o: any) => ({
+            name: (o.Name || '').trim(),
+            branchType: o.BranchType || '',
+            deliveryStatus: o.DeliveryStatus || '',
+            district: (o.District || district).trim(),
+            state: (o.State || state).trim(),
+          }));
+
+          return {
+            success: true,
+            pincode: cleanPin,
+            district,
+            state,
+            country,
+            primaryLocality,
+            localities,
+            postOffices,
+            multipleOffices: localities.length > 1,
+          };
+        } else if (entry.Status === 'Error' || (entry.Message && entry.Message.toLowerCase().includes('no records found'))) {
+          return {
+            success: false,
+            pincode: cleanPin,
+            localities: [],
+            postOffices: [],
+            errorCode: 'PINCODE_NOT_FOUND',
+            message: 'PIN code not found in postal registry.',
+          };
+        }
+      }
+    }
+  } catch (err: any) {
+    // Direct API also failed or timed out
+  }
+
+  // 3. Graceful manual fallback: keep form usable and allow manual entry
+  return {
+    success: false,
+    pincode: cleanPin,
+    localities: [],
+    postOffices: [],
+    errorCode: 'LOOKUP_FAILED',
+    message: 'Unable to auto-fill address details. Please fill them manually.',
+  };
 }
 
 // -------------------------------------------------------------

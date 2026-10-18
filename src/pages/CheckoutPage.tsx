@@ -126,12 +126,16 @@ export const CheckoutPage: React.FC = () => {
     if (reqId !== lookupRequestIdRef.current) return;
 
     if (!postal.success) {
-      setPostalLookupStatus('error');
-      setPostalErrorCode(postal.errorCode || 'LOOKUP_FAILED');
-      setPostalErrorMessage(postal.message || 'PIN code not found in Indian postal registry.');
-      setCity('');
-      setState('');
-      setLocality('');
+      if (postal.errorCode === 'LOOKUP_FAILED') {
+        setPostalLookupStatus('idle');
+        setPostalErrorCode('LOOKUP_FAILED');
+        setPostalErrorMessage('Unable to auto-fill address details. Please fill them manually.');
+        showToast('Unable to auto-fill address details. Please fill them manually.', 'info');
+      } else {
+        setPostalLookupStatus('error');
+        setPostalErrorCode(postal.errorCode || 'PINCODE_NOT_FOUND');
+        setPostalErrorMessage(postal.message || 'PIN code not found in Indian postal registry.');
+      }
       return;
     }
 
@@ -749,7 +753,7 @@ export const CheckoutPage: React.FC = () => {
                     onChange={(e) => handlePincodeChange(e.target.value)}
                     placeholder="Enter 6-digit PIN code (e.g. 110001, 560034, 400001)"
                     className={`w-full px-3.5 py-2.5 rounded-xl border focus:outline-none bg-white text-xs font-mono font-bold transition ${
-                      postalLookupStatus === 'error'
+                      postalLookupStatus === 'error' && postalErrorCode !== 'LOOKUP_FAILED'
                         ? 'border-red-400 focus:border-red-500 bg-red-50/20'
                         : postalLookupStatus === 'success'
                         ? 'border-emerald-400 focus:border-emerald-500'
@@ -763,8 +767,8 @@ export const CheckoutPage: React.FC = () => {
                   )}
                 </div>
 
-                {/* Honest Error State: Invalid PIN, Not Found, or Network Timeout */}
-                {postalLookupStatus === 'error' && (
+                {/* Honest Error State: Invalid PIN or Not Found */}
+                {postalLookupStatus === 'error' && postalErrorCode !== 'LOOKUP_FAILED' && (
                   <div className="mt-1.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
@@ -773,21 +777,27 @@ export const CheckoutPage: React.FC = () => {
                         <p className="text-[11px] text-red-700 mt-0.5">
                           {postalErrorCode === 'INVALID_PINCODE'
                             ? 'Please ensure you entered a standard 6-digit numeric Indian postal code.'
-                            : postalErrorCode === 'PINCODE_NOT_FOUND'
-                            ? 'This PIN code was not found in authentic Indian postal directory records.'
-                            : 'Could not reach the postal registry service at this moment.'}
+                            : 'This PIN code was not found in authentic Indian postal directory records.'}
                         </p>
                       </div>
                     </div>
-                    {postalErrorCode === 'LOOKUP_FAILED' && (
-                      <button
-                        type="button"
-                        onClick={handleRetryLookup}
-                        className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] transition cursor-pointer shrink-0"
-                      >
-                        Retry
-                      </button>
-                    )}
+                  </div>
+                )}
+
+                {/* Graceful Manual Fallback Info Banner */}
+                {postalErrorCode === 'LOOKUP_FAILED' && (
+                  <div className="mt-1.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Unable to auto-fill address details. Please fill them manually.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleRetryLookup}
+                      className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] transition cursor-pointer shrink-0"
+                    >
+                      Retry
+                    </button>
                   </div>
                 )}
 
