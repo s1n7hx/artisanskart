@@ -784,14 +784,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const refreshOrders = async () => {
+    let remoteOrders: Order[] = [];
     try {
       const { data, error } = await supabase
         .from('orders')
         .select(`*, order_items (*)`)
         .order('created_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        const mappedList: Order[] = data.map((d: any) => {
+      if (!error && data && Array.isArray(data)) {
+        remoteOrders = data.map((d: any) => {
           const items = Array.isArray(d.order_items)
             ? d.order_items.map((i: any) => ({
                 productId: i.product_id,
@@ -831,22 +832,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             items,
           };
         });
-
-        setOrders(mappedList);
-        try {
-          localStorage.setItem('artisanskart_all_orders_v2', JSON.stringify(mappedList));
-        } catch {}
-        return;
       }
     } catch (e) {}
 
-    // Fallback to local storage
+    let localOrders: Order[] = [];
     try {
       const saved = localStorage.getItem('artisanskart_all_orders_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) setOrders(parsed);
+        if (Array.isArray(parsed)) localOrders = parsed;
       }
+    } catch {}
+
+    const orderMap = new Map<string, Order>();
+    [...localOrders, ...remoteOrders].forEach((o) => {
+      const key = o.orderNumber || String(o.id);
+      if (!orderMap.has(key)) {
+        orderMap.set(key, o);
+      }
+    });
+
+    const merged = Array.from(orderMap.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    setOrders(merged);
+    try {
+      localStorage.setItem('artisanskart_all_orders_v2', JSON.stringify(merged));
     } catch {}
   };
 
