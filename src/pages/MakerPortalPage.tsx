@@ -55,12 +55,19 @@ export const MakerPortalPage: React.FC = () => {
 
 
 
-  // Filter orders strictly assigned to this maker or products by this maker
+  // Filter orders assigned to this maker or awaiting acceptance
   const makerOrders = useMemo(() => {
     const currentName = (currentUser?.name || '').trim().toLowerCase();
     const currentId = currentUser?.id;
 
     const list = orders.filter((o) => {
+      if (
+        o.status === 'awaiting_maker_acceptance' ||
+        o.status === 'new' ||
+        o.status === 'order_placed'
+      ) {
+        return true;
+      }
       if (currentId && o.makerId === currentId) return true;
       if (currentName && o.makerName?.toLowerCase() === currentName) return true;
       if (o.items && Array.isArray(o.items)) {
