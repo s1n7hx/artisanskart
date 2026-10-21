@@ -644,11 +644,9 @@ export async function fetchSupabaseProducts(): Promise<Product[] | null> {
       };
     }) : [];
 
-    const existingIds = new Set(mappedRemote.map(p => p.id));
-    const missingDefaults = PRODUCTS.filter(p => !existingIds.has(p.id));
-    return [...mappedRemote, ...missingDefaults];
+    return mappedRemote;
   } catch (err) {
-    return PRODUCTS;
+    return [];
   }
 }
 
@@ -702,6 +700,24 @@ export async function upsertProductInSupabase(product: Product, makerId?: string
   } catch (err: any) {
     console.warn('upsertProductInSupabase error:', err.message);
     return null;
+  }
+}
+
+export async function deleteProductFromSupabase(id: number) {
+  try {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.warn('Notice deleting product from Supabase products table:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('deleteProductFromSupabase error:', err.message);
+    return false;
   }
 }
 

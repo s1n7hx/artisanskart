@@ -28,6 +28,7 @@ import {
   fetchAllProfiles,
   fetchSupabaseProducts,
   upsertProductInSupabase,
+  deleteProductFromSupabase,
   updateUserRole as updateSupabaseUserRole,
   updateUserStatus as updateSupabaseUserStatus,
   updateUserRoleAndStatus as updateSupabaseUserRoleAndStatus,
@@ -503,23 +504,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Load products from localStorage or default PRODUCTS
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_PRODUCTS_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const existingIds = new Set(parsed.map((p: Product) => p.id));
-          const missingDefaults = PRODUCTS.filter((p) => !existingIds.has(p.id));
-          return [...parsed, ...missingDefaults];
-        }
+  // Load products from Supabase
+  const [products, setProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    fetchSupabaseProducts().then((data) => {
+      if (data) {
+        setProducts(data);
       }
-    } catch (e) {
-      console.warn('Failed to load cached products', e);
-    }
-    return PRODUCTS;
-  });
+    });
+  }, []);
 
   const [heroContent, setHeroContent] = useState<HeroContent>(() => {
     try {
@@ -969,13 +963,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Admin authority required to edit products or photographs.', 'shield-alert');
       return;
     }
-    setProducts((prev) => {
-      const next = prev.map((p) => (p.id === updated.id ? updated : p));
-      try {
-        localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
     // Async background sync to Supabase
     upsertProductInSupabase(updated, currentUser?.id).catch((err) => {
       console.warn('Background Supabase product update notice:', err);
@@ -988,13 +976,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Admin authority required to add new products.', 'shield-alert');
       return;
     }
-    setProducts((prev) => {
-      const next = [newProd, ...prev];
-      try {
-        localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
+    setProducts((prev) => [newProd, ...prev]);
     // Async background sync to Supabase
     upsertProductInSupabase(newProd, currentUser?.id).catch((err) => {
       console.warn('Background Supabase product create notice:', err);
@@ -1002,27 +984,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Published "${newProd.title}" live!`, 'sparkles');
   };
 
-  const deleteProduct = (id: number) => {
+  const deleteProduct = async (id: number) => {
     if (!canManageProducts) {
       showToast('Admin authority required to delete products.', 'shield-alert');
       return;
     }
-    setProducts((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_PRODUCTS_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
-    showToast('Product removed from marketplace', 'trash-2');
+    const success = await deleteProductFromSupabase(id);
+    if (success) {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      showToast('Product removed from marketplace', 'trash-2');
+    } else {
+      showToast('Failed to delete product', 'shield-alert');
+    }
   };
 
-  const resetProductsToDefault = () => {
-    setProducts(PRODUCTS);
-    try {
-      localStorage.removeItem(LOCAL_STORAGE_PRODUCTS_KEY);
-    } catch (e) {}
-  };
 
   const openEditorForProduct = (id: number) => {
     setSelectedProductIdForEdit(id);
@@ -1202,7 +1177,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateProduct,
         addNewProduct,
         deleteProduct,
-        resetProductsToDefault,
       }}
     >
       {children}
