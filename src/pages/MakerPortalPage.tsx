@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Wallet,
   CheckCircle2,
@@ -33,6 +33,7 @@ import {
   Send,
   Boxes,
   Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Product, Order, OrderStatus, maskEmail } from '../types';
@@ -55,12 +56,20 @@ export const MakerPortalPage: React.FC = () => {
 
 
 
-  // Filter orders assigned to this maker or awaiting acceptance
+  const [orderFilterTab, setOrderFilterTab] = useState<'all' | 'awaiting' | 'production' | 'completed'>('all');
+
+  // Filter orders assigned to this maker, awaiting studio acceptance, or all studio orders
   const makerOrders = useMemo(() => {
     const currentName = (currentUser?.name || '').trim().toLowerCase();
     const currentId = currentUser?.id;
+    const isPlatformAdmin = userRole === 'admin' || userRole === 'master_admin';
 
-    const list = orders.filter((o) => {
+    if (isPlatformAdmin) {
+      return orders;
+    }
+
+    return orders.filter((o) => {
+      // 1. Any order awaiting acceptance is open for any artisan in the collective to claim
       if (
         o.status === 'awaiting_maker_acceptance' ||
         o.status === 'new' ||
@@ -68,18 +77,24 @@ export const MakerPortalPage: React.FC = () => {
       ) {
         return true;
       }
+      // 2. Orders accepted by or crafted by this maker
       if (currentId && o.makerId === currentId) return true;
-      if (currentName && o.makerName?.toLowerCase() === currentName) return true;
+      if (currentName && o.makerName?.toLowerCase().includes(currentName)) return true;
       if (o.items && Array.isArray(o.items)) {
-        return o.items.some(
-          (i) => (currentId && i.makerId === currentId) || (currentName && i.makerName?.toLowerCase() === currentName)
-        );
+        if (
+          o.items.some(
+            (i) =>
+              (currentId && i.makerId === currentId) ||
+              (currentName && i.makerName?.toLowerCase().includes(currentName))
+          )
+        ) {
+          return true;
+        }
       }
-      return false;
+      // 3. Collective Studio: Allow verified makers to view studio workflow
+      return true;
     });
-
-    return list;
-  }, [orders, currentUser]);
+  }, [orders, currentUser, userRole]);
 
   // Maker's own products
   const makerProducts = useMemo(() => {
@@ -105,8 +120,22 @@ export const MakerPortalPage: React.FC = () => {
 
   const completed = makerOrders.filter((o) => o.status === 'completed' || o.status === 'delivered');
   const activeOrders = makerOrders.filter((o) => o.status !== 'completed' && o.status !== 'delivered' && o.status !== 'cancelled' && o.status !== 'maker_rejected');
+  const awaitingAcceptance = makerOrders.filter((o) => o.status === 'awaiting_maker_acceptance' || o.status === 'new' || o.status === 'order_placed');
   const totalEarnings = completed.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
   const pendingEarnings = activeOrders.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
+
+  const displayedOrders = useMemo(() => {
+    if (orderFilterTab === 'awaiting') {
+      return awaitingAcceptance;
+    }
+    if (orderFilterTab === 'production') {
+      return activeOrders.filter((o) => o.status !== 'awaiting_maker_acceptance' && o.status !== 'new' && o.status !== 'order_placed');
+    }
+    if (orderFilterTab === 'completed') {
+      return completed;
+    }
+    return makerOrders;
+  }, [makerOrders, orderFilterTab, awaitingAcceptance, activeOrders, completed]);
 
   // Friendly status labels & badges
   const getStatusBadge = (status: OrderStatus) => {
@@ -250,36 +279,103 @@ export const MakerPortalPage: React.FC = () => {
 
       {/* TAB 1: 13-STAGE ORDER LIFECYCLE WORKFLOW */}
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-black text-[#1E293B]">
-              Handcrafted Order Lifecycle ({makerOrders.length})
-            </h2>
-            <span className="text-xs text-slate-500">
-              Only orders assigned to your studio or crafted by you appear here.
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black text-[#1E293B]">
+                Handcrafted Order Lifecycle ({makerOrders.length})
+              </h2>
+              <span className="text-xs text-slate-500">
+                Manage incoming patron orders, accept preparation timelines, and dispatch parcels with courier.
+              </span>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setOrderFilterTab('all')}
+                className={`px-3 py-1.5 rounded-full cursor-pointer transition ${
+                  orderFilterTab === 'all'
+                    ? 'bg-[#C85A32] text-white shadow-xs'
+                    : 'bg-white border border-[#e7e0d8] text-slate-600 hover:bg-[#FAF9F6]'
+                }`}
+              >
+                All ({makerOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderFilterTab('awaiting')}
+                className={`px-3 py-1.5 rounded-full cursor-pointer transition ${
+                  orderFilterTab === 'awaiting'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white border border-amber-200 text-amber-900 hover:bg-amber-50'
+                }`}
+              >
+                Awaiting Acceptance ({awaitingAcceptance.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderFilterTab('production')}
+                className={`px-3 py-1.5 rounded-full cursor-pointer transition ${
+                  orderFilterTab === 'production'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'bg-white border border-purple-200 text-purple-900 hover:bg-purple-50'
+                }`}
+              >
+                In Production ({Math.max(0, activeOrders.length - awaitingAcceptance.length)})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderFilterTab('completed')}
+                className={`px-3 py-1.5 rounded-full cursor-pointer transition ${
+                  orderFilterTab === 'completed'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-white border border-emerald-200 text-emerald-900 hover:bg-emerald-50'
+                }`}
+              >
+                Delivered ({completed.length})
+              </button>
+            </div>
           </div>
 
-          {makerOrders.length === 0 ? (
+          {displayedOrders.length === 0 ? (
             <div className="p-12 text-center bg-white rounded-3xl border border-[#e7e0d8] space-y-3">
               <Package className="w-10 h-10 text-slate-300 mx-auto" />
-              <p className="text-sm font-bold text-slate-700">No Orders Assigned Yet</p>
+              <p className="text-sm font-bold text-slate-700">
+                {orderFilterTab === 'awaiting'
+                  ? 'No Orders Awaiting Acceptance'
+                  : orderFilterTab === 'production'
+                  ? 'No Orders in Production'
+                  : orderFilterTab === 'completed'
+                  ? 'No Delivered Orders Yet'
+                  : 'No Orders in Studio'}
+              </p>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                As soon as patrons purchase your handcrafted pieces on ArtisansKart, new orders will appear here for acceptance.
+                {orderFilterTab === 'awaiting'
+                  ? 'As soon as patrons place new orders on ArtisansKart, they appear here instantly for studio acceptance.'
+                  : 'Check the other filters or wait for incoming patron requests.'}
               </p>
             </div>
           ) : (
             <div className="grid gap-4">
-              {makerOrders.map((order) => {
+              {displayedOrders.map((order) => {
                 const badge = getStatusBadge(order.status);
                 const isAwaitingAcceptance =
                   order.status === 'awaiting_maker_acceptance' ||
                   order.status === 'new' ||
                   order.status === 'order_placed';
+                const isAccepted = order.status === 'accepted';
                 const isInProduction = order.status === 'in_production';
                 const isQualityCheck = order.status === 'quality_check';
                 const isReadyToPack = order.status === 'ready_to_pack' || order.status === 'ready';
                 const isPacked = order.status === 'packed';
                 const isReadyToShip = order.status === 'ready_to_ship';
+                const isInTransit =
+                  order.status === 'shipment_booked' ||
+                  order.status === 'picked_up' ||
+                  order.status === 'in_transit';
+                const isOutForDelivery = order.status === 'out_for_delivery';
+                const isDelivered = order.status === 'delivered' || order.status === 'completed';
 
                 return (
                   <div
@@ -297,8 +393,24 @@ export const MakerPortalPage: React.FC = () => {
                         </span>
                       </div>
 
-                      <div className="text-xs text-slate-400">
-                        Placed on {order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently'}
+                      <div className="flex items-center gap-4 text-xs text-slate-400">
+                        <span>
+                          Placed on{' '}
+                          {order.createdAt
+                            ? new Date(order.createdAt).toLocaleDateString('en-IN', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })
+                            : 'Recently'}
+                        </span>
+                        <Link
+                          to={`/track/${order.orderNumber || order.id}`}
+                          target="_blank"
+                          className="text-[#C85A32] hover:underline font-bold inline-flex items-center gap-1"
+                        >
+                          Track Live <ExternalLink className="w-3 h-3" />
+                        </Link>
                       </div>
                     </div>
 
@@ -308,8 +420,12 @@ export const MakerPortalPage: React.FC = () => {
                       <div className="sm:col-span-5 space-y-1">
                         <span className="font-bold text-slate-400 uppercase text-[10px]">Craft Pieces</span>
                         <p className="font-bold text-slate-900 text-sm leading-snug">{order.product}</p>
-                        <p className="text-slate-500">Qty: {order.qty} items • Total: {formatINR(order.amount)}</p>
-                        <p className="text-[#C85A32] font-semibold">Your Studio Share: {formatINR(order.amount * (makerEarningPercent / 100))}</p>
+                        <p className="text-slate-500">
+                          Qty: {order.qty} items • Total: {formatINR(order.amount)}
+                        </p>
+                        <p className="text-[#C85A32] font-semibold">
+                          Your Studio Share: {formatINR(order.amount * (makerEarningPercent / 100))}
+                        </p>
                       </div>
 
                       {/* Customer Destination */}
@@ -317,7 +433,14 @@ export const MakerPortalPage: React.FC = () => {
                         <span className="font-bold text-slate-400 uppercase text-[10px]">Patron &amp; Destination</span>
                         <p className="font-bold text-slate-800">{order.customerName}</p>
                         <p className="text-slate-500 truncate">{order.city}</p>
-                        <p className="text-slate-400">Carrier: {order.courierName || 'Shiprocket Partner'}</p>
+                        <p className="text-slate-400">
+                          Carrier: {order.courierName || 'NimbusPost Express Partner'}
+                        </p>
+                        {order.trackingAwb && (
+                          <p className="font-mono text-[11px] text-[#C85A32]">
+                            AWB: {order.trackingAwb}
+                          </p>
+                        )}
                       </div>
 
                       {/* Studio Action Center */}
@@ -330,7 +453,7 @@ export const MakerPortalPage: React.FC = () => {
                                 setSelectedOrderForAction(order);
                                 setActionModalType('accept');
                               }}
-                              className="w-full py-2 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                              className="w-full py-2.5 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <Check className="w-3.5 h-3.5" /> Accept Order
                             </button>
@@ -347,10 +470,29 @@ export const MakerPortalPage: React.FC = () => {
                           </div>
                         )}
 
+                        {isAccepted && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTransitionStatus(
+                                order,
+                                'in_production',
+                                'Artisan commenced handcrafted studio crafting',
+                                { makerId: currentUser?.id, makerName: currentUser?.name }
+                              )
+                            }
+                            className="w-full py-2.5 px-3 rounded-xl bg-[#C85A32] hover:bg-[#b04a25] text-white font-bold text-xs shadow-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Hammer className="w-3.5 h-3.5" /> Start Crafting
+                          </button>
+                        )}
+
                         {isInProduction && (
                           <button
                             type="button"
-                            onClick={() => handleTransitionStatus(order, 'quality_check', 'Craft completed, moving to inspection')}
+                            onClick={() =>
+                              handleTransitionStatus(order, 'quality_check', 'Craft completed, moving to inspection')
+                            }
                             className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                           >
                             <Sparkles className="w-3.5 h-3.5" /> Inspection Ready
@@ -360,7 +502,13 @@ export const MakerPortalPage: React.FC = () => {
                         {isQualityCheck && (
                           <button
                             type="button"
-                            onClick={() => handleTransitionStatus(order, 'ready_to_pack', 'Quality check passed, ready for parcel packaging')}
+                            onClick={() =>
+                              handleTransitionStatus(
+                                order,
+                                'ready_to_pack',
+                                'Quality check passed, ready for parcel packaging'
+                              )
+                            }
                             className="w-full py-2 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                           >
                             <CheckCircle2 className="w-3.5 h-3.5" /> Pass Quality Check
@@ -383,11 +531,56 @@ export const MakerPortalPage: React.FC = () => {
                         {(isPacked || isReadyToShip) && (
                           <button
                             type="button"
-                            onClick={() => handleTransitionStatus(order, 'shipment_booked', 'Shipment booked with Shiprocket courier')}
+                            onClick={() =>
+                              handleTransitionStatus(
+                                order,
+                                'in_transit',
+                                'Parcel dispatched with NimbusPost partner carrier',
+                                { courierName: 'NimbusPost Express Partner' }
+                              )
+                            }
                             className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
                           >
-                            <Truck className="w-3.5 h-3.5" /> Dispatch with Carrier
+                            <Truck className="w-3.5 h-3.5" /> Dispatch Courier
                           </button>
+                        )}
+
+                        {isInTransit && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTransitionStatus(
+                                order,
+                                'out_for_delivery',
+                                'Courier out for delivery to customer destination'
+                              )
+                            }
+                            className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <Truck className="w-3.5 h-3.5" /> Out for Delivery
+                          </button>
+                        )}
+
+                        {isOutForDelivery && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleTransitionStatus(
+                                order,
+                                'delivered',
+                                'Parcel delivered safely to customer patron'
+                              )
+                            }
+                            className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark Delivered
+                          </button>
+                        )}
+
+                        {isDelivered && (
+                          <div className="text-center py-1 px-2 rounded-xl bg-emerald-50 text-emerald-800 text-[11px] font-bold border border-emerald-200">
+                            Completed &amp; Settled
+                          </div>
                         )}
 
                         {/* Status history audit trail trigger */}
@@ -397,7 +590,7 @@ export const MakerPortalPage: React.FC = () => {
                             setSelectedOrderForAction(order);
                             setActionModalType('history');
                           }}
-                          className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold text-center cursor-pointer"
+                          className="text-[11px] text-slate-500 hover:text-[#C85A32] font-semibold text-center cursor-pointer pt-1"
                         >
                           View Status History →
                         </button>

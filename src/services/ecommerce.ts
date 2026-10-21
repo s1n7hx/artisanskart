@@ -738,6 +738,22 @@ export function saveProductReview(review: ProductReviewItem): void {
   } catch {}
 }
 
+export async function fetchServerOrders(): Promise<Order[]> {
+  try {
+    const res = await fetch('/api/orders');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.orders)) {
+        saveStoredOrders(data.orders);
+        return data.orders;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice fetching orders from server:', err);
+  }
+  return getStoredOrders();
+}
+
 export async function createOrderRecord(orderData: Partial<Order>): Promise<Order> {
   const orderNumber = orderData.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
   const deadlineDate = new Date();
@@ -763,8 +779,8 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     shippingAddress: orderData.shippingAddress,
     paymentStatus: (orderData.paymentStatus || 'paid') as PaymentStatus,
     paymentMethod: (orderData.paymentMethod || 'razorpay') as PaymentMethod,
-    trackingAwb: orderData.trackingAwb || `SR-AK-${Math.floor(100000 + Math.random() * 900000)}`,
-    courierName: orderData.courierName || 'BlueDart / Delhivery',
+    trackingAwb: orderData.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
+    courierName: orderData.courierName || 'NimbusPost Express Partner',
     createdAt: new Date().toISOString(),
     items: orderData.items || [],
     makerId: orderData.makerId || orderData.items?.[0]?.makerId,
@@ -779,18 +795,35 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
         toStatus: (orderData.status || 'awaiting_maker_acceptance') as OrderStatus,
         actorName: orderData.customerName || 'Customer',
         actorRole: 'customer',
-        note: 'Order placed by customer and sent to artisan studio',
+        note: 'Order placed by customer and routed to maker studio',
         createdAt: new Date().toISOString(),
       },
     ],
   };
 
-  // 1. Save to local store
+  // 1. Immediately post to central server persistent database
+  try {
+    const serverRes = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fullOrder),
+    });
+    if (serverRes.ok) {
+      const serverData = await serverRes.json();
+      if (serverData.order) {
+        Object.assign(fullOrder, serverData.order);
+      }
+    }
+  } catch (err) {
+    console.warn('Notice sending order to central server:', err);
+  }
+
+  // 2. Save to local store for instant offline feedback
   const existing = getStoredOrders();
   const updated = [fullOrder, ...existing.filter((o) => o.orderNumber !== fullOrder.orderNumber)];
   saveStoredOrders(updated);
 
-  // 2. Try inserting into Supabase orders & order_items tables
+  // 3. Try inserting into Supabase orders & order_items tables
   try {
     const orderPayload = {
       order_number: fullOrder.orderNumber,
@@ -835,7 +868,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
       await supabase.from('order_items').insert(itemsPayload);
     }
   } catch (err) {
-    console.warn('Notice saving order to Supabase (using persistent local storage):', err);
+    console.warn('Notice saving order to Supabase:', err);
   }
 
   return fullOrder;
@@ -856,8 +889,11 @@ export async function updateOrderStatusWithLifecycle(params: {
   parcelDimensions?: string;
   rejectionReason?: string;
   confirmedPrepDays?: number;
-}): Promise<{ success: boolean; status: OrderStatus; error?: string }> {
-  const { orderId, orderNumber, currentStatus, newStatus, actorRole, actorName, note, parcelWeightKg, parcelDimensions, rejectionReason, confirmedPrepDays } = params;
+  makerId?: string;
+  courierName?: string;
+  trackingAwb?: string;
+}): Promise<{ success: boolean; status: OrderStatus; order?: Order; error?: string }> {
+  const { orderId, orderNumber, currentStatus, newStatus, actorRole, actorName, note, parcelWeightKg, parcelDimensions, rejectionReason, confirmedPrepDays, makerId, courierName, trackingAwb } = params;
 
   try {
     const res = await fetch('/api/orders/update-status', {
@@ -889,6 +925,10 @@ export async function updateOrderStatusWithLifecycle(params: {
           confirmedPrepDays: confirmedPrepDays || o.confirmedPrepDays,
           parcelWeightKg: parcelWeightKg || o.parcelWeightKg,
           parcelDimensions: parcelDimensions || o.parcelDimensions,
+          courierName: courierName || o.courierName,
+          trackingAwb: trackingAwb || o.trackingAwb,
+          makerId: makerId || o.makerId,
+          makerName: actorRole === 'maker' && actorName ? actorName : o.makerName,
           statusHistory: hist,
           updatedAt: new Date().toISOString(),
         };
@@ -914,7 +954,7 @@ export async function updateOrderStatusWithLifecycle(params: {
       }
     } catch {}
 
-    return { success: true, status: newStatus };
+    return { success: true, status: newStatus, order: data.order };
   } catch (err: any) {
     return { success: false, status: currentStatus, error: err.message };
   }

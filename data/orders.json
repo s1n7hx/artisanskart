@@ -1,0 +1,63 @@
+[
+  {
+    "orderNumber": "AK-2026-77889",
+    "customerName": "Aarav Gupta",
+    "customerEmail": "aarav@example.com",
+    "customerPhone": "9876543210",
+    "city": "Bengaluru, Karnataka",
+    "amount": 599,
+    "product": "Handcrafted Sunflower Crochet Bouquet (x1)",
+    "status": "in_production",
+    "paymentMethod": "cod",
+    "paymentStatus": "cod",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Handcrafted Sunflower Crochet Bouquet",
+        "quantity": 1,
+        "unitPrice": 599,
+        "subtotal": 599,
+        "makerName": "Kavita Sharma"
+      }
+    ],
+    "id": 1792573729135,
+    "trackingAwb": "NP-981358",
+    "courierName": "NimbusPost Express Partner",
+    "createdAt": "2026-10-21T09:08:49.135Z",
+    "updatedAt": "2026-10-21T09:09:10.962Z",
+    "statusHistory": [
+      {
+        "id": "init_1792573729136",
+        "orderId": 1792573729136,
+        "toStatus": "awaiting_maker_acceptance",
+        "actorName": "Aarav Gupta",
+        "actorRole": "customer",
+        "note": "Order placed by customer and routed to maker studio",
+        "createdAt": "2026-10-21T09:08:49.136Z"
+      },
+      {
+        "id": "hist_1792573741304_slt2",
+        "orderNumber": "AK-2026-77889",
+        "fromStatus": "awaiting_maker_acceptance",
+        "toStatus": "accepted",
+        "actorName": "Kavita Sharma",
+        "actorRole": "maker",
+        "note": "Kavita Sharma accepted order with 3 days crafting timeline",
+        "createdAt": "2026-10-21T09:09:01.304Z",
+        "confirmedPrepDays": 3
+      },
+      {
+        "id": "hist_1792573750962_lx9v",
+        "orderNumber": "AK-2026-77889",
+        "fromStatus": "accepted",
+        "toStatus": "in_production",
+        "actorName": "Kavita Sharma",
+        "actorRole": "maker",
+        "note": "Artisan began studio preparation & crafting",
+        "createdAt": "2026-10-21T09:09:10.962Z"
+      }
+    ],
+    "confirmedPrepDays": 3,
+    "makerName": "Kavita Sharma"
+  }
+]

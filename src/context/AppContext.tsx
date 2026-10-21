@@ -16,6 +16,7 @@ import {
   DEFAULT_WP_CONFIG,
   fetchWordPressContent,
 } from '../services/wordpress';
+import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 import {
   supabase,
   signInWithGoogle as supabaseSignInWithGoogle,
@@ -835,6 +836,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (e) {}
 
+    let serverOrders: Order[] = [];
+    try {
+      const serverRes = await fetch('/api/orders');
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (Array.isArray(serverData.orders)) {
+          serverOrders = serverData.orders;
+        }
+      }
+    } catch (e) {}
+
     let localOrders: Order[] = [];
     try {
       const saved = localStorage.getItem('artisanskart_all_orders_v2');
@@ -845,7 +857,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
 
     const orderMap = new Map<string, Order>();
-    [...localOrders, ...remoteOrders].forEach((o) => {
+    [...serverOrders, ...localOrders, ...remoteOrders].forEach((o) => {
       const key = o.orderNumber || String(o.id);
       if (!orderMap.has(key)) {
         orderMap.set(key, o);
@@ -862,7 +874,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     refreshOrders();
   }, [currentUser?.id, userRole]);
-  const [cart, setCart] = useState<CartItem[]>([]);
+
+  // Reliable cart persistence: Loaded on mount and persisted across visits
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('artisanskart_cart_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => item && typeof item.id === 'number' && item.qty > 0);
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('artisanskart_cart_v1', JSON.stringify(cart));
+    } catch (e) {}
+  }, [cart]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -1041,9 +1072,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const acceptOrder = (id: number) => {
+  const acceptOrder = async (id: number) => {
+    const target = orders.find((o) => o.id === id);
+    if (target) {
+      await updateOrderStatusWithLifecycle({
+        orderId: target.id,
+        orderNumber: target.orderNumber,
+        currentStatus: target.status,
+        newStatus: 'accepted',
+        actorRole: userRole || 'maker',
+        actorName: currentUser?.name || 'Studio Artisan',
+        note: 'Maker accepted order and began preparation in studio',
+        makerId: currentUser?.id,
+      });
+      refreshOrders().catch(() => {});
+      showToast('Order accepted — maker crafting started!', 'hammer');
+      return;
+    }
     setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: 'in_production' } : o))
+      prev.map((o) => (o.id === id ? { ...o, status: 'accepted' } : o))
     );
     showToast('Order accepted — maker crafting started!', 'hammer');
   };
@@ -1066,6 +1113,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsCheckoutOpen(false);
     setIsCartOpen(false);
     setCart([]);
+    try {
+      localStorage.removeItem('artisanskart_cart_v1');
+    } catch (e) {}
     refreshOrders().catch(() => {});
     showToast('Order placed! Your maker will begin crafting.', 'party-popper');
   };

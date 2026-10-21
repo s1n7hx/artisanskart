@@ -43,13 +43,28 @@ export const OrderTrackingPage: React.FC = () => {
     let localMatch: Order | undefined;
 
     try {
-      // 1. Check local storage first for instant feedback
+      // 1. Query central server order store first
+      try {
+        const serverRes = await fetch(`/api/orders/${encodeURIComponent(cleanRef)}`);
+        if (serverRes.ok) {
+          const serverData = await serverRes.json();
+          if (serverData.order) {
+            setSelectedOrder(serverData.order);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      // 2. Check local storage for instant feedback
       const localOrders = getStoredOrders();
       localMatch = localOrders.find(
-        (o) => o.orderNumber?.toLowerCase() === cleanRef.toLowerCase() || String(o.id) === cleanRef
+        (o) =>
+          o.orderNumber?.toLowerCase() === cleanRef.toLowerCase() ||
+          String(o.trackingAwb || '').toLowerCase() === cleanRef.toLowerCase() ||
+          String(o.id) === cleanRef
       );
 
-      // 2. Fetch from Supabase
+      // 3. Fetch from Supabase
       const { data: dbOrders, error } = await supabase
         .from('orders')
         .select(`
@@ -107,6 +122,26 @@ export const OrderTrackingPage: React.FC = () => {
         setSelectedOrder(localMatch);
         return;
       }
+
+      // 4. Fallback search across all server orders
+      try {
+        const allRes = await fetch('/api/orders');
+        if (allRes.ok) {
+          const allData = await allRes.json();
+          if (Array.isArray(allData.orders)) {
+            const found = allData.orders.find(
+              (o: Order) =>
+                o.orderNumber?.toLowerCase() === cleanRef.toLowerCase() ||
+                String(o.trackingAwb || '').toLowerCase() === cleanRef.toLowerCase() ||
+                String(o.id) === cleanRef
+            );
+            if (found) {
+              setSelectedOrder(found);
+              return;
+            }
+          }
+        }
+      } catch (e) {}
 
       setSelectedOrder(null);
       setErrorMessage(`No order found matching "${cleanRef}". Please verify your Order Reference or Tracking AWB.`);

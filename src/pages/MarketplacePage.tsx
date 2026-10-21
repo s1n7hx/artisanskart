@@ -19,9 +19,8 @@ export const MarketplacePage: React.FC = () => {
   } = useApp();
 
   const allCategories = React.useMemo(() => {
-    const base = ['All', 'Clay Crafts', 'Hand-painted Cards', 'Paintings', 'Accessories', 'Keychains', 'Other Crafts'];
     const dynamicTypes = products.map((p) => p.category).filter(Boolean);
-    return Array.from(new Set([...base, ...dynamicTypes]));
+    return Array.from(new Set([...CATEGORIES, ...dynamicTypes]));
   }, [products]);
 
   const term = searchTerm.trim().toLowerCase();
