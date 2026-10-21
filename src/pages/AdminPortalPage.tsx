@@ -215,7 +215,7 @@ export const AdminPortalPage: React.FC = () => {
     }
   };
 
-  const handleSaveNewProduct = (e: React.FormEvent) => {
+  const handleSaveNewProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProductForm.title || !newProductForm.maker || !newProductForm.price) {
       showToast('Please fill in product title, maker, and price.', 'alert-circle');
@@ -252,21 +252,23 @@ export const AdminPortalPage: React.FC = () => {
       source: 'custom',
     };
 
-    addNewProduct(prodToAdd);
-    showToast(`Added craft "${prodToAdd.title}" with ${effectiveImages.length} photos!`, 'sparkles');
-    setIsAddingProduct(false);
-    setNewProductForm({
-      title: '',
-      category: 'Crochet',
-      price: 349,
-      maker: '',
-      cls: 'Class 10',
-      school: '',
-      image: '',
-      images: [],
-      stock: 'In Stock • Made on Demand',
-      description: '',
-    });
+    const success = await addNewProduct(prodToAdd);
+    if (success) {
+      showToast(`Added craft "${prodToAdd.title}" with ${effectiveImages.length} photos!`, 'sparkles');
+      setIsAddingProduct(false);
+      setNewProductForm({
+        title: '',
+        category: 'Crochet',
+        price: 349,
+        maker: '',
+        cls: 'Class 10',
+        school: '',
+        image: '',
+        images: [],
+        stock: 'In Stock • Made on Demand',
+        description: '',
+      });
+    }
   };
 
   const handleUpdateProductSave = (e: React.FormEvent) => {

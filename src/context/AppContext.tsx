@@ -971,17 +971,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Updated product "${updated.title}"`, 'edit-2');
   };
 
-  const addNewProduct = (newProd: Product) => {
+  const addNewProduct = async (newProd: Product): Promise<boolean> => {
     if (!canManageProducts) {
       showToast('Admin authority required to add new products.', 'shield-alert');
-      return;
+      return false;
     }
-    setProducts((prev) => [newProd, ...prev]);
-    // Async background sync to Supabase
-    upsertProductInSupabase(newProd, currentUser?.id).catch((err) => {
-      console.warn('Background Supabase product create notice:', err);
-    });
-    showToast(`Published "${newProd.title}" live!`, 'sparkles');
+    const savedProducts = await upsertProductInSupabase(newProd, currentUser?.id);
+    if (savedProducts && savedProducts.length > 0) {
+      setProducts((prev) => [savedProducts[0], ...prev]);
+      showToast(`Published "${newProd.title}" live!`, 'sparkles');
+      return true;
+    } else {
+      showToast('Failed to save product to database.', 'shield-alert');
+      return false;
+    }
   };
 
   const deleteProduct = async (id: number) => {
