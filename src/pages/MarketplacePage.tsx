@@ -16,6 +16,7 @@ export const MarketplacePage: React.FC = () => {
     cartCount,
     setIsCartOpen,
     makerEarningPercent,
+    userRole,
   } = useApp();
 
   const allCategories = React.useMemo(() => {
@@ -39,7 +40,11 @@ export const MarketplacePage: React.FC = () => {
       p.category.toLowerCase().includes(term) ||
       p.maker.toLowerCase().includes(term) ||
       p.school.toLowerCase().includes(term);
-    return catOk && searchOk;
+
+    const isMaker = userRole === 'maker' || userRole === 'admin' || userRole === 'master_admin';
+    const isVisible = isMaker || !p.isMakerOnly;
+
+    return catOk && searchOk && isVisible;
   });
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');

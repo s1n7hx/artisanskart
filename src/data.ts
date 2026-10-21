@@ -35,7 +35,8 @@ export const PRODUCTS: Product[] = [
     weight: "250g",
     weightKg: 0.3,
     careInstructions: "Gently dust with a soft dry brush. Spot clean with damp cloth if required.",
-    source: "default"
+    source: "default",
+    isMakerOnly: true
   },
   {
     id: 2,
@@ -56,7 +57,8 @@ export const PRODUCTS: Product[] = [
     weight: "380g",
     weightKg: 0.4,
     careInstructions: "Hand wash in cold water with mild detergent. Dry flat in shade.",
-    source: "default"
+    source: "default",
+    isMakerOnly: true
   },
   {
     id: 3,

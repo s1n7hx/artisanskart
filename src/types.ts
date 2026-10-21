@@ -41,6 +41,7 @@ export interface Product {
   isMadeToOrder?: boolean;
   color?: string;
   weightKg?: number;
+  isMakerOnly?: boolean;
 }
 
 export interface CustomerAddress {
