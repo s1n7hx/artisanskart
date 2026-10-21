@@ -616,19 +616,6 @@ export const MakerPortalPage: React.FC = () => {
               Confirm your studio is ready to craft Order #{selectedOrderForAction.orderNumber || selectedOrderForAction.id} ({selectedOrderForAction.product}).
             </p>
 
-            <div className="space-y-2 text-xs">
-              <label className="font-bold text-slate-700">Estimated Studio Crafting Time (Days):</label>
-              <input
-                type="number"
-                min={1}
-                max={14}
-                value={prepDaysInput}
-                onChange={(e) => setPrepDaysInput(Number(e.target.value))}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-bold"
-              />
-              <p className="text-[11px] text-slate-400">The customer will receive an updated delivery projection.</p>
-            </div>
-
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -640,7 +627,7 @@ export const MakerPortalPage: React.FC = () => {
               <button
                 type="button"
                 disabled={isUpdatingStatus}
-                onClick={() => handleTransitionStatus(selectedOrderForAction, 'accepted', `Maker accepted order with ${prepDaysInput} days prep time`, { confirmedPrepDays: prepDaysInput })}
+                onClick={() => handleTransitionStatus(selectedOrderForAction, 'accepted', `Maker accepted order`)}
                 className="px-5 py-2 rounded-xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25]"
               >
                 {isUpdatingStatus ? 'Accepting...' : 'Confirm & Begin Production'}

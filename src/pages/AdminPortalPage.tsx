@@ -110,11 +110,8 @@ export const AdminPortalPage: React.FC = () => {
     setCustomPercentInput(makerEarningPercent);
   }, [makerEarningPercent]);
 
-  // Server-side Shiprocket & Razorpay integration status
-  const [shippingStatus, setShippingStatus] = useState<any>(null);
+  // Server-side Razorpay integration status
   const [razorpayStatus, setRazorpayStatus] = useState<any>(null);
-  const [isTestingShiprocket, setIsTestingShiprocket] = useState(false);
-  const [shiprocketTestResult, setShiprocketTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Administrative Order Management state
   const [selectedAdminOrder, setSelectedAdminOrder] = useState<Order | null>(null);
@@ -127,26 +124,11 @@ export const AdminPortalPage: React.FC = () => {
     fetch('/api/shipping/config-status')
       .then((r) => r.json())
       .then((d) => {
-        if (d?.shiprocket) setShippingStatus(d.shiprocket);
         if (d?.razorpay) setRazorpayStatus(d.razorpay);
       })
       .catch(() => {});
   }, []);
 
-  const handleTestShiprocketAuth = async () => {
-    setIsTestingShiprocket(true);
-    setShiprocketTestResult(null);
-    try {
-      const res = await fetch('/api/shipping/test-shiprocket-auth', { method: 'POST' });
-      const data = await res.json();
-      setShiprocketTestResult({ success: Boolean(data.success), message: data.message });
-      if (data.status) setShippingStatus(data.status);
-    } catch (err: any) {
-      setShiprocketTestResult({ success: false, message: err.message || 'Diagnostic request failed' });
-    } finally {
-      setIsTestingShiprocket(false);
-    }
-  };
 
   const [newProductForm, setNewProductForm] = useState<Partial<Product>>({
     title: '',
@@ -2386,69 +2368,6 @@ export const AdminPortalPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Shiprocket Logistics & Pincode Engine */}
-          <div className="bg-white rounded-3xl p-6 md:p-8 border border-[#e7e0d8] shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-[#e7e0d8] gap-4">
-              <div>
-                <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-                  <Truck className="w-5 h-5 text-sky-600" />
-                  Shiprocket Logistics &amp; PIN Code Intelligence
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Automated serviceability checks, ETD estimates, official postal directory lookups, and AWB tracking.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={isTestingShiprocket}
-                onClick={handleTestShiprocketAuth}
-                className="px-4 py-2 rounded-full bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isTestingShiprocket ? 'animate-spin' : ''}`} />
-                <span>{isTestingShiprocket ? 'Testing Auth...' : 'Test Shiprocket API'}</span>
-              </button>
-            </div>
-
-            {shiprocketTestResult && (
-              <div
-                className={`p-4 rounded-2xl border text-xs flex items-start gap-2.5 ${
-                  shiprocketTestResult.success
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-amber-50 border-amber-200 text-amber-900'
-                }`}
-              >
-                {shiprocketTestResult.success ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                )}
-                <div>
-                  <p className="font-bold">{shiprocketTestResult.message}</p>
-                  <p className="text-[11px] opacity-80 mt-0.5">
-                    Fallback courier rates and official postal directory ensure customers never encounter a broken checkout.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase">Live Pincode Intelligence</span>
-                <p className="font-bold text-slate-800">India Post Directory + Shiprocket</p>
-                <p className="text-[10px] text-slate-500">Auto-resolves district, state &amp; delivery post office.</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase">Integrated Courier Partners</span>
-                <p className="font-bold text-slate-800">BlueDart, Delhivery, DTDC, Shadowfax</p>
-                <p className="text-[10px] text-slate-500">Multi-courier rate comparisons &amp; live ETD.</p>
-              </div>
-              <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
-                <span className="text-[11px] font-bold text-slate-400 uppercase">Shiprocket Webhooks</span>
-                <p className="font-bold text-emerald-700">/api/shipping/webhook Active</p>
-                <p className="text-[10px] text-slate-500">Auto-updates customer tracking upon carrier scan.</p>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

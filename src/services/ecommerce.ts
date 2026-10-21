@@ -960,16 +960,7 @@ export async function updateOrderStatusWithLifecycle(params: {
   }
 }
 
-// -------------------------------------------------------------
-// Shiprocket & Razorpay Integration Configuration Status
-// -------------------------------------------------------------
 export interface IntegrationConfigStatus {
-  shiprocket: {
-    isConfigured: boolean;
-    mode: 'live' | 'setup_required';
-    credentialsPresent: { email: boolean; password: boolean };
-    description: string;
-  };
   razorpay: {
     isConfigured: boolean;
     mode: 'live' | 'test_gateway';
@@ -978,58 +969,13 @@ export interface IntegrationConfigStatus {
   };
 }
 
-export async function fetchIntegrationConfigStatus() {
-  try {
-    const res = await fetch('/api/shipping/config-status');
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Could not fetch server-side shipping config status:', err);
-  }
-
-  return {
-    shiprocket: {
-      configured: false,
-      mode: 'simulation',
-      authMechanism: 'automatic_server_login_and_auto_renewal',
-      tokenRequiredInEnv: false,
-      authenticated: false,
-      tokenCached: false,
-      tokenExpiresInHours: null,
-      emailMasked: null,
-      companyName: null,
-      lastError: null,
-    },
-    razorpay: {
-      configured: false,
-      mode: 'test_gateway',
-      keyIdSet: false,
-    },
-  };
-}
-
 export function checkIntegrationsConfigStatus(): IntegrationConfigStatus {
-  const shiprocketEmail = typeof process !== 'undefined' ? process.env?.SHIPROCKET_EMAIL : undefined;
-  const shiprocketPass = typeof process !== 'undefined' ? process.env?.SHIPROCKET_PASSWORD : undefined;
   const razorpayKey = typeof process !== 'undefined' ? process.env?.RAZORPAY_KEY_ID : undefined;
   const razorpaySecret = typeof process !== 'undefined' ? process.env?.RAZORPAY_KEY_SECRET : undefined;
 
-  const srConfigured = Boolean(shiprocketEmail && shiprocketPass);
   const rzConfigured = Boolean(razorpayKey && razorpaySecret);
 
   return {
-    shiprocket: {
-      isConfigured: srConfigured,
-      mode: srConfigured ? 'live' : 'setup_required',
-      credentialsPresent: {
-        email: Boolean(shiprocketEmail),
-        password: Boolean(shiprocketPass),
-      },
-      description: srConfigured
-        ? 'Connected to live Shiprocket fulfillment API (Auto-login & token auto-renewal active)'
-        : 'Credentials pending in environment variables (SHIPROCKET_EMAIL, SHIPROCKET_PASSWORD). Running in verified simulation mode with active PIN code serviceability.',
-    },
     razorpay: {
       isConfigured: rzConfigured,
       mode: rzConfigured ? 'live' : 'test_gateway',
