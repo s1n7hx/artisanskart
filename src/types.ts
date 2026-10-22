@@ -23,6 +23,7 @@ export interface Product {
   wpId?: number | string;
   source?: 'wordpress' | 'custom' | 'default';
   updatedAt?: string;
+  uuid?: string;
 
   // Professional specifications
   originalPrice?: number;

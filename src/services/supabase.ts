@@ -605,41 +605,57 @@ export async function savePlatformSettings(settings: { makerEarningPercent: numb
 // Product Catalog Operations
 // -------------------------------------------------------------
 export async function fetchSupabaseProducts(): Promise<Product[] | null> {
+  // 1. Try server API endpoint (uses service role key)
+  try {
+    const res = await fetch('/api/products');
+    if (res.ok) {
+      const serverData = await res.json();
+      if (serverData.success && Array.isArray(serverData.products)) {
+        return serverData.products;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Client-side SDK fallback
   try {
     const { data, error } = await supabase
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
 
+    if (error) {
+      console.warn('Notice fetching products from Supabase:', error.message);
+      return [];
+    }
+
     const mappedRemote = (data && !error) ? data.map((item) => {
-      const gallery = Array.isArray(item.gallery_images) && item.gallery_images.length > 0
-        ? item.gallery_images.filter(Boolean)
-        : (item.image_url ? [item.image_url] : []);
+      const gallery = Array.isArray(item.gallery_urls) && item.gallery_urls.length > 0
+        ? item.gallery_urls.filter(Boolean)
+        : (Array.isArray(item.gallery_images) && item.gallery_images.length > 0
+          ? item.gallery_images.filter(Boolean)
+          : (item.image_url ? [item.image_url] : []));
       const primary = item.image_url || gallery[0] || '';
       const allImages = Array.from(new Set([primary, ...gallery].filter(Boolean)));
 
+      const numericId = typeof item.id === 'number' ? item.id : Math.abs(hashCode(item.id));
+
       return {
-        id: typeof item.id === 'string' ? Math.abs(hashCode(item.id)) : item.id,
+        id: numericId,
+        uuid: item.id,
         title: item.title,
-        category: item.category_name,
-        price: Number(item.price),
+        category: item.category_name || item.category || 'Handicrafts',
+        price: Number(item.price || 0),
         rating: Number(item.rating || 5.0),
         reviews: item.reviews_count || 1,
-        maker: item.maker_name,
+        maker: item.maker_name || 'Artisan Creator',
         cls: 'Class 10',
         school: item.maker_school || 'Fine Arts Studio',
         image: primary,
         images: allImages,
         stock: item.stock_status || 'In Stock • Made on Demand',
         description: item.description || '',
-        materials: item.materials,
-        dimensions: item.dimensions,
-        weight: item.weight,
-        careInstructions: item.care_instructions,
-        inStockCount: item.in_stock_count,
         slug: item.slug,
         makerId: item.maker_id,
-        originalPrice: item.original_price ? Number(item.original_price) : undefined,
         source: 'custom' as const,
       };
     }) : [];
@@ -651,59 +667,92 @@ export async function fetchSupabaseProducts(): Promise<Product[] | null> {
 }
 
 export async function upsertProductInSupabase(product: Product, makerId?: string) {
+  const payload = {
+    ...product,
+    makerId: makerId || product.makerId,
+  };
+
+  // 1. Try server API endpoint with service role bypass
+  try {
+    const res = await fetch('/api/products/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success && data.product) {
+      return [data.product];
+    }
+
+    if (data.error) {
+      console.warn('❌ [Server Product Save Error]:', data.error, data.details, data.hint);
+    }
+  } catch (err: any) {
+    console.warn('Notice calling server save product endpoint:', err.message);
+  }
+
+  // 2. Client-side SDK fallback with normalized columns
   try {
     const gallery = product.images && product.images.length > 0
       ? product.images
       : (product.image ? [product.image] : []);
     const primary = product.image || gallery[0] || '';
+    const cleanSlug = product.slug || titleToSlug(product.title);
 
-    const payload: any = {
+    const clientPayload: any = {
       title: product.title,
-      category_name: product.category,
-      price: product.price,
-      maker_name: product.maker,
-      maker_school: product.school || 'Fine Arts Studio',
-      image_url: primary,
-      gallery_images: gallery,
-      stock_status: product.stock || 'In Stock • Made on Demand',
+      slug: cleanSlug,
       description: product.description || '',
-      materials: product.materials,
-      dimensions: product.dimensions,
-      weight: product.weight,
-      in_stock_count: product.inStockCount ?? 15,
-      slug: product.slug,
+      price: Math.max(0, Number(product.price) || 0),
+      category_name: product.category || 'Handicrafts',
+      image_url: primary,
+      gallery_urls: gallery,
+      maker_name: product.maker || 'Artisan Creator',
+      maker_school: product.school || 'Fine Arts Studio',
+      stock_status: product.stock || 'In Stock • Made on Demand',
+      rating: Number(product.rating || 5.0),
+      reviews_count: Number(product.reviews || 1),
+      is_published: true,
       updated_at: new Date().toISOString(),
     };
 
-    if (product.originalPrice) {
-      payload.original_price = product.originalPrice;
+    if (product.uuid) {
+      clientPayload.id = product.uuid;
     }
 
-    if (makerId) {
-      payload.maker_id = makerId;
+    if (makerId && makerId.length === 36) {
+      clientPayload.maker_id = makerId;
     }
 
-    // Only set numeric DB ID if not a huge timestamp
-    if (typeof product.id === 'number' && product.id > 0 && product.id < 100000) {
-      payload.id = product.id;
-    }
-
-    const { data, error } = await supabase
+    const { data: clientData, error } = await supabase
       .from('products')
-      .upsert(payload)
+      .upsert(clientPayload)
       .select();
 
     if (error) {
-      console.warn('Notice saving product to Supabase products table:', error.message);
+      console.error(`❌ [Client Supabase Product Upsert Error]: ${error.message} | Details: ${error.details} | Hint: ${error.hint}`);
+      return null;
     }
-    return data;
+    return clientData;
   } catch (err: any) {
-    console.warn('upsertProductInSupabase error:', err.message);
+    console.error('❌ upsertProductInSupabase client error:', err.message);
     return null;
   }
 }
 
-export async function deleteProductFromSupabase(id: number) {
+export async function deleteProductFromSupabase(id: number | string) {
+  // 1. Try server API endpoint
+  try {
+    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) return true;
+    }
+  } catch (e) {}
+
+  // 2. Client-side fallback
   try {
     const { error } = await supabase
       .from('products')
@@ -711,7 +760,7 @@ export async function deleteProductFromSupabase(id: number) {
       .eq('id', id);
 
     if (error) {
-      console.warn('Notice deleting product from Supabase products table:', error.message);
+      console.warn('Notice deleting product from Supabase:', error.message);
       return false;
     }
     return true;
@@ -719,6 +768,10 @@ export async function deleteProductFromSupabase(id: number) {
     console.warn('deleteProductFromSupabase error:', err.message);
     return false;
   }
+}
+
+function titleToSlug(title: string): string {
+  return (title || 'craft').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `craft-${Date.now()}`;
 }
 
 function hashCode(str: string): number {

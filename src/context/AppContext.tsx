@@ -963,11 +963,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Admin authority required to edit products or photographs.', 'shield-alert');
       return;
     }
-    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    // Async background sync to Supabase
-    upsertProductInSupabase(updated, currentUser?.id).catch((err) => {
-      console.warn('Background Supabase product update notice:', err);
-    });
+    // Optimistic state update
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id === updated.id || (p.uuid && updated.uuid && p.uuid === updated.uuid) ? updated : p
+      )
+    );
+
+    // Background sync to Supabase with service role endpoint
+    upsertProductInSupabase(updated, currentUser?.id)
+      .then((saved) => {
+        if (saved && saved[0]) {
+          const fresh = saved[0];
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === updated.id || (p.uuid && updated.uuid && p.uuid === updated.uuid)
+                ? { ...p, ...fresh }
+                : p
+            )
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn('Background Supabase product update notice:', err);
+      });
+
     showToast(`Updated product "${updated.title}"`, 'edit-2');
   };
 
@@ -978,26 +998,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     const savedProducts = await upsertProductInSupabase(newProd, currentUser?.id);
     if (savedProducts && savedProducts.length > 0) {
-      setProducts((prev) => [savedProducts[0], ...prev]);
-      showToast(`Published "${newProd.title}" live!`, 'sparkles');
+      const savedProd = savedProducts[0];
+      setProducts((prev) => [savedProd, ...prev.filter((p) => p.id !== newProd.id && p.title !== newProd.title)]);
+      showToast(`Published "${savedProd.title}" live!`, 'sparkles');
       return true;
     } else {
-      showToast('Failed to save product to database.', 'shield-alert');
+      showToast('Failed to save product to database. Please try again.', 'shield-alert');
       return false;
     }
   };
 
-  const deleteProduct = async (id: number) => {
+  const deleteProduct = async (id: number | string) => {
     if (!canManageProducts) {
       showToast('Admin authority required to delete products.', 'shield-alert');
       return;
     }
-    const success = await deleteProductFromSupabase(id);
+    const targetProd = products.find((p) => p.id === id || p.uuid === id);
+    const deleteRef = targetProd?.uuid || id;
+
+    const success = await deleteProductFromSupabase(deleteRef);
     if (success) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setProducts((prev) => prev.filter((p) => p.id !== id && p.uuid !== id));
       showToast('Product removed from marketplace', 'trash-2');
     } else {
-      showToast('Failed to delete product', 'shield-alert');
+      showToast('Failed to delete product from database', 'shield-alert');
     }
   };
 

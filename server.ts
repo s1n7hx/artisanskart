@@ -2017,6 +2017,278 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API Route 10: Server-Side Product Management (Service Role Bypass)
+// Bypasses client-side RLS and normalizes schema column formats
+// -------------------------------------------------------------
+
+function mapDbRowToProduct(item: any): any {
+  if (!item) return null;
+  const gallery = Array.isArray(item.gallery_urls) && item.gallery_urls.length > 0
+    ? item.gallery_urls.filter(Boolean)
+    : (Array.isArray(item.gallery_images) && item.gallery_images.length > 0
+      ? item.gallery_images.filter(Boolean)
+      : (item.image_url ? [item.image_url] : []));
+
+  const primary = item.image_url || gallery[0] || '';
+  const allImages = Array.from(new Set([primary, ...gallery].filter(Boolean)));
+
+  let numericId = 0;
+  if (typeof item.id === 'number') {
+    numericId = item.id;
+  } else if (typeof item.id === 'string') {
+    let hash = 0;
+    for (let i = 0; i < item.id.length; i++) {
+      hash = (hash << 5) - hash + item.id.charCodeAt(i);
+      hash |= 0;
+    }
+    numericId = Math.abs(hash);
+  }
+
+  return {
+    id: numericId,
+    uuid: item.id,
+    title: item.title,
+    category: item.category_name || item.category || 'Handicrafts',
+    price: Number(item.price || 0),
+    rating: Number(item.rating || 5.0),
+    reviews: Number(item.reviews_count || 1),
+    maker: item.maker_name || 'Artisan Creator',
+    cls: 'Class 10',
+    school: item.maker_school || 'Fine Arts Studio',
+    image: primary,
+    images: allImages,
+    stock: item.stock_status || 'In Stock • Made on Demand',
+    description: item.description || '',
+    slug: item.slug,
+    makerId: item.maker_id,
+    source: 'custom',
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+// GET /api/products
+app.get('/api/products', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [Supabase GET /api/products Error]:', error.message, error.details, error.hint);
+      return res.status(400).json({ success: false, error: error.message, details: error.details, hint: error.hint });
+    }
+
+    const mapped = (data || []).map(mapDbRowToProduct);
+    return res.json({ success: true, count: mapped.length, products: mapped });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/products/save
+app.post(['/api/products/save', '/api/products/create', '/api/admin/save-product'], async (req: Request, res: Response) => {
+  try {
+    const product = req.body || {};
+
+    const title = String(product.title || '').trim();
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        error: 'Product title is required.',
+      });
+    }
+
+    const price = Math.max(0, Number(product.price) || 0);
+    const categoryName = String(product.category || product.category_name || 'Handicrafts').trim();
+    const makerName = String(product.maker || product.maker_name || 'Artisan Creator').trim();
+    const makerSchool = String(product.school || product.maker_school || 'Fine Arts Studio').trim();
+    const stockStatus = String(product.stock || product.stock_status || 'In Stock • Made on Demand').trim();
+    const description = String(product.description || '').trim();
+
+    const rawImages = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : (Array.isArray(product.gallery_urls) && product.gallery_urls.length > 0
+        ? product.gallery_urls
+        : [product.image || product.image_url].filter(Boolean));
+
+    const primaryImage = String(product.image || product.image_url || rawImages[0] || '').trim();
+    const galleryUrls = Array.from(new Set([primaryImage, ...rawImages].filter(Boolean)));
+
+    const cleanSlug = product.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `craft-${Date.now()}`;
+
+    let validMakerId: string | null = null;
+    if (product.makerId && typeof product.makerId === 'string' && product.makerId.length === 36) {
+      validMakerId = product.makerId;
+    } else if (product.maker_id && typeof product.maker_id === 'string' && product.maker_id.length === 36) {
+      validMakerId = product.maker_id;
+    }
+
+    const payload: any = {
+      title,
+      slug: cleanSlug,
+      description,
+      price,
+      category_name: categoryName,
+      image_url: primaryImage,
+      gallery_urls: galleryUrls,
+      maker_name: makerName,
+      maker_school: makerSchool,
+      stock_status: stockStatus,
+      rating: Number(product.rating || 5.0),
+      reviews_count: Number(product.reviews || product.reviews_count || 1),
+      is_published: true,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (validMakerId) {
+      payload.maker_id = validMakerId;
+    }
+
+    let targetUuid: string | null = null;
+    if (product.uuid && typeof product.uuid === 'string' && product.uuid.length === 36) {
+      targetUuid = product.uuid;
+    } else if (product.id && typeof product.id === 'string' && product.id.length === 36) {
+      targetUuid = product.id;
+    }
+
+    let resultData = null;
+
+    if (targetUuid) {
+      payload.id = targetUuid;
+      console.log(`📦 [Supabase Service Role] Updating existing product UUID: ${targetUuid}`);
+      const { data, error } = await supabaseAdmin
+        .from('products')
+        .upsert(payload)
+        .select();
+
+      if (error) {
+        console.error(`❌ [Supabase Product Upsert Error]: ${error.message} | Details: ${error.details} | Hint: ${error.hint}`);
+        return res.status(400).json({
+          success: false,
+          error: `Database save failed: ${error.message}`,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+      }
+      resultData = data;
+    } else {
+      const { data: existingBySlug } = await supabaseAdmin
+        .from('products')
+        .select('id')
+        .eq('slug', cleanSlug)
+        .maybeSingle();
+
+      if (existingBySlug?.id) {
+        payload.id = existingBySlug.id;
+        console.log(`📦 [Supabase Service Role] Updating existing product by slug match: ${cleanSlug} (UUID: ${existingBySlug.id})`);
+        const { data, error } = await supabaseAdmin
+          .from('products')
+          .upsert(payload)
+          .select();
+
+        if (error) {
+          console.error(`❌ [Supabase Product Upsert Error]: ${error.message} | Details: ${error.details} | Hint: ${error.hint}`);
+          return res.status(400).json({
+            success: false,
+            error: `Database save failed: ${error.message}`,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+        }
+        resultData = data;
+      } else {
+        console.log(`✨ [Supabase Service Role] Inserting new product: "${title}"`);
+        payload.created_at = new Date().toISOString();
+        const { data, error } = await supabaseAdmin
+          .from('products')
+          .insert(payload)
+          .select();
+
+        if (error) {
+          console.error(`❌ [Supabase Product Insert Error]: ${error.message} | Details: ${error.details} | Hint: ${error.hint}`);
+          return res.status(400).json({
+            success: false,
+            error: `Database save failed: ${error.message}`,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+        }
+        resultData = data;
+      }
+    }
+
+    if (!resultData || resultData.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Product was saved but no database record was returned.',
+      });
+    }
+
+    const savedProduct = mapDbRowToProduct(resultData[0]);
+    console.log(`✅ [Product Saved Successfully] "${savedProduct.title}" (UUID: ${savedProduct.uuid})`);
+
+    return res.status(201).json({
+      success: true,
+      product: savedProduct,
+      message: `Successfully saved "${savedProduct.title}" to catalog!`,
+    });
+  } catch (err: any) {
+    console.error('❌ [Product Save Server Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error while saving product.' });
+  }
+});
+
+// DELETE /api/products/:id
+app.delete('/api/products/:id', async (req: Request, res: Response) => {
+  try {
+    const rawRef = String(req.params.id || '').trim();
+    if (!rawRef) {
+      return res.status(400).json({ success: false, error: 'Product ID is required.' });
+    }
+
+    let deleteError = null;
+
+    if (rawRef.length === 36) {
+      const { error } = await supabaseAdmin.from('products').delete().eq('id', rawRef);
+      deleteError = error;
+    } else {
+      const { data: allProds } = await supabaseAdmin.from('products').select('id, slug');
+      const matched = (allProds || []).find((p: any) => {
+        let hash = 0;
+        for (let i = 0; i < p.id.length; i++) {
+          hash = (hash << 5) - hash + p.id.charCodeAt(i);
+          hash |= 0;
+        }
+        return Math.abs(hash) === Number(rawRef) || p.slug === rawRef;
+      });
+
+      if (matched?.id) {
+        const { error } = await supabaseAdmin.from('products').delete().eq('id', matched.id);
+        deleteError = error;
+      } else {
+        const { error } = await supabaseAdmin.from('products').delete().eq('id', rawRef);
+        deleteError = error;
+      }
+    }
+
+    if (deleteError) {
+      console.error(`❌ [Supabase Product Delete Error]: ${deleteError.message}`);
+      return res.status(400).json({ success: false, error: deleteError.message });
+    }
+
+    console.log(`🗑️ [Product Deleted] Ref: ${rawRef}`);
+    return res.json({ success: true, message: 'Product deleted from marketplace.' });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // Vite Dev Middleware or Production Static Handler
 // -------------------------------------------------------------
 app.get('/api/debug/schema', async (_req, res) => {
