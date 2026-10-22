@@ -204,7 +204,7 @@ export async function lookupPostalPincode(pincode: string): Promise<PostalLookup
 }
 
 // -------------------------------------------------------------
-// Separate Courier Serviceability Check (Shiprocket)
+// Separate Courier Serviceability Check (NimbusPost)
 // Never assumes a PIN is serviceable or invents fake couriers.
 // -------------------------------------------------------------
 export async function checkCourierAvailability(params: {
@@ -376,7 +376,7 @@ export async function fetchPincodeIntelligence(
         codAvailable: Boolean(data.codAvailable),
         message: data.message || `Delivery to ${data.district}, ${data.state}`,
         originPincode: data.originPincode || pickupPincode,
-        verifiedSource: 'official_postal_shiprocket',
+        verifiedSource: 'official_postal_nimbuspost',
         localities: data.localities,
         postOffices: data.postOffices,
       };

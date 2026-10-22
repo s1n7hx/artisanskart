@@ -236,7 +236,7 @@ export const ProductDetailPage: React.FC = () => {
     } catch {}
   };
 
-  // Check PIN code via authentic India Post directory + Shiprocket
+  // Check PIN code via authentic India Post directory + NimbusPost
   const handleCheckPincode = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanPin = pincodeInput.replace(/\D/g, '').slice(0, 6);
@@ -704,7 +704,7 @@ export const ProductDetailPage: React.FC = () => {
 
             <p className="text-xs text-slate-500 font-medium">Inclusive of all taxes</p>
 
-            {/* Smart Indian Postal & Shiprocket Delivery Intelligence */}
+            {/* Smart Indian Postal & NimbusPost Delivery Intelligence */}
             <div className="pt-3 border-t border-[#e7e0d8]/80 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="font-semibold text-slate-700 flex items-center gap-1.5">
@@ -1112,7 +1112,7 @@ export const ProductDetailPage: React.FC = () => {
                     <Truck className="w-4 h-4" /> Pan-India Courier Delivery
                   </h4>
                   <p className="text-xs text-slate-600">
-                    Dispatched via verified courier partners (Delhivery, BlueDart, India Post) through Shiprocket. Free shipping on orders over ₹499.
+                    Dispatched via verified courier partners (Delhivery, BlueDart, India Post) through NimbusPost logistics network. Free shipping on orders over ₹499.
                   </p>
                 </div>
 

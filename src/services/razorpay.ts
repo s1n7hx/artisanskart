@@ -184,8 +184,8 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   const orderData = await response.json();
   const { orderId, amount, currency, keyId, gateway } = orderData;
 
-  // 2. Check if we are running with a real live Razorpay key or in sandbox/test mode
-  const isTestGateway = gateway === 'test_gateway' || !keyId || keyId.startsWith('rzp_test_artisanskart');
+  // 2. Check if we are running with configured Razorpay keys or in safe test sandbox
+  const isTestGateway = gateway === 'test_gateway' || !keyId || keyId === 'rzp_test_artisanskart_hub';
 
   if (isTestGateway) {
     // Launch responsive sandbox simulator overlay
@@ -214,19 +214,15 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
               razorpaySignature: `sim_sig_${Date.now()}`,
             });
           } else {
-            // Still proceed gracefully with test payment
-            options.onSuccess({
-              razorpayOrderId: orderId,
-              razorpayPaymentId: simulatedPaymentId,
-              razorpaySignature: `sim_sig_${Date.now()}`,
-            });
+            const errorMsg = verifyData.error || 'Payment verification failed on the server.';
+            if (options.onFailure) {
+              options.onFailure(new Error(errorMsg));
+            }
           }
-        } catch (e) {
-          options.onSuccess({
-            razorpayOrderId: orderId,
-            razorpayPaymentId: simulatedPaymentId,
-            razorpaySignature: `sim_sig_${Date.now()}`,
-          });
+        } catch (e: any) {
+          if (options.onFailure) {
+            options.onFailure(e || new Error('Network error verifying payment.'));
+          }
         }
       },
       () => {

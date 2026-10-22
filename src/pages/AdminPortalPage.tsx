@@ -110,8 +110,11 @@ export const AdminPortalPage: React.FC = () => {
     setCustomPercentInput(makerEarningPercent);
   }, [makerEarningPercent]);
 
-  // Server-side Razorpay integration status
+  // Server-side NimbusPost & Razorpay integration status
+  const [shippingStatus, setShippingStatus] = useState<any>(null);
   const [razorpayStatus, setRazorpayStatus] = useState<any>(null);
+  const [isTestingNimbus, setIsTestingNimbus] = useState(false);
+  const [nimbusTestResult, setNimbusTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Administrative Order Management state
   const [selectedAdminOrder, setSelectedAdminOrder] = useState<Order | null>(null);
@@ -124,10 +127,26 @@ export const AdminPortalPage: React.FC = () => {
     fetch('/api/shipping/config-status')
       .then((r) => r.json())
       .then((d) => {
+        if (d?.shipping || d?.nimbuspost) setShippingStatus(d.shipping || d.nimbuspost);
         if (d?.razorpay) setRazorpayStatus(d.razorpay);
       })
       .catch(() => {});
   }, []);
+
+  const handleTestNimbusAuth = async () => {
+    setIsTestingNimbus(true);
+    setNimbusTestResult(null);
+    try {
+      const res = await fetch('/api/shipping/test-nimbuspost-auth', { method: 'POST' });
+      const data = await res.json();
+      setNimbusTestResult({ success: Boolean(data.success), message: data.message });
+      if (data.status) setShippingStatus(data.status);
+    } catch (err: any) {
+      setNimbusTestResult({ success: false, message: err.message || 'Diagnostic request failed' });
+    } finally {
+      setIsTestingNimbus(false);
+    }
+  };
 
 
   const [newProductForm, setNewProductForm] = useState<Partial<Product>>({
@@ -1999,12 +2018,12 @@ export const AdminPortalPage: React.FC = () => {
               <div className="flex items-center gap-2 self-start sm:self-auto">
                 <button
                   type="button"
-                  onClick={handleTestShiprocketAuth}
-                  disabled={isTestingShiprocket}
+                  onClick={handleTestNimbusAuth}
+                  disabled={isTestingNimbus}
                   className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold rounded-xl border border-slate-300 shadow-2xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 text-[#C85A32] ${isTestingShiprocket ? 'animate-spin' : ''}`} />
-                  <span>{isTestingShiprocket ? 'Authenticating...' : 'Test Logistics Auth'}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 text-[#C85A32] ${isTestingNimbus ? 'animate-spin' : ''}`} />
+                  <span>{isTestingNimbus ? 'Authenticating...' : 'Test Logistics Auth'}</span>
                 </button>
               </div>
             </div>
@@ -2032,20 +2051,20 @@ export const AdminPortalPage: React.FC = () => {
               </div>
             </div>
 
-            {shiprocketTestResult && (
+            {nimbusTestResult && (
               <div
                 className={`p-3 rounded-xl text-xs font-medium flex items-center gap-2 ${
-                  shiprocketTestResult.success
+                  nimbusTestResult.success
                     ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                     : 'bg-red-50 text-red-800 border border-red-200'
                 }`}
               >
-                {shiprocketTestResult.success ? (
+                {nimbusTestResult.success ? (
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 ) : (
                   <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
                 )}
-                <span>{shiprocketTestResult.message}</span>
+                <span>{nimbusTestResult.message}</span>
               </div>
             )}
           </div>
@@ -2293,7 +2312,7 @@ export const AdminPortalPage: React.FC = () => {
       )}
 
       {/* -------------------------------------------------------------
-          TAB 5: DATABASE & INTEGRATIONS HEALTH (SUPABASE, RAZORPAY, SHIPROCKET)
+          TAB 5: DATABASE & INTEGRATIONS HEALTH (SUPABASE, RAZORPAY, NIMBUSPOST)
       ------------------------------------------------------------- */}
       {activeTab === 'supabase' && (
         <div className="space-y-6">

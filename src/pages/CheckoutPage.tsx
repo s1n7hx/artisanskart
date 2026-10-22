@@ -838,7 +838,7 @@ export const CheckoutPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Separate Courier Delivery Status (Shiprocket) */}
+                {/* Separate Courier Delivery Status (NimbusPost) */}
                 {courierStatus === 'loading' && (
                   <div className="mt-1 p-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-[11px] flex items-center gap-1.5">
                     <RefreshCw className="w-3 h-3 animate-spin text-[#C85A32]" />

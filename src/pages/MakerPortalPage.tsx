@@ -158,7 +158,7 @@ export const MakerPortalPage: React.FC = () => {
       case 'ready_to_ship':
         return { label: 'Ready for Courier', cls: 'bg-emerald-100 text-emerald-900 border-emerald-300' };
       case 'shipment_booked':
-        return { label: 'Shiprocket Booked', cls: 'bg-sky-100 text-sky-900 border-sky-300' };
+        return { label: 'NimbusPost Booked', cls: 'bg-sky-100 text-sky-900 border-sky-300' };
       case 'picked_up':
       case 'in_transit':
         return { label: 'In Transit', cls: 'bg-cyan-100 text-cyan-900 border-cyan-300' };
@@ -223,7 +223,7 @@ export const MakerPortalPage: React.FC = () => {
             Artisan Production &amp; Order Dashboard
           </h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
-            Manage your handmade creations, accept customer orders, and track Shiprocket courier logistics.
+            Manage your handmade creations, accept customer orders, and track NimbusPost courier logistics.
           </p>
         </div>
 
@@ -685,7 +685,7 @@ export const MakerPortalPage: React.FC = () => {
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 shadow-2xl border">
             <h3 className="text-base font-black text-slate-900">Confirm Parcel Packaging &amp; Weight</h3>
             <p className="text-xs text-slate-500">
-              Enter final package measurements for Shiprocket courier label generation.
+              Enter final package measurements for NimbusPost courier label generation.
             </p>
 
             <div className="space-y-3 text-xs">
