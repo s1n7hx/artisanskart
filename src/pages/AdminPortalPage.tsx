@@ -2106,7 +2106,7 @@ export const AdminPortalPage: React.FC = () => {
                 <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">API Key ID</span>
                   <span className="font-semibold text-slate-800 font-mono">
-                    {razorpayStatus?.keyIdSet ? 'rzp_test_TmGwRfupTUxGH8' : 'Configured'}
+                    {razorpayStatus?.keyIdMasked || (razorpayStatus?.configured ? 'Active (Configured in Env)' : 'Pending Configuration')}
                   </span>
                 </div>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100">
@@ -2372,9 +2372,9 @@ export const AdminPortalPage: React.FC = () => {
               <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 uppercase">Key Status</span>
                 <p className="font-mono font-bold text-slate-800">
-                  {razorpayStatus?.configured ? 'Active Credentials' : 'rzp_test_... Available'}
+                  {razorpayStatus?.configured ? (razorpayStatus.mode === 'live' ? 'Active (Live Production)' : 'Active Credentials') : 'Pending Environment Configuration'}
                 </p>
-                <p className="text-[10px] text-slate-500">Test &amp; Live environment compatible.</p>
+                <p className="text-[10px] text-slate-500">Live production environment active.</p>
               </div>
               <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 uppercase">Supported Modes</span>

@@ -204,7 +204,7 @@ export interface PincodeIntelligence {
   codAvailable: boolean;
   message: string;
   originPincode: string;
-  verifiedSource: 'official_postal_nimbuspost' | 'nimbuspost_api' | 'official_postal_shiprocket' | 'shiprocket_api' | 'verified_postal_registry';
+  verifiedSource: 'official_postal_nimbuspost' | 'nimbuspost_api' | 'verified_postal_registry';
   localities?: string[];
   postOffices?: PostalOfficeRecord[];
 }

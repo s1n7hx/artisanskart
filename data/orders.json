@@ -1,5 +1,45 @@
 [
   {
+    "orderNumber": "AK-2026-TEST01",
+    "customerName": "Priya Sharma",
+    "customerEmail": "priya@example.com",
+    "customerPhone": "9876543210",
+    "amount": 599,
+    "shippingAddress": {
+      "addressLine": "Flat 102, Green Park",
+      "city": "New Delhi",
+      "state": "Delhi",
+      "pincode": "110016"
+    },
+    "items": [
+      {
+        "productId": 1,
+        "title": "Crochet Bouquet",
+        "unitPrice": 599,
+        "quantity": 1
+      }
+    ],
+    "id": 1792684764912,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "trackingAwb": "NP-188035",
+    "courierName": "NimbusPost Express Partner",
+    "createdAt": "2026-10-22T15:59:24.912Z",
+    "updatedAt": "2026-10-22T15:59:24.912Z",
+    "statusHistory": [
+      {
+        "id": "init_1792684764912",
+        "orderId": 1792684764912,
+        "toStatus": "awaiting_maker_acceptance",
+        "actorName": "Priya Sharma",
+        "actorRole": "customer",
+        "note": "Order placed by customer and routed to maker studio",
+        "createdAt": "2026-10-22T15:59:24.912Z"
+      }
+    ]
+  },
+  {
     "orderNumber": "AK-TEST-88002",
     "customerName": "Amit Roy",
     "customerEmail": "amit@example.com",

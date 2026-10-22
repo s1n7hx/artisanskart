@@ -188,6 +188,10 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   const isTestGateway = gateway === 'test_gateway' || !keyId || keyId === 'rzp_test_artisanskart_hub';
 
   if (isTestGateway) {
+    if (keyId?.startsWith('rzp_live_') || (import.meta as any).env?.PROD) {
+      throw new Error('Simulated payment fallback is strictly disabled for live production payments. Please check gateway configuration.');
+    }
+
     // Launch responsive sandbox simulator overlay
     showSimulatedRazorpayModal(
       options,
@@ -255,7 +259,7 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
     key: keyId,
     amount: amount,
     currency: currency || 'INR',
-    name: 'ArtisansKart.in',
+    name: 'ArtisansKart',
     description: options.description || 'Handcrafted Artisan Crafts Purchase',
     image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=256&q=80',
     order_id: orderId,
@@ -307,8 +311,18 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
 
   const rzpInstance = new window.Razorpay(rzpOptions);
   rzpInstance.on('payment.failed', function (resp: any) {
+    // Record failure on the server to maintain audit integrity
+    fetch('/api/payment/record-failure', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orderNumber: options.orderNumber,
+        error: resp.error,
+      }),
+    }).catch(() => {});
+
     if (options.onFailure) {
-      options.onFailure(resp.error);
+      options.onFailure(resp.error || new Error('Payment attempt failed.'));
     }
   });
   rzpInstance.open();

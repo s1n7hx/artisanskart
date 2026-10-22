@@ -158,12 +158,17 @@ export const CheckoutPage: React.FC = () => {
 
     // Note: Customer's addressLine1, addressLine2, landmark remain untouched!
 
-    // 2. Separate Courier Serviceability Check
+    // 2. Separate NimbusPost Courier Serviceability & Live Rate Check
+    const totalCartWeightKg = checkoutItems.reduce((acc, item) => {
+      const weight = Number(item.product?.weightKg || 0.5);
+      return acc + (weight * item.qty);
+    }, 0) || 0.5;
+
     setCourierStatus('loading');
     const courier = await checkCourierAvailability({
       deliveryPincode: cleanPin,
-      pickupPincode: '110016',
-      weightKg: 0.5,
+      pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
+      weightKg: totalCartWeightKg,
       cod: true,
     });
 
@@ -171,6 +176,11 @@ export const CheckoutPage: React.FC = () => {
 
     setCourierStatus('checked');
     setCourierResult(courier);
+    if (courier && courier.serviceable && courier.rate !== undefined) {
+      setShippingFee(courier.rate);
+    } else {
+      setShippingFee(0);
+    }
   };
 
   // Immediate PIN editing handler: Instantly clears stale data
@@ -181,6 +191,7 @@ export const CheckoutPage: React.FC = () => {
     // Clear previous verified location, courier, and stale serviceability immediately!
     setVerifiedPostal(null);
     setCourierResult(null);
+    setShippingFee(0);
     setPostalErrorMessage('');
     setPostalErrorCode('');
     setAvailableLocalities([]);

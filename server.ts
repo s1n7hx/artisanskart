@@ -301,20 +301,22 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API Route 2: Create Gateway Payment Order (Razorpay / Test)
+// -------------------------------------------------------------
+// API Route 2: Create Gateway Payment Order (Razorpay Live & Official API)
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
   try {
     const { amount, receipt, notes, orderNumber } = req.body;
     const targetOrderNumber = orderNumber || notes?.order_number;
-    const keyId = (process.env.RAZORPAY_KEY_ID || '').trim();
+    const keyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
     const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
-    const isProd = process.env.NODE_ENV === 'production';
+    const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
+    const isProd = process.env.NODE_ENV === 'production' || isLive;
 
     const amountInPaise = Math.round(Number(amount) * 100);
 
     if (keyId && keySecret) {
-      // Real Razorpay API call
+      // Real Live / Official Razorpay API call
       const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
       const orderNotes: Record<string, string> = {
         platform: 'ArtisansKart',
@@ -368,29 +370,33 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             orderId: data.id,
             amount: data.amount,
             currency: 'INR',
-            keyId,
+            keyId, // Only public Key ID is sent to client
             orderNumber: targetOrderNumber,
           });
         } else {
-          const errMsg = data.error?.description || data.message || 'Razorpay order creation rejected';
-          console.warn('[Razorpay API Live Call Failed]:', errMsg);
-          if (isProd) {
-            return res.status(400).json({ error: `Razorpay error: ${errMsg}` });
-          }
+          const errMsg = data.error?.description || data.message || 'Razorpay order creation rejected by gateway';
+          console.error('[Razorpay Order Creation Failed]:', errMsg);
+          // Strictly reject when credentials are configured - NO silent simulated fallback!
+          return res.status(400).json({
+            error: `Razorpay order creation failed: ${errMsg}. Please verify your RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`,
+          });
         }
       } catch (razorErr: any) {
-        console.warn('[Razorpay Network Notice]:', razorErr.message);
-        if (isProd) {
-          return res.status(502).json({ error: `Razorpay network error: ${razorErr.message}` });
-        }
+        console.error('[Razorpay Network Notice]:', razorErr.message);
+        return res.status(502).json({
+          error: `Razorpay network connection error: ${razorErr.message}`,
+        });
       }
-    } else if (isProd) {
+    }
+
+    // When in live/production mode without complete credentials, reject immediately
+    if (isProd || keyId.startsWith('rzp_live_')) {
       return res.status(400).json({
-        error: 'Razorpay keys (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) are not configured in production.',
+        error: 'Razorpay Live keys (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) must be configured in environment variables. Simulated payments are disabled in Live mode.',
       });
     }
 
-    // Safe Test Gateway Simulation (Development / Sandbox prototype mode only)
+    // Safe Test Gateway Simulation (Only active during local sandbox development with zero keys)
     const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     if (targetOrderNumber) {
       try {
@@ -420,7 +426,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       currency: 'INR',
       keyId: 'rzp_test_artisanskart_hub',
       orderNumber: targetOrderNumber,
-      message: 'Running in safe Indian test gateway mode. Real UPI, NetBanking, Card simulation available.',
+      message: 'Running in safe Indian test gateway mode. Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to activate live payments.',
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Payment initiation failed.' });
@@ -428,15 +434,137 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
-// API Route 3: Verify Payment Signature & Persist to Database
+// Automated NimbusPost Shipment Booking Trigger
+// Automatically creates shipment order when payment is marked paid
+// -------------------------------------------------------------
+async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): Promise<void> {
+  try {
+    const sOrder = sOrderInput || SERVER_ORDERS.find((o) =>
+      String(o.orderNumber || o.id).toLowerCase() === String(targetRef).toLowerCase()
+    );
+
+    if (!sOrder) {
+      const { data: dbOrder } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('order_number', targetRef)
+        .maybeSingle();
+
+      if (dbOrder && (!dbOrder.tracking_awb || dbOrder.tracking_awb.startsWith('NP-'))) {
+        const payload = {
+          orderNumber: dbOrder.order_number,
+          customerName: dbOrder.customer_name || 'Artisan Patron',
+          phone: dbOrder.customer_phone || '9876543210',
+          email: dbOrder.customer_email || 'patron@artisanskart.in',
+          address: dbOrder.shipping_address?.addressLine || dbOrder.shipping_address?.address || 'Studio Address',
+          city: dbOrder.shipping_address?.city || 'New Delhi',
+          state: dbOrder.shipping_address?.state || 'Delhi',
+          pincode: dbOrder.shipping_address?.pincode || '110016',
+          items: [{ title: 'Handcrafted Artisan Craft', price: dbOrder.total_amount || 499, quantity: 1 }],
+          totalAmount: Number(dbOrder.total_amount || 499),
+          paymentMethod: dbOrder.payment_method || 'Prepaid',
+          pickupPincode: '110016',
+          weightKg: 0.5,
+          dimensions: '15x15x10 cm',
+        };
+        const shipmentResult = await createShipmentOrder(payload);
+        if (shipmentResult.success && shipmentResult.awb) {
+          await supabaseAdmin
+            .from('orders')
+            .update({
+              tracking_awb: shipmentResult.awb,
+              courier_name: shipmentResult.courierName,
+              status: 'shipment_booked',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('order_number', targetRef);
+          console.log(`📦 [NimbusPost Auto-Booking] Created shipment for order ${targetRef} | AWB: ${shipmentResult.awb}`);
+        }
+      }
+      return;
+    }
+
+    if (sOrder.trackingAwb && !sOrder.trackingAwb.startsWith('NP-')) {
+      return; // Already booked with live courier AWB
+    }
+
+    const payload = {
+      orderNumber: sOrder.orderNumber || String(sOrder.id),
+      customerName: sOrder.customerName || 'Artisan Patron',
+      phone: sOrder.customerPhone || sOrder.phone || '9876543210',
+      email: sOrder.customerEmail || sOrder.email || 'patron@artisanskart.in',
+      address: sOrder.shippingAddress?.addressLine || sOrder.shippingAddress?.address || 'Studio Address',
+      city: sOrder.shippingAddress?.city || 'New Delhi',
+      state: sOrder.shippingAddress?.state || 'Delhi',
+      pincode: sOrder.shippingAddress?.pincode || '110016',
+      items: Array.isArray(sOrder.items) && sOrder.items.length > 0
+        ? sOrder.items
+        : [{ title: 'Handcrafted Artisan Craft', price: sOrder.amount || 499, quantity: 1 }],
+      totalAmount: Number(sOrder.amount || sOrder.itemsTotal || 499),
+      paymentMethod: sOrder.paymentMethod || 'Prepaid',
+      pickupPincode: sOrder.pickupPincode || '110016',
+      weightKg: Number(sOrder.parcelWeightKg || 0.5),
+      dimensions: sOrder.parcelDimensions || '15x15x10 cm',
+    };
+
+    const res = await createShipmentOrder(payload);
+    if (res.success && res.awb) {
+      sOrder.trackingAwb = res.awb;
+      sOrder.courierName = res.courierName;
+      sOrder.status = 'shipment_booked';
+      sOrder.updatedAt = new Date().toISOString();
+      sOrder.statusHistory = sOrder.statusHistory || [];
+      sOrder.statusHistory.push({
+        id: `auto_ship_${Date.now()}`,
+        orderId: sOrder.id,
+        fromStatus: sOrder.status,
+        toStatus: 'shipment_booked',
+        actorName: 'NimbusPost Logistics Engine',
+        actorRole: 'shipping',
+        note: `Automated NimbusPost shipment booked on payment verification (AWB: ${res.awb}, Courier: ${res.courierName})`,
+        createdAt: new Date().toISOString(),
+      });
+      saveOrdersToDisk(SERVER_ORDERS);
+
+      try {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            tracking_awb: res.awb,
+            courier_name: res.courierName,
+            status: 'shipment_booked',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', sOrder.orderNumber || sOrder.id);
+      } catch (e) {}
+
+      console.log(`📦 [NimbusPost Auto-Booking] Created shipment for order ${sOrder.orderNumber || targetRef} | AWB: ${res.awb}`);
+    }
+  } catch (err: any) {
+    console.warn(`[NimbusPost Auto-Booking Notice]:`, err.message);
+  }
+}
+
+// -------------------------------------------------------------
+// API Route 3: Verify Payment Signature & Authorize Order
+// Strictly enforces server-side cryptographic HMAC-SHA256 verification
 // -------------------------------------------------------------
 app.post('/api/payment/verify', async (req: Request, res: Response) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
+    const keyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
     const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
-    const isProd = process.env.NODE_ENV === 'production';
+    const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
+    const isProd = process.env.NODE_ENV === 'production' || isLive;
 
-    if (keySecret && razorpaySignature) {
+    if (keySecret) {
+      if (!razorpaySignature || !razorpayOrderId || !razorpayPaymentId) {
+        return res.status(400).json({
+          verified: false,
+          error: 'Missing Razorpay order ID, payment ID, or signature required for verification.',
+        });
+      }
+
       const generatedSignature = crypto
         .createHmac('sha256', keySecret)
         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
@@ -446,10 +574,14 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
       const genBuf = Buffer.from(generatedSignature, 'utf-8');
 
       if (sigBuf.length !== genBuf.length || !crypto.timingSafeEqual(sigBuf, genBuf)) {
-        return res.status(400).json({ verified: false, error: 'Invalid payment signature.' });
+        console.warn(`[Razorpay Signature Verification Failed] Order: ${orderNumber || razorpayOrderId}`);
+        return res.status(400).json({
+          verified: false,
+          error: 'Invalid payment signature. Payment cannot be verified.',
+        });
       }
 
-      // Synchronize in both Supabase and SERVER_ORDERS
+      // Synchronize verified payment in both Supabase and SERVER_ORDERS
       if (orderNumber) {
         try {
           await supabaseAdmin
@@ -494,24 +626,29 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
           toStatus: 'awaiting_maker_acceptance',
           actorName: 'Razorpay Payment Gateway',
           actorRole: 'system',
-          note: `Payment verified via Razorpay (Payment ID: ${razorpayPaymentId})`,
+          note: `Payment verified via Razorpay Live (Payment ID: ${razorpayPaymentId})`,
           createdAt: new Date().toISOString(),
         });
         saveOrdersToDisk(SERVER_ORDERS);
       }
 
+      console.log(`✅ [Payment Verified] Order #${orderNumber || razorpayOrderId} verified via Razorpay ID: ${razorpayPaymentId}`);
+
+      // Auto-book shipment with NimbusPost
+      autoBookShipmentForOrder(orderNumber || razorpayOrderId, sOrder).catch(() => {});
+
       return res.json({ verified: true, paymentId: razorpayPaymentId });
     }
 
-    // In production, reject unverified payments
-    if (isProd) {
+    // In production or live mode, unverified payments are strictly rejected
+    if (isProd || keyId.startsWith('rzp_live_')) {
       return res.status(400).json({
         verified: false,
-        error: 'Razorpay secret key or signature missing. Unverified payments are rejected in production.',
+        error: 'RAZORPAY_KEY_SECRET is not configured. Live payments require server-side signature verification.',
       });
     }
 
-    // In development test mode: verify order was received
+    // In local sandbox development mode only: verify order was received
     if (razorpayOrderId) {
       const simulatedPaymentId = razorpayPaymentId || `pay_test_${Date.now()}`;
       if (orderNumber) {
@@ -551,6 +688,9 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
         saveOrdersToDisk(SERVER_ORDERS);
       }
 
+      // Auto-book shipment with NimbusPost
+      autoBookShipmentForOrder(orderNumber || razorpayOrderId, sOrder).catch(() => {});
+
       return res.json({
         verified: true,
         paymentId: simulatedPaymentId,
@@ -561,6 +701,50 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
     return res.status(400).json({ verified: false, error: 'Missing order details.' });
   } catch (err: any) {
     return res.status(500).json({ verified: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// API Route 3a: Record Failed or Cancelled Payment Attempt
+// Ensures failed/cancelled payments are never marked as paid
+// -------------------------------------------------------------
+app.post('/api/payment/record-failure', async (req: Request, res: Response) => {
+  try {
+    const { orderNumber, error } = req.body;
+    if (orderNumber) {
+      try {
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            payment_status: 'failed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('order_number', orderNumber);
+      } catch (e) {}
+
+      const sOrder = SERVER_ORDERS.find(
+        (o) => String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()
+      );
+      if (sOrder) {
+        sOrder.paymentStatus = 'failed';
+        sOrder.updatedAt = new Date().toISOString();
+        sOrder.statusHistory = sOrder.statusHistory || [];
+        sOrder.statusHistory.push({
+          id: `pay_fail_${Date.now()}`,
+          orderId: sOrder.id,
+          fromStatus: sOrder.status,
+          toStatus: sOrder.status,
+          actorName: 'Razorpay Payment Gateway',
+          actorRole: 'system',
+          note: `Payment failed or was cancelled: ${error?.description || error?.message || 'Payment attempt unsuccessful'}`,
+          createdAt: new Date().toISOString(),
+        });
+        saveOrdersToDisk(SERVER_ORDERS);
+      }
+    }
+    return res.json({ success: true, recorded: true });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1122,6 +1306,57 @@ app.post('/api/shipping/pincode-intel', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API Route 4b: Direct Courier Serviceability Check (NimbusPost API)
+// -------------------------------------------------------------
+app.post('/api/shipping/check-serviceability', async (req: Request, res: Response) => {
+  try {
+    const deliveryPincode = req.body.deliveryPincode || req.body.pincode || req.query.deliveryPincode || req.query.pincode;
+    const pickupPincode = req.body.pickupPincode || req.query.pickupPincode || '110016';
+    const weightKg = Number(req.body.weightKg || req.query.weightKg || 0.5);
+    const cod = req.body.cod !== false && req.body.cod !== 0 && req.body.cod !== '0' && req.body.cod !== 'false';
+
+    const cleanPin = String(deliveryPincode || '').replace(/\D/g, '').slice(0, 6);
+    if (!cleanPin || cleanPin.length !== 6) {
+      return res.status(400).json({
+        serviceable: false,
+        carrierAvailable: false,
+        couriers: [],
+        message: 'Invalid delivery pincode. Must be 6 digits.',
+      });
+    }
+
+    const nimbusResult = await checkCourierServiceability({
+      deliveryPincode: cleanPin,
+      pickupPincode: String(pickupPincode),
+      weightKg,
+      cod,
+    });
+
+    return res.json({
+      success: true,
+      serviceable: nimbusResult.serviceable,
+      carrierAvailable: nimbusResult.carrierAvailable,
+      couriers: nimbusResult.couriers || [],
+      recommended_courier: nimbusResult.recommended_courier || 'Delhivery Surface (NimbusPost)',
+      rate: nimbusResult.rate !== undefined ? nimbusResult.rate : 49,
+      etd: nimbusResult.etd || '3-5 business days',
+      cod_available: Boolean(nimbusResult.cod_available),
+      mode: nimbusResult.mode,
+      pickup_postcode: pickupPincode,
+      delivery_postcode: cleanPin,
+      message: nimbusResult.message,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      serviceable: false,
+      carrierAvailable: false,
+      couriers: [],
+      error: err.message || 'Serviceability check failed',
+    });
+  }
+});
+
+// -------------------------------------------------------------
 // API Route 5: NimbusPost Shipment Creation & Dispatch Booking
 // -------------------------------------------------------------
 app.post('/api/shipping/create-shipment', async (req: Request, res: Response) => {
@@ -1277,16 +1512,19 @@ app.post('/api/shipping/cancel', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
   const nimbusStatus = getNimbusPostIntegrationStatus();
-  const hasRazorpay = Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET);
+  const rawKeyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
+  const rawKeySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+  const hasRazorpay = Boolean(rawKeyId && rawKeySecret);
+  const isLive = rawKeyId.startsWith('rzp_live_') || (hasRazorpay && process.env.NODE_ENV === 'production');
 
   return res.json({
     shipping: nimbusStatus,
     nimbuspost: nimbusStatus,
-    shiprocket: nimbusStatus, // backward compat for any cached components
     razorpay: {
       configured: hasRazorpay,
-      mode: hasRazorpay ? 'live' : 'test_gateway',
-      keyIdSet: Boolean(process.env.RAZORPAY_KEY_ID),
+      mode: isLive ? 'live' : (hasRazorpay ? 'test' : 'not_configured'),
+      keyIdSet: Boolean(rawKeyId),
+      keyIdMasked: rawKeyId ? `${rawKeyId.slice(0, 8)}...` : null,
     },
   });
 });
@@ -1294,7 +1532,7 @@ app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
 // -------------------------------------------------------------
 // API Route 7: Diagnostic Test for Courier Authentication
 // -------------------------------------------------------------
-app.post(['/api/shipping/test-nimbuspost-auth', '/api/shipping/test-shiprocket-auth'], async (_req: Request, res: Response) => {
+app.post('/api/shipping/test-nimbuspost-auth', async (_req: Request, res: Response) => {
   try {
     const hasToken = Boolean(process.env.NIMBUSPOST_TOKEN?.trim());
     const email = process.env.NIMBUSPOST_EMAIL?.trim();
@@ -1469,12 +1707,13 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
   console.log(`🔔 [Razorpay Webhook] Verified event: ${event}`);
 
   try {
-    if (event === 'payment.captured' || event === 'order.paid') {
-      const payment = req.body.payload?.payment?.entity;
-      const orderNumber = payment?.notes?.order_number;
-      const rzpOrderId = payment?.order_id;
-      const paymentId = payment?.id;
+    const payment = req.body.payload?.payment?.entity;
+    const orderEntity = req.body.payload?.order?.entity;
+    const orderNumber = payment?.notes?.order_number || orderEntity?.notes?.order_number;
+    const rzpOrderId = payment?.order_id || orderEntity?.id;
+    const paymentId = payment?.id;
 
+    if (event === 'payment.captured' || event === 'order.paid' || event === 'payment.authorized') {
       // Update SERVER_ORDERS
       const sOrder = SERVER_ORDERS.find(
         (o) =>
@@ -1483,7 +1722,7 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
       );
       if (sOrder) {
         sOrder.paymentStatus = 'paid';
-        sOrder.paymentGatewayPaymentId = paymentId;
+        if (paymentId) sOrder.paymentGatewayPaymentId = paymentId;
         sOrder.status = 'awaiting_maker_acceptance';
         sOrder.updatedAt = new Date().toISOString();
         sOrder.statusHistory = sOrder.statusHistory || [];
@@ -1492,43 +1731,39 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
           orderId: sOrder.id,
           fromStatus: sOrder.status,
           toStatus: 'awaiting_maker_acceptance',
-          actorName: 'Razorpay Webhook',
+          actorName: 'Razorpay Live Webhook',
           actorRole: 'system',
-          note: `Payment confirmed via webhook (${paymentId})`,
+          note: `Payment confirmed via webhook event "${event}" (ID: ${paymentId || rzpOrderId})`,
           createdAt: new Date().toISOString(),
         });
         saveOrdersToDisk(SERVER_ORDERS);
       }
 
       // Update Supabase
+      const updatePayload: Record<string, any> = {
+        payment_status: 'paid',
+        status: 'awaiting_maker_acceptance',
+        updated_at: new Date().toISOString(),
+      };
+      if (paymentId) updatePayload.payment_gateway_payment_id = paymentId;
+
       if (orderNumber) {
         await supabaseAdmin
           .from('orders')
-          .update({
-            payment_status: 'paid',
-            payment_gateway_payment_id: paymentId,
-            status: 'awaiting_maker_acceptance',
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('order_number', orderNumber);
         console.log(`✅ [Razorpay Webhook] Order #${orderNumber} marked PAID`);
       } else if (rzpOrderId) {
         await supabaseAdmin
           .from('orders')
-          .update({
-            payment_status: 'paid',
-            payment_gateway_payment_id: paymentId,
-            status: 'awaiting_maker_acceptance',
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('payment_gateway_order_id', rzpOrderId);
         console.log(`✅ [Razorpay Webhook] Gateway Order #${rzpOrderId} marked PAID`);
       }
-    } else if (event === 'payment.failed') {
-      const payment = req.body.payload?.payment?.entity;
-      const orderNumber = payment?.notes?.order_number;
-      const rzpOrderId = payment?.order_id;
 
+      // Auto-book shipment in NimbusPost
+      autoBookShipmentForOrder(orderNumber || rzpOrderId, sOrder).catch(() => {});
+    } else if (event === 'payment.failed') {
       const sOrder = SERVER_ORDERS.find(
         (o) =>
           (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
@@ -1537,6 +1772,17 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
       if (sOrder) {
         sOrder.paymentStatus = 'failed';
         sOrder.updatedAt = new Date().toISOString();
+        sOrder.statusHistory = sOrder.statusHistory || [];
+        sOrder.statusHistory.push({
+          id: `rzp_wh_fail_${Date.now()}`,
+          orderId: sOrder.id,
+          fromStatus: sOrder.status,
+          toStatus: sOrder.status,
+          actorName: 'Razorpay Live Webhook',
+          actorRole: 'system',
+          note: `Payment failed notification received from gateway`,
+          createdAt: new Date().toISOString(),
+        });
         saveOrdersToDisk(SERVER_ORDERS);
       }
 
@@ -1557,15 +1803,26 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
           })
           .eq('payment_gateway_order_id', rzpOrderId);
       }
-    } else if (event === 'refund.processed') {
+    } else if (event === 'refund.processed' || event === 'refund.created') {
       const refund = req.body.payload?.refund?.entity;
-      const paymentId = refund?.payment_id;
+      const refundPaymentId = refund?.payment_id || paymentId;
 
-      if (paymentId) {
-        const sOrder = SERVER_ORDERS.find((o) => o.paymentGatewayPaymentId === paymentId);
+      if (refundPaymentId) {
+        const sOrder = SERVER_ORDERS.find((o) => o.paymentGatewayPaymentId === refundPaymentId);
         if (sOrder) {
           sOrder.paymentStatus = 'refunded';
           sOrder.updatedAt = new Date().toISOString();
+          sOrder.statusHistory = sOrder.statusHistory || [];
+          sOrder.statusHistory.push({
+            id: `rzp_wh_ref_${Date.now()}`,
+            orderId: sOrder.id,
+            fromStatus: sOrder.status,
+            toStatus: sOrder.status,
+            actorName: 'Razorpay Live Webhook',
+            actorRole: 'system',
+            note: `Refund recorded via webhook: ₹${(refund?.amount || 0) / 100}`,
+            createdAt: new Date().toISOString(),
+          });
           saveOrdersToDisk(SERVER_ORDERS);
         }
 
@@ -1575,7 +1832,7 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
             payment_status: 'refunded',
             updated_at: new Date().toISOString(),
           })
-          .eq('payment_gateway_payment_id', paymentId);
+          .eq('payment_gateway_payment_id', refundPaymentId);
       }
     }
   } catch (err: any) {
