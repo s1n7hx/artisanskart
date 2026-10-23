@@ -437,12 +437,56 @@ app.get(['/api/config', '/api/payment/key'], (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// -------------------------------------------------------------
 // API Route 2: Create Gateway Payment Order (Razorpay Live & Official API)
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
   try {
-    const { amount, receipt, notes, orderNumber } = req.body || {};
-    const targetOrderNumber = orderNumber || notes?.order_number;
+    // 1. Robust Request Payload Handling: safely parse req.body with fallback defaults
+    const body = (req.body && typeof req.body === 'object') ? req.body : {};
+    const rawAmount = body.amount !== undefined ? body.amount : (body.totalAmount !== undefined ? body.totalAmount : body.total);
+    const currency = (typeof body.currency === 'string' && body.currency.trim() ? body.currency.trim().toUpperCase() : 'INR') || 'INR';
+    const targetOrderNumber = String(body.orderNumber || body.order_number || body.notes?.order_number || body.notes?.orderNumber || '').trim();
+
+    // Receipt fallback: valid string under 40 characters
+    const cleanReceipt = String(body.receipt || targetOrderNumber || `rcpt_${Date.now()}`)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 40) || `rcpt_${Date.now()}`.slice(0, 40);
+
+    // Notes fallback defaults
+    const orderNotes: Record<string, string> = {
+      platform: 'ArtisansKart',
+    };
+    if (targetOrderNumber) {
+      orderNotes.order_number = targetOrderNumber.slice(0, 40);
+    }
+    if (body.notes && typeof body.notes === 'object') {
+      for (const [k, v] of Object.entries(body.notes)) {
+        if (v !== undefined && v !== null && typeof v !== 'object') {
+          orderNotes[String(k).slice(0, 30)] = String(v).slice(0, 100);
+        }
+      }
+    }
+
+    // 2. Ensure Correct Currency & Integer Amount in Paisa (Math.round(amount * 100))
+    const parsedAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount || '0'));
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      console.warn(`[Razorpay Order Error] Invalid amount supplied:`, rawAmount);
+      return res.status(400).json({
+        success: false,
+        error: 'Order amount must be a valid positive number greater than zero.',
+      });
+    }
+
+    // Strictly convert amount to integer in paisa, preventing validation errors from float/string amounts
+    const amountInPaise = Math.round(parsedAmount * 100);
+    if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {
+      console.warn(`[Razorpay Order Error] Invalid paisa conversion:`, amountInPaise);
+      return res.status(400).json({
+        success: false,
+        error: 'Calculated order amount in paisa must be a valid integer greater than zero.',
+      });
+    }
 
     const creds = getRazorpayCredentials();
     const { keyId, keySecret, hasKeyId, hasKeySecret, keyPrefix, isLive, maskedKeyId, secretLength } = creds;
@@ -452,41 +496,15 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     console.log(
       `[Razorpay Safe Audit] KeyID: ${hasKeyId ? 'Present' : 'MISSING'} (${keyPrefix}, ${maskedKeyId}) | KeySecret: ${
         hasKeySecret ? `Present (${secretLength} chars)` : 'MISSING'
-      } | Mode: ${isLive ? 'LIVE' : 'TEST'} | Prod: ${isProd}`
+      } | Mode: ${isLive ? 'LIVE' : 'TEST'} | Amount: ₹${parsedAmount} (${amountInPaise} paise) | Currency: ${currency}`
     );
 
-    const numAmount = Number(amount) || 0;
-    if (numAmount <= 0) {
-      return res.status(400).json({ error: 'Order amount must be greater than zero.' });
-    }
-
-    const amountInPaise = Math.round(numAmount * 100);
-
-    // Razorpay API requirement: Receipt field MUST NOT EXCEED 40 characters
-    const cleanReceipt = String(receipt || targetOrderNumber || `rcpt_${Date.now()}`)
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .slice(0, 40);
-
     if (keyId && keySecret) {
-      // Real Live / Official Razorpay API call
-      const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
-      const orderNotes: Record<string, string> = {
-        platform: 'ArtisansKart',
-      };
-      if (targetOrderNumber) {
-        orderNotes.order_number = String(targetOrderNumber).slice(0, 40);
-      }
-      if (notes && typeof notes === 'object') {
-        for (const [k, v] of Object.entries(notes)) {
-          if (v !== undefined && v !== null && typeof v !== 'object') {
-            orderNotes[String(k).slice(0, 30)] = String(v).slice(0, 100);
-          }
-        }
-      }
-
+      // 3. Wrap Razorpay order creation call in try/catch block with explicit Vercel console logging
       try {
-        console.log(`[Razorpay Order Creation] Requesting https://api.razorpay.com/v1/orders | ₹${numAmount} (${amountInPaise} paise) | Key: ${maskedKeyId} | Receipt: ${cleanReceipt}`);
+        console.log(`[Razorpay Order Creation] Requesting https://api.razorpay.com/v1/orders | ₹${parsedAmount} (${amountInPaise} paise) | Currency: ${currency} | Key: ${maskedKeyId} | Receipt: ${cleanReceipt}`);
 
+        const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
         const response = await fetch('https://api.razorpay.com/v1/orders', {
           method: 'POST',
           headers: {
@@ -495,13 +513,24 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
           },
           body: JSON.stringify({
             amount: amountInPaise,
-            currency: 'INR',
+            currency,
             receipt: cleanReceipt,
             notes: orderNotes,
           }),
         });
 
-        const data = await response.json();
+        const rawText = await response.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch (jsonErr) {
+          console.error(`[Razorpay Order Creation Failed - Non-JSON Response from Gateway]:`, rawText.slice(0, 300));
+          return res.status(response.status >= 400 && response.status < 600 ? response.status : 502).json({
+            success: false,
+            error: `Razorpay payment gateway returned an unexpected response (HTTP ${response.status}).`,
+          });
+        }
+
         console.log(`[Razorpay Order Response] HTTP ${response.status} ${response.statusText}`);
 
         if (response.ok && data.id) {
@@ -527,13 +556,16 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             }
           }
 
-          console.log(`✅ [Razorpay Live Order Created] ID: ${data.id} | Amount: ₹${data.amount / 100}`);
+          console.log(`✅ [Razorpay Live Order Created] ID: ${data.id} | Amount: ₹${data.amount / 100} ${data.currency || currency}`);
 
           return res.json({
+            success: true,
             gateway: 'razorpay',
             orderId: data.id,
+            id: data.id,
             amount: data.amount,
-            currency: 'INR',
+            currency: data.currency || currency,
+            receipt: cleanReceipt,
             keyId, // Only public Key ID sent to client
             orderNumber: targetOrderNumber,
           });
@@ -549,6 +581,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             errMsg = data.message;
           }
 
+          // Exact error logging to Vercel console
           console.error(`[Razorpay Order Creation Failed - HTTP ${response.status}]:`, JSON.stringify(data));
 
           if (errMsg.toLowerCase().includes('authentication failed')) {
@@ -567,6 +600,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
           }
 
           return res.status(response.status >= 400 && response.status < 500 ? response.status : 400).json({
+            success: false,
             error: `Razorpay Live API Error: ${errMsg}. Please verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`,
             details: data.error || data,
             diagnostic: {
@@ -579,10 +613,12 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             },
           });
         }
-      } catch (razorErr: any) {
-        console.error('[Razorpay Network Error]:', razorErr.message);
+      } catch (error: any) {
+        // Logs the exact error message to Vercel console and returns clear JSON response
+        console.error('[Razorpay Order Creation Error / Vercel Console]:', error?.message || error);
         return res.status(502).json({
-          error: `Razorpay network connection error: ${razorErr.message}`,
+          success: false,
+          error: error?.message || 'Failed to create payment gateway order.',
         });
       }
     }
@@ -592,6 +628,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       const missingVar = !hasKeyId ? 'RAZORPAY_KEY_ID' : 'RAZORPAY_KEY_SECRET';
       console.error(`[Razorpay Configuration Error] ${missingVar} is missing on the server.`);
       return res.status(400).json({
+        success: false,
         error: `Razorpay Live Configuration Error: ${missingVar} environment variable is missing on the server. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel environment variables.`,
         diagnostic: {
           keyIdConfigured: hasKeyId,
@@ -625,16 +662,23 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     }
 
     return res.json({
+      success: true,
       gateway: 'test_gateway',
       orderId: mockOrderId,
+      id: mockOrderId,
       amount: amountInPaise,
-      currency: 'INR',
+      currency,
+      receipt: cleanReceipt,
       keyId: 'rzp_test_artisanskart_hub',
       orderNumber: targetOrderNumber,
       message: 'Running in safe Indian test gateway mode. Configure RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to activate live payments.',
     });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Payment initiation failed.' });
+  } catch (error: any) {
+    console.error('[Razorpay Order Creation Exception / Vercel Console]:', error?.message || error);
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Payment initiation failed.',
+    });
   }
 });
 

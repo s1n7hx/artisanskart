@@ -200,7 +200,12 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   }
 
   const orderData = await response.json();
-  const { orderId, amount, currency, keyId: serverKeyId, gateway } = orderData;
+  if (orderData.success === false) {
+    const errMsg = typeof orderData.error === 'string' ? orderData.error : (orderData.error?.description || orderData.message || 'Failed to initiate payment gateway order.');
+    throw new Error(errMsg);
+  }
+  const orderId = orderData.orderId || orderData.id;
+  const { amount, currency, keyId: serverKeyId, gateway } = orderData;
 
   const rawKey =
     (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
