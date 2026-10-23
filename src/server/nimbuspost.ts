@@ -398,7 +398,7 @@ export async function createShipmentOrder(params: {
         awb,
         courierName: data.courier_name || 'Delhivery Surface (NimbusPost)',
         status: 'SHIPMENT_CREATED',
-        trackingUrl: `https://nimbuspost.com/shipping-tracking?awb=${awb}`,
+        trackingUrl: data.tracking_url || data.trackingUrl || `/track/${orderNumber}`,
         labelUrl: data.label || null,
         manifestUrl: data.manifest || null,
         pickupScheduled: 'Next business day at Artisan Workshop',
@@ -417,7 +417,7 @@ export async function createShipmentOrder(params: {
     awb,
     courierName: 'Delhivery Surface (NimbusPost)',
     status: 'AWB_ASSIGNED',
-    trackingUrl: `https://nimbuspost.com/shipping-tracking?awb=${awb}`,
+    trackingUrl: `/track/${orderNumber}`,
     pickupScheduled: 'Next business day at Artisan Workshop',
   };
 }
@@ -454,7 +454,7 @@ export async function trackShipment(awb: string) {
     awb,
     status: 'IN_TRANSIT',
     message: 'Shipment is in transit via NimbusPost network.',
-    trackingUrl: `https://nimbuspost.com/shipping-tracking?awb=${awb}`,
+    trackingUrl: `/track/${awb}`,
   };
 }
 
