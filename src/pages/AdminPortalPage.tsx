@@ -123,14 +123,81 @@ export const AdminPortalPage: React.FC = () => {
   const [overrideNote, setOverrideNote] = useState<string>('');
   const [isOverridingStatus, setIsOverridingStatus] = useState(false);
 
+  // Environment Variable Fallback: Check both import.meta.env.VITE_RAZORPAY_KEY_ID and process.env.RAZORPAY_KEY_ID
+  const envRazorpayKeyId =
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_RAZORPAY_KEY_ID) ||
+    (typeof process !== 'undefined' && (process.env?.RAZORPAY_KEY_ID || process.env?.VITE_RAZORPAY_KEY_ID)) ||
+    '';
+
+  const isKeyPresentInEnv = Boolean(
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_RAZORPAY_KEY_ID) ||
+    (typeof process !== 'undefined' && (process.env?.RAZORPAY_KEY_ID || process.env?.VITE_RAZORPAY_KEY_ID))
+  );
+
+  // Consider key status "Active" if either RAZORPAY_KEY_ID / VITE_RAZORPAY_KEY_ID is present in env or verified by backend
+  const isRazorpayActive = Boolean(
+    isKeyPresentInEnv ||
+    razorpayStatus?.active ||
+    razorpayStatus?.status === 'Active' ||
+    razorpayStatus?.configured ||
+    razorpayStatus?.keyIdSet ||
+    razorpayStatus?.keyId
+  );
+
+  const isRazorpayLive = Boolean(
+    razorpayStatus?.isLive ||
+    razorpayStatus?.mode === 'live' ||
+    (typeof envRazorpayKeyId === 'string' && envRazorpayKeyId.startsWith('rzp_live_')) ||
+    (typeof razorpayStatus?.keyPrefix === 'string' && razorpayStatus.keyPrefix === 'rzp_live')
+  );
+
+  const displayRazorpayKeyId =
+    razorpayStatus?.keyIdMasked ||
+    (razorpayStatus?.keyId && razorpayStatus.keyId.length >= 8
+      ? `${razorpayStatus.keyId.slice(0, 8)}...${razorpayStatus.keyId.slice(-4)}`
+      : null) ||
+    (envRazorpayKeyId && envRazorpayKeyId.length >= 8
+      ? `${envRazorpayKeyId.slice(0, 8)}...${envRazorpayKeyId.slice(-4)}`
+      : null) ||
+    (isRazorpayActive ? 'Active (Configured in Env)' : 'Pending Configuration');
+
   React.useEffect(() => {
-    fetch('/api/shipping/config-status')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.shipping || d?.nimbuspost) setShippingStatus(d.shipping || d.nimbuspost);
-        if (d?.razorpay) setRazorpayStatus(d.razorpay);
-      })
-      .catch(() => {});
+    // Rely on live backend verification endpoint (/api/config or /api/payment/key)
+    const loadGatewayConfig = async () => {
+      try {
+        const configRes = await fetch('/api/config');
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          if (configData?.razorpay) setRazorpayStatus(configData.razorpay);
+          else if (configData?.active !== undefined) setRazorpayStatus(configData);
+          if (configData?.shipping || configData?.nimbuspost) {
+            setShippingStatus(configData.shipping || configData.nimbuspost);
+          }
+          return;
+        }
+      } catch (err) {}
+
+      try {
+        const keyRes = await fetch('/api/payment/key');
+        if (keyRes.ok) {
+          const keyData = await keyRes.json();
+          if (keyData?.razorpay) setRazorpayStatus(keyData.razorpay);
+          else setRazorpayStatus(keyData);
+          return;
+        }
+      } catch (err) {}
+
+      try {
+        const shippingRes = await fetch('/api/shipping/config-status');
+        if (shippingRes.ok) {
+          const d = await shippingRes.json();
+          if (d?.shipping || d?.nimbuspost) setShippingStatus(d.shipping || d.nimbuspost);
+          if (d?.razorpay) setRazorpayStatus(d.razorpay);
+        }
+      } catch (err) {}
+    };
+
+    loadGatewayConfig();
   }, []);
 
   const handleTestNimbusAuth = async () => {
@@ -2148,12 +2215,12 @@ export const AdminPortalPage: React.FC = () => {
                       <h3 className="text-sm font-bold text-slate-900">Razorpay Payment Gateway</h3>
                       <span
                         className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
-                          razorpayStatus?.configured
+                          isRazorpayActive
                             ? 'bg-emerald-100 text-emerald-800'
                             : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {razorpayStatus?.configured ? '● Gateway Active (Keys Loaded)' : '○ Safe Simulation Mode'}
+                        {isRazorpayActive ? '● Gateway Active (Keys Loaded)' : '○ Safe Simulation Mode'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
@@ -2164,7 +2231,7 @@ export const AdminPortalPage: React.FC = () => {
 
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   <span className="text-xs font-mono font-semibold bg-white px-3 py-1.5 rounded-xl border border-blue-200 text-slate-700">
-                    Mode: <strong className="text-[#2B6CB0]">{razorpayStatus?.mode || 'live'}</strong>
+                    Mode: <strong className="text-[#2B6CB0]">{isRazorpayLive ? 'live' : (isRazorpayActive ? 'test' : 'simulation')}</strong>
                   </span>
                 </div>
               </div>
@@ -2173,7 +2240,7 @@ export const AdminPortalPage: React.FC = () => {
                 <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block">API Key ID</span>
                   <span className="font-semibold text-slate-800 font-mono">
-                    {razorpayStatus?.keyIdMasked || (razorpayStatus?.configured ? 'Active (Configured in Env)' : 'Pending Configuration')}
+                    {displayRazorpayKeyId}
                   </span>
                 </div>
                 <div className="bg-white/80 p-2.5 rounded-xl border border-blue-100">
@@ -2429,9 +2496,11 @@ export const AdminPortalPage: React.FC = () => {
                   Server-side order generation and HMAC SHA-256 signature verification.
                 </p>
               </div>
-              <span className="text-xs bg-emerald-100 text-emerald-800 font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5">
+              <span className={`text-xs font-extrabold px-3 py-1 rounded-full flex items-center gap-1.5 ${
+                isRazorpayActive ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+              }`}>
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                Gateway Ready
+                {isRazorpayActive ? 'Gateway Ready (Active)' : 'Gateway Pending'}
               </span>
             </div>
 
@@ -2439,9 +2508,15 @@ export const AdminPortalPage: React.FC = () => {
               <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 uppercase">Key Status</span>
                 <p className="font-mono font-bold text-slate-800">
-                  {razorpayStatus?.configured ? (razorpayStatus.mode === 'live' ? 'Active (Live Production)' : 'Active Credentials') : 'Pending Environment Configuration'}
+                  {isRazorpayActive
+                    ? (isRazorpayLive ? 'Active (Live Production)' : 'Active Credentials')
+                    : 'Pending Environment Configuration'}
                 </p>
-                <p className="text-[10px] text-slate-500">Live production environment active.</p>
+                <p className="text-[10px] text-slate-500">
+                  {isRazorpayActive
+                    ? (isRazorpayLive ? 'Live production environment active.' : 'Credentials configured and active.')
+                    : 'Configure RAZORPAY_KEY_ID in environment.'}
+                </p>
               </div>
               <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-1">
                 <span className="text-[11px] font-bold text-slate-400 uppercase">Supported Modes</span>

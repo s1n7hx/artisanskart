@@ -205,7 +205,7 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   const rawKey =
     (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
     (import.meta as any).env?.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-    (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env?.VITE_RAZORPAY_KEY_ID)) ||
+    (typeof process !== 'undefined' && (process.env?.RAZORPAY_KEY_ID || process.env?.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env?.VITE_RAZORPAY_KEY_ID)) ||
     serverKeyId ||
     '';
   const effectiveKeyId = String(rawKey).replace(/^["']|["']$/g, '').trim();

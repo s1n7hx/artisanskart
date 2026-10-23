@@ -400,6 +400,43 @@ app.get('/api/payment/diagnostics', (_req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API Route 2c: Public Configuration & Razorpay Key Status Endpoint (/api/config & /api/payment/key)
+// Exposes safe public status indicating whether Razorpay integration is live & active.
+// Checks both process.env.RAZORPAY_KEY_ID and process.env.VITE_RAZORPAY_KEY_ID.
+// Strictly never exposes secret keys.
+// -------------------------------------------------------------
+app.get(['/api/config', '/api/payment/key'], (_req: Request, res: Response) => {
+  const creds = getRazorpayCredentials();
+  const envKeyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
+  const isActive = Boolean(envKeyId || creds.hasKeyId);
+  const isLive = creds.isLive || (Boolean(creds.keyId) && creds.keyPrefix === 'rzp_live') || envKeyId.startsWith('rzp_live_');
+  const effectiveKeyId = creds.keyId || envKeyId || '';
+
+  return res.json({
+    success: true,
+    active: isActive,
+    isLive,
+    status: isActive ? 'Active' : 'Pending Configuration',
+    keyId: effectiveKeyId,
+    maskedKeyId: creds.maskedKeyId,
+    keyPrefix: creds.keyPrefix,
+    mode: isLive ? 'live' : (isActive ? 'test' : 'not_configured'),
+    razorpay: {
+      active: isActive,
+      configured: creds.configured || isActive,
+      isLive,
+      mode: isLive ? 'live' : (isActive ? 'test' : 'not_configured'),
+      keyId: effectiveKeyId,
+      keyIdMasked: creds.maskedKeyId,
+      keyPrefix: creds.keyPrefix,
+      status: isActive ? 'Active' : 'Pending Configuration',
+      hasKeySecret: creds.hasKeySecret,
+    },
+    shipping: getNimbusPostIntegrationStatus(),
+  });
+});
+
+// -------------------------------------------------------------
 // API Route 2: Create Gateway Payment Order (Razorpay Live & Official API)
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
@@ -1693,15 +1730,23 @@ app.post('/api/shipping/cancel', async (req: Request, res: Response) => {
 app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
   const nimbusStatus = getNimbusPostIntegrationStatus();
   const creds = getRazorpayCredentials();
+  const envKeyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
+  const isActive = Boolean(envKeyId || creds.hasKeyId);
+  const isLive = creds.isLive || (Boolean(creds.keyId) && creds.keyPrefix === 'rzp_live') || envKeyId.startsWith('rzp_live_');
+  const effectiveKeyId = creds.keyId || envKeyId || '';
 
   return res.json({
     shipping: nimbusStatus,
     nimbuspost: nimbusStatus,
     razorpay: {
-      configured: creds.configured,
-      mode: creds.isLive ? 'live' : (creds.configured ? 'test' : 'not_configured'),
-      keyIdSet: creds.hasKeyId,
-      keyIdMasked: creds.hasKeyId ? creds.maskedKeyId : null,
+      active: isActive,
+      status: isActive ? 'Active' : 'Pending Configuration',
+      configured: creds.configured || isActive,
+      isLive,
+      mode: isLive ? 'live' : (isActive ? 'test' : 'not_configured'),
+      keyId: effectiveKeyId,
+      keyIdSet: isActive,
+      keyIdMasked: creds.hasKeyId ? creds.maskedKeyId : (effectiveKeyId ? `${effectiveKeyId.slice(0, 8)}...${effectiveKeyId.slice(-4)}` : null),
       keyPrefix: creds.keyPrefix,
       secretLength: creds.secretLength,
     },
