@@ -162,22 +162,36 @@ function showSimulatedRazorpayModal(
 
 export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): Promise<void> {
   // 1. Create order on the server
-  const response = await fetch('/api/payment/create-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      amount: options.amount,
-      orderNumber: options.orderNumber,
-      receipt: options.orderNumber || `rcpt_${Date.now()}`,
-      notes: {
-        order_number: options.orderNumber || '',
-        ...(options.notes || {}),
-      },
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch('/api/payment/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: options.amount,
+        orderNumber: options.orderNumber,
+        receipt: options.orderNumber || `rcpt_${Date.now()}`,
+        notes: {
+          order_number: options.orderNumber || '',
+          ...(options.notes || {}),
+        },
+      }),
+    });
+  } catch (netErr: any) {
+    console.error('[Razorpay Network Error] Failed to reach /api/payment/create-order endpoint:', netErr);
+    throw new Error(`Network error connecting to payment gateway: ${netErr?.message || 'Check API route'}`);
+  }
 
   if (!response.ok) {
-    const errData = await response.json().catch(() => ({}));
+    const errData = await response.json().catch((jsonErr) => {
+      console.warn('[Razorpay API Parsing Notice] Server response was not valid JSON (HTTP ' + response.status + '):', jsonErr);
+      return {
+        error: `Payment server returned HTTP ${response.status}. Ensure /api/payment/create-order is routed correctly in Vercel.`,
+      };
+    });
+
+    console.error('[Razorpay Order Creation Failed - Full Server Error Response]:', errData);
+
     const errorMessage =
       typeof errData.error === 'string'
         ? errData.error
@@ -186,13 +200,21 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   }
 
   const orderData = await response.json();
-  const { orderId, amount, currency, keyId, gateway } = orderData;
+  const { orderId, amount, currency, keyId: serverKeyId, gateway } = orderData;
+
+  const rawKey =
+    (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
+    (import.meta as any).env?.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+    (typeof process !== 'undefined' && (process.env?.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env?.VITE_RAZORPAY_KEY_ID)) ||
+    serverKeyId ||
+    '';
+  const effectiveKeyId = String(rawKey).replace(/^["']|["']$/g, '').trim();
 
   // 2. Check if we are running with configured Razorpay keys or in safe test sandbox
-  const isTestGateway = gateway === 'test_gateway' || !keyId || keyId === 'rzp_test_artisanskart_hub';
+  const isTestGateway = gateway === 'test_gateway' || !effectiveKeyId || effectiveKeyId === 'rzp_test_artisanskart_hub';
 
   if (isTestGateway) {
-    if (keyId?.startsWith('rzp_live_') || (import.meta as any).env?.PROD) {
+    if (effectiveKeyId?.startsWith('rzp_live_') || (import.meta as any).env?.PROD) {
       throw new Error('Simulated payment fallback is strictly disabled for live production payments. Please check gateway configuration.');
     }
 
@@ -260,7 +282,7 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
 
   // 4. Configure Razorpay modal options
   const rzpOptions = {
-    key: keyId,
+    key: effectiveKeyId || serverKeyId,
     amount: amount,
     currency: currency || 'INR',
     name: 'ArtisansKart',

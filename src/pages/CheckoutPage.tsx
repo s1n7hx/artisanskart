@@ -371,6 +371,7 @@ export const CheckoutPage: React.FC = () => {
           })),
           couponCode: appliedCoupon,
           pincode,
+          shippingFee,
         }),
       });
 
@@ -1167,15 +1168,26 @@ export const CheckoutPage: React.FC = () => {
                 <span>Packaging Fee</span>
                 <span className="font-bold text-slate-900">
                   {packagingFee === 0 ? (
-                    <span className="text-emerald-700">FREE</span>
+                    <span className="text-emerald-700 font-semibold">FREE</span>
                   ) : (
                     formatINR(packagingFee)
                   )}
                 </span>
               </div>
 
+              <div className="flex items-center justify-between">
+                <span>Delivery &amp; Courier Fee</span>
+                <span className="font-bold text-slate-900">
+                  {shippingFee === 0 ? (
+                    <span className="text-emerald-700 font-semibold">FREE</span>
+                  ) : (
+                    formatINR(shippingFee)
+                  )}
+                </span>
+              </div>
+
               <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                <span>Taxes &amp; Packaging</span>
+                <span>Taxes &amp; GST</span>
                 <span>Included</span>
               </div>
 

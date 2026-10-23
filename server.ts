@@ -235,7 +235,7 @@ export function evaluateCoupon(code: string, subtotal: number): { valid: boolean
 // -------------------------------------------------------------
 app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
   try {
-    const { items, couponCode, pincode } = req.body;
+    const { items, couponCode, pincode, shippingFee } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty or invalid.' });
@@ -250,7 +250,7 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
 
       const catalogItem = SERVER_PRODUCT_CATALOG[prodId] || {
         title: item.title || `Craft #${prodId}`,
-        price: Number(item.price) || 299,
+        price: item.price !== undefined && !isNaN(Number(item.price)) ? Number(item.price) : 299,
         stock: 20,
         maker: item.maker || 'Independent Maker',
       };
@@ -276,16 +276,20 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       packagingFee += weight < 1 ? 30 : 60;
     }
 
+    // Courier shipping fee validation
+    const validShippingFee = typeof shippingFee === 'number' && !isNaN(shippingFee) && shippingFee >= 0 ? Math.round(shippingFee) : 0;
+
     // Secure server-authoritative coupon evaluation
     const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
 
-    const finalPayable = Math.max(0, itemsTotal + packagingFee - discountAmount);
+    const finalPayable = Math.max(0, itemsTotal + packagingFee + validShippingFee - discountAmount);
 
     return res.json({
       valid: true,
       itemsTotal,
       packagingFee,
+      shippingFee: validShippingFee,
       discountAmount,
       totalAmount: finalPayable,
       validatedItems,
@@ -592,8 +596,10 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
 app.post('/api/payment/verify', async (req: Request, res: Response) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
-    const keyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
-    const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+    const keyId = rawKeyId.replace(/^["']|["']$/g, '').trim();
+    const keySecret = rawKeySecret.replace(/^["']|["']$/g, '').trim();
     const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
     const isProd = process.env.NODE_ENV === 'production' || isLive;
 
@@ -2786,7 +2792,11 @@ async function startServer() {
   });
 }
 
+if (!process.env.VERCEL) {
+  startServer().catch((err) => {
+    console.error('Server boot failed:', err);
+  });
+}
 
-startServer().catch((err) => {
-  console.error('Server boot failed:', err);
-});
+export default app;
+export { app };
