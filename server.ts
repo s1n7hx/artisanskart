@@ -533,7 +533,8 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     const tax = 0;
 
     const serverFinalINR = Math.max(0, itemsTotal + packagingFee + shippingFee - tax - discountAmount);
-    const amountInPaise = Math.round(serverFinalINR * 100);
+    const parsedAmount = serverFinalINR; // Validated final amount in INR
+    const amountInPaise = Math.round(parsedAmount * 100); // Converted INR to paise exactly once
 
     // Safe debugging information in server logs
     console.log(
