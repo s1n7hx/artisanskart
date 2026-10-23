@@ -3058,6 +3058,78 @@ app.get('/api/debug/schema', async (_req, res) => {
   res.json({ data, error });
 });
 
+// -------------------------------------------------------------
+// API Route: Atomic Maker Acceptance
+// -------------------------------------------------------------
+app.post('/api/maker/accept', async (req: Request, res: Response) => {
+  try {
+    const { orderId, makerId, makerName } = req.body;
+    
+    // Atomic update: only accept if status is still 'awaiting_maker_acceptance'
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .update({
+        status: 'MAKER_ACCEPTED',
+        maker_id: makerId,
+        maker_name: makerName,
+        accepted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .eq('status', 'awaiting_maker_acceptance')
+      .select()
+      .maybeSingle();
+
+    if (error || !data) {
+      return res.status(409).json({ success: false, error: 'Order already accepted by another maker or not available.' });
+    }
+
+    return res.json({ success: true, order: data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/maker/update-status', async (req: Request, res: Response) => {
+  try {
+    const { orderId, status, makerId } = req.body;
+    
+    // Verify maker is assigned
+    const { data: order, error: fetchError } = await supabaseAdmin
+      .from('orders')
+      .select('maker_id')
+      .eq('id', orderId)
+      .maybeSingle();
+
+    if (fetchError || !order || order.maker_id !== makerId) {
+      return res.status(403).json({ success: false, error: 'Unauthorized or invalid order.' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('orders')
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .select()
+      .maybeSingle();
+
+    if (error || !data) {
+      return res.status(400).json({ success: false, error: 'Failed to update order status.' });
+    }
+
+    // If status is ready_to_pack, trigger shipment
+    if (status === 'ready_to_pack') {
+      await autoBookShipmentForOrder(data.order_number, data);
+    }
+
+    return res.json({ success: true, order: data });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 
