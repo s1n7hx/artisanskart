@@ -12,7 +12,7 @@ import {
   trackShipment,
   cancelShipment,
   getNimbusPostIntegrationStatus,
-} from './src/server/nimbuspost';
+} from './src/server/nimbuspost.js';
 
 dotenv.config({ path: '.env.local', override: true });
 dotenv.config();
