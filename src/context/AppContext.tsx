@@ -281,6 +281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Master Admin grants/elevates user permissions
   const grantUserRole = async (userId: string, newRole: UserRole) => {
+    const targetUser = usersList.find((u) => u.id === userId);
     setUsersList((prev) => {
       const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u));
       try {
@@ -294,7 +295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await updateSupabaseUserRole(userId, newRole);
+      await updateSupabaseUserRole(userId, newRole, targetUser?.email);
     } catch (err) {
       console.warn('Supabase profile role update error:', err);
     }
@@ -304,6 +305,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Master Admin updates approval status
   const grantUserStatus = async (userId: string, newStatus: UserStatus) => {
+    const targetUser = usersList.find((u) => u.id === userId);
     setUsersList((prev) => {
       const next = prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u));
       try {
@@ -317,7 +319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await updateSupabaseUserStatus(userId, newStatus);
+      await updateSupabaseUserStatus(userId, newStatus, targetUser?.email);
     } catch (err) {
       console.warn('Supabase status update error:', err);
     }
@@ -327,6 +329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Combined role and status update
   const promoteUserRole = async (userId: string, newRole: UserRole, newStatus: UserStatus = 'approved') => {
+    const targetUser = usersList.find((u) => u.id === userId);
     setUsersList((prev) => {
       const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole, status: newStatus } : u));
       try {
@@ -341,7 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await updateSupabaseUserRoleAndStatus(userId, newRole, newStatus);
+      await updateSupabaseUserRoleAndStatus(userId, newRole, newStatus, targetUser?.email, targetUser?.school);
     } catch (err) {
       console.warn('Supabase role/status update error:', err);
     }
@@ -381,18 +384,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
     } catch (e) {}
 
-    // Try finding matching profile in Supabase to sync real database
+    // Send role promotion to backend API with SUPABASE_SERVICE_ROLE_KEY
     try {
-      const { data: matched } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('email', trimmedEmail)
-        .maybeSingle();
-
-      if (matched?.id) {
-        newUser.id = matched.id;
-        await updateSupabaseUserRoleAndStatus(matched.id, role, status);
-      }
+      await updateSupabaseUserRoleAndStatus(newUser.id, role, status, trimmedEmail, newUser.school);
     } catch (e) {}
 
     // If active user is the one being updated

@@ -134,22 +134,44 @@ export async function ensureUserProfile(
     }
   } catch (e) {}
 
-  // Check if there was a pre-authorized role in local store
+  // Check if there was a pre-authorized or server-persisted role
   let preAuthorizedRole: UserRole | undefined;
   let preAuthorizedStatus: UserStatus | undefined;
   let preAuthorizedSchool: string | undefined;
+
   try {
-    const storedUsers = localStorage.getItem('artisanskart_all_users_v1');
-    if (storedUsers) {
-      const list = JSON.parse(storedUsers);
-      const match = list.find((u: any) => (u.email || '').trim().toLowerCase() === cleanEmail);
-      if (match) {
-        preAuthorizedRole = match.role;
-        preAuthorizedStatus = match.status;
-        preAuthorizedSchool = match.school;
+    const res = await fetch('/api/admin/users');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.users && Array.isArray(json.users)) {
+        const match = json.users.find(
+          (u: any) =>
+            (u.id && u.id === userId) ||
+            (u.email && u.email.trim().toLowerCase() === cleanEmail)
+        );
+        if (match) {
+          preAuthorizedRole = match.role;
+          preAuthorizedStatus = match.status;
+          preAuthorizedSchool = match.school;
+        }
       }
     }
   } catch (e) {}
+
+  if (!preAuthorizedRole) {
+    try {
+      const storedUsers = localStorage.getItem('artisanskart_all_users_v1');
+      if (storedUsers) {
+        const list = JSON.parse(storedUsers);
+        const match = list.find((u: any) => (u.email || '').trim().toLowerCase() === cleanEmail);
+        if (match) {
+          preAuthorizedRole = match.role;
+          preAuthorizedStatus = match.status;
+          preAuthorizedSchool = match.school;
+        }
+      }
+    } catch (e) {}
+  }
 
   // Determine final role:
   // - Master always gets master_admin
@@ -247,6 +269,27 @@ export async function ensureUserProfile(
 // -------------------------------------------------------------
 export async function fetchAllProfiles(): Promise<UserProfile[]> {
   try {
+    const res = await fetch('/api/admin/users');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.users && Array.isArray(json.users)) {
+        return json.users.map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          full_name: u.full_name || u.name || (u.email ? u.email.split('@')[0] : 'User'),
+          avatar_url: u.avatar_url || '',
+          role: (u.email || '').trim().toLowerCase() === 'ssumollah@gmail.com' ? 'master_admin' : (u.role || 'customer'),
+          status: u.status || 'approved',
+          school: u.school || '',
+          created_at: u.created_at || u.updated_at || new Date().toISOString(),
+        })) as UserProfile[];
+      }
+    }
+  } catch (e) {
+    console.warn('API fetchAllProfiles failed, falling back to direct Supabase:', e);
+  }
+
+  try {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -266,48 +309,55 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
       return p;
     });
   } catch (err) {
-    console.warn('Falling back to local user store:', err);
+    console.warn('Falling back to empty profiles array:', err);
     return [];
   }
 }
 
-export async function updateUserRole(userId: string, role: UserRole) {
-  // Defensive update: handle DB enum constraint and status column resilience
-  const payload: any = { role, updated_at: new Date().toISOString() };
-  let { data, error } = await supabase
-    .from('profiles')
-    .update(payload)
-    .eq('id', userId);
 
-  // If role is master_admin and enum doesn't support it yet, fallback to admin in database
-  if (error && error.message?.includes('enum user_role') && role === 'master_admin') {
-    const retryResult = await supabase
-      .from('profiles')
-      .update({ role: 'admin', updated_at: new Date().toISOString() })
-      .eq('id', userId);
-    data = retryResult.data;
-    error = retryResult.error;
+export async function updateUserRole(userId: string, role: UserRole, email?: string) {
+  try {
+    const res = await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: userId, userId, email, role }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (e) {
+    console.warn('API update-role failed, falling back to direct Supabase:', e);
   }
 
-  if (error) {
-    console.warn('Supabase profile role update notice:', error.message);
-  }
+  // Fallback to client Supabase SDK
+  const payload: any = { role: role === 'master_admin' ? 'admin' : role, updated_at: new Date().toISOString() };
+  const { data } = await supabase.from('profiles').update(payload).eq('id', userId);
   return data;
 }
 
-export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected') {
+export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected', email?: string) {
   try {
-    const { data, error } = await supabase
+    const res = await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: userId, userId, email, status }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (e) {
+    console.warn('API update-role status failed, falling back to direct Supabase:', e);
+  }
+
+  try {
+    const { data } = await supabase
       .from('profiles')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', userId);
-
-    if (error) {
-      console.warn('Supabase status update notice (status column may be pending migration):', error.message);
-    }
     return data;
   } catch (err: any) {
-    console.warn('updateUserStatus caught:', err.message);
     return null;
   }
 }
@@ -315,36 +365,40 @@ export async function updateUserStatus(userId: string, status: 'approved' | 'pen
 export async function updateUserRoleAndStatus(
   userId: string,
   role: UserRole,
-  status: 'approved' | 'pending' | 'rejected'
+  status: 'approved' | 'pending' | 'rejected',
+  email?: string,
+  school?: string
 ) {
   try {
+    const res = await fetch('/api/admin/update-role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data;
+    }
+  } catch (e) {
+    console.warn('API update-role full failed, falling back to direct Supabase:', e);
+  }
+
+  try {
     const payload: any = {
-      role: role === 'master_admin' ? 'admin' : role, // DB enum safety
+      role: role === 'master_admin' ? 'admin' : role,
       status,
       updated_at: new Date().toISOString(),
     };
+    if (school) payload.school = school;
 
-    let { data, error } = await supabase
-      .from('profiles')
-      .update(payload)
-      .eq('id', userId);
-
-    // If status column doesn't exist yet, retry updating just role
+    let { data, error } = await supabase.from('profiles').update(payload).eq('id', userId);
     if (error && error.message?.includes('status')) {
-      const retryResult = await supabase
-        .from('profiles')
-        .update({ role: payload.role, updated_at: new Date().toISOString() })
-        .eq('id', userId);
-      data = retryResult.data;
-      error = retryResult.error;
-    }
-
-    if (error) {
-      console.warn('Supabase role/status update notice:', error.message);
+      delete payload.status;
+      const retry = await supabase.from('profiles').update(payload).eq('id', userId);
+      data = retry.data;
     }
     return data;
   } catch (err: any) {
-    console.warn('updateUserRoleAndStatus caught:', err.message);
     return null;
   }
 }
@@ -362,23 +416,76 @@ export interface MakerApplicationItem {
   reviewed_at?: string;
   applicant_name?: string;
   applicant_email?: string;
+  craft_type?: string;
+  portfolio_url?: string;
+}
+
+export async function submitMakerApplication(payload: {
+  applicant_id?: string;
+  user_id?: string;
+  full_name?: string;
+  applicant_name?: string;
+  email?: string;
+  applicant_email?: string;
+  craft_type?: string;
+  school?: string;
+  portfolio_url?: string;
+  grade_class?: string;
+  message?: string;
+}) {
+  try {
+    const res = await fetch('/api/maker-applications/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.application;
+    }
+  } catch (e) {
+    console.warn('Backend maker-applications submission failed, attempting direct Supabase:', e);
+  }
+
+  // Fallback direct Supabase insert
+  const uid = payload.applicant_id || payload.user_id || `usr_${Date.now()}`;
+  const { data } = await supabase
+    .from('maker_applications')
+    .insert({
+      user_id: uid,
+      school: payload.craft_type || payload.school || 'Handicrafts Studio',
+      grade_class: payload.portfolio_url || payload.grade_class || 'Craft Series',
+      message: payload.message || 'Artisan Application',
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  return data;
 }
 
 export async function fetchAllMakerApplications(): Promise<MakerApplicationItem[]> {
+  try {
+    const res = await fetch('/api/maker-applications');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.applications && Array.isArray(data.applications)) {
+        return data.applications;
+      }
+    }
+  } catch (e) {
+    console.warn('API fetchAllMakerApplications failed, trying Supabase table:', e);
+  }
+
   try {
     const { data, error } = await supabase
       .from('maker_applications')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      // Table may not exist yet if migration has not been run
-      return [];
-    }
-    return data || [];
-  } catch (err) {
-    return [];
-  }
+    if (!error && data) return data;
+  } catch (err) {}
+  return [];
 }
 
 export async function reviewMakerApplication(
@@ -387,25 +494,29 @@ export async function reviewMakerApplication(
   newStatus: 'approved' | 'rejected'
 ) {
   try {
-    // 1. Update maker application record
-    const { error: appErr } = await supabase
+    const res = await fetch('/api/maker-applications/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: appId, user_id: targetUserId, status: newStatus }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Backend reviewMakerApplication failed, attempting direct Supabase:', e);
+  }
+
+  try {
+    await supabase
       .from('maker_applications')
-      .update({
-        status: newStatus,
-        reviewed_at: new Date().toISOString(),
-      })
+      .update({ status: newStatus, reviewed_at: new Date().toISOString() })
       .eq('id', appId);
 
-    if (appErr) {
-      console.warn('Notice updating maker_applications:', appErr.message);
-    }
-
-    // 2. If approved, upgrade user's profile to 'maker' and 'approved'
     if (newStatus === 'approved') {
       await updateUserRoleAndStatus(targetUserId, 'maker', 'approved');
     }
   } catch (err: any) {
-    console.warn('reviewMakerApplication caught:', err.message);
+    console.warn('reviewMakerApplication fallback caught:', err.message);
   }
 }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../services/supabase';
+import { supabase, submitMakerApplication } from '../services/supabase';
 import { maskEmail } from '../types';
 import {
   Hammer,
@@ -38,6 +38,19 @@ export const BecomeAMakerPage: React.FC = () => {
     async function loadExistingApp() {
       if (!currentUser?.id) return;
       setLoadingApp(true);
+      try {
+        const res = await fetch(`/api/maker-applications?userId=${currentUser.id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.applications && json.applications.length > 0) {
+            const pending = json.applications.find((a: any) => a.status === 'pending');
+            setExistingApplication(pending || json.applications[0]);
+            setLoadingApp(false);
+            return;
+          }
+        }
+      } catch (e) {}
+
       try {
         const { data, error } = await supabase
           .from('maker_applications')
@@ -76,54 +89,31 @@ export const BecomeAMakerPage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      // Check for an existing pending application first
-      const { data: check, error: checkErr } = await supabase
-        .from('maker_applications')
-        .select('id, status')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'pending');
+      const appResult = await submitMakerApplication({
+        applicant_id: currentUser.id,
+        user_id: currentUser.id,
+        full_name: currentUser.name || currentUser.email.split('@')[0],
+        applicant_name: currentUser.name || currentUser.email.split('@')[0],
+        email: currentUser.email,
+        applicant_email: currentUser.email,
+        craft_type: school.trim(),
+        school: school.trim(),
+        portfolio_url: gradeClass.trim(),
+        grade_class: gradeClass.trim(),
+        message: message.trim(),
+      });
 
-      if (!checkErr && check && check.length > 0) {
-        setErrorMsg('You already have a pending application under review.');
-        setExistingApplication({
-          status: 'pending',
-          school,
-          grade_class: gradeClass,
-          created_at: new Date().toISOString(),
-        });
-        setSubmitting(false);
-        return;
-      }
+      const appData = appResult || {
+        status: 'pending',
+        school: school.trim(),
+        grade_class: gradeClass.trim(),
+        message: message.trim(),
+        created_at: new Date().toISOString(),
+      };
 
-      // Submit new application to Supabase
-      const { data, error } = await supabase
-        .from('maker_applications')
-        .insert({
-          user_id: currentUser.id,
-          school: school.trim(),
-          grade_class: gradeClass.trim(),
-          message: message.trim(),
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (error) {
-        // Fallback for local demo simulation if Supabase credentials are in test mode
-        setExistingApplication({
-          status: 'pending',
-          school,
-          grade_class: gradeClass,
-          message,
-          created_at: new Date().toISOString(),
-        });
-        setSuccessMsg('Your application has been logged and submitted for Master Admin review!');
-        showToast('Maker application submitted!', 'sparkles');
-      } else {
-        setExistingApplication(data);
-        setSuccessMsg('Application successfully submitted! Master Admin will review your craft portfolio.');
-        showToast('Application sent to Master Admin!', 'sparkles');
-      }
+      setExistingApplication(appData);
+      setSuccessMsg('Your application has been logged and submitted for Master Admin review!');
+      showToast('Maker application submitted!', 'sparkles');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to submit application. Please try again.');
     } finally {

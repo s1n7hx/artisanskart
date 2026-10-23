@@ -178,7 +178,11 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
-    throw new Error(errData.error || 'Failed to initiate payment gateway order.');
+    const errorMessage =
+      typeof errData.error === 'string'
+        ? errData.error
+        : errData.error?.description || errData.message || 'Failed to initiate payment gateway order.';
+    throw new Error(errorMessage);
   }
 
   const orderData = await response.json();

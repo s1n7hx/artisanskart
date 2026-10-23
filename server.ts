@@ -302,31 +302,56 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
 
 // -------------------------------------------------------------
 // -------------------------------------------------------------
+// -------------------------------------------------------------
 // API Route 2: Create Gateway Payment Order (Razorpay Live & Official API)
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
   try {
-    const { amount, receipt, notes, orderNumber } = req.body;
+    const { amount, receipt, notes, orderNumber } = req.body || {};
     const targetOrderNumber = orderNumber || notes?.order_number;
-    const keyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
-    const keySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
+
+    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+
+    // Strip any surrounding single/double quotes or accidental whitespace
+    const keyId = rawKeyId.replace(/^["']|["']$/g, '').trim();
+    const keySecret = rawKeySecret.replace(/^["']|["']$/g, '').trim();
+
     const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
     const isProd = process.env.NODE_ENV === 'production' || isLive;
 
-    const amountInPaise = Math.round(Number(amount) * 100);
+    const numAmount = Number(amount) || 0;
+    if (numAmount <= 0) {
+      return res.status(400).json({ error: 'Order amount must be greater than zero.' });
+    }
+
+    const amountInPaise = Math.round(numAmount * 100);
+
+    // Razorpay API requirement: Receipt field MUST NOT EXCEED 40 characters
+    const cleanReceipt = String(receipt || targetOrderNumber || `rcpt_${Date.now()}`)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 40);
 
     if (keyId && keySecret) {
       // Real Live / Official Razorpay API call
       const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
       const orderNotes: Record<string, string> = {
         platform: 'ArtisansKart',
-        ...(notes || {}),
       };
       if (targetOrderNumber) {
-        orderNotes.order_number = String(targetOrderNumber);
+        orderNotes.order_number = String(targetOrderNumber).slice(0, 40);
+      }
+      if (notes && typeof notes === 'object') {
+        for (const [k, v] of Object.entries(notes)) {
+          if (v !== undefined && v !== null && typeof v !== 'object') {
+            orderNotes[String(k).slice(0, 30)] = String(v).slice(0, 100);
+          }
+        }
       }
 
       try {
+        console.log(`[Razorpay Order Creation] Initiating ₹${numAmount} (${amountInPaise} paise) | KeyID: ${keyId.slice(0, 12)}*** | Receipt: ${cleanReceipt}`);
+
         const response = await fetch('https://api.razorpay.com/v1/orders', {
           method: 'POST',
           headers: {
@@ -336,7 +361,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
           body: JSON.stringify({
             amount: amountInPaise,
             currency: 'INR',
-            receipt: receipt || targetOrderNumber || `rcpt_${Date.now()}`,
+            receipt: cleanReceipt,
             notes: orderNotes,
           }),
         });
@@ -365,34 +390,49 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             }
           }
 
+          console.log(`✅ [Razorpay Live Order Created] ID: ${data.id} | Amount: ₹${data.amount / 100}`);
+
           return res.json({
             gateway: 'razorpay',
             orderId: data.id,
             amount: data.amount,
             currency: 'INR',
-            keyId, // Only public Key ID is sent to client
+            keyId, // Only public Key ID sent to client
             orderNumber: targetOrderNumber,
           });
         } else {
-          const errMsg = data.error?.description || data.message || 'Razorpay order creation rejected by gateway';
-          console.error('[Razorpay Order Creation Failed]:', errMsg);
-          // Strictly reject when credentials are configured - NO silent simulated fallback!
+          let errMsg = 'Razorpay order creation rejected by gateway';
+          if (typeof data.error === 'string') {
+            errMsg = data.error;
+          } else if (data.error?.description) {
+            errMsg = data.error.description;
+          } else if (data.error?.message) {
+            errMsg = data.error.message;
+          } else if (data.message) {
+            errMsg = data.message;
+          }
+
+          console.error('[Razorpay Order Creation Failed]:', JSON.stringify(data));
+
           return res.status(400).json({
-            error: `Razorpay order creation failed: ${errMsg}. Please verify your RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`,
+            error: `Razorpay Live API Error: ${errMsg}. Please verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`,
+            details: data.error || data,
           });
         }
       } catch (razorErr: any) {
-        console.error('[Razorpay Network Notice]:', razorErr.message);
+        console.error('[Razorpay Network Error]:', razorErr.message);
         return res.status(502).json({
           error: `Razorpay network connection error: ${razorErr.message}`,
         });
       }
     }
 
-    // When in live/production mode without complete credentials, reject immediately
+    // When in live/production mode or when rzp_live_ is used without complete keys:
     if (isProd || keyId.startsWith('rzp_live_')) {
+      const missingVar = !keyId ? 'RAZORPAY_KEY_ID' : 'RAZORPAY_KEY_SECRET';
+      console.error(`[Razorpay Configuration Error] ${missingVar} is missing on the server.`);
       return res.status(400).json({
-        error: 'Razorpay Live keys (RAZORPAY_KEY_ID & RAZORPAY_KEY_SECRET) must be configured in environment variables. Simulated payments are disabled in Live mode.',
+        error: `Razorpay Live Configuration Error: ${missingVar} environment variable is missing on the server. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel environment variables.`,
       });
     }
 
@@ -2013,6 +2053,433 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Status transition failed.' });
+  }
+});
+
+
+// -------------------------------------------------------------
+// Server Persistent Storage for Maker Applications & User Roles
+// -------------------------------------------------------------
+const MAKER_APPS_FILE_PATH = path.resolve(__dirname, 'data', 'maker_applications.json');
+const ALL_USERS_FILE_PATH = path.resolve(__dirname, 'data', 'all_users.json');
+
+function ensureDataFileExists(filePath: string, defaultContent: any = []): void {
+  try {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify(defaultContent, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    console.warn(`[Data Store Warning]: Failed to verify ${filePath}:`, err);
+  }
+}
+
+function loadMakerAppsFromDisk(): any[] {
+  try {
+    ensureDataFileExists(MAKER_APPS_FILE_PATH);
+    if (fs.existsSync(MAKER_APPS_FILE_PATH)) {
+      const content = fs.readFileSync(MAKER_APPS_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('[Maker Apps Warning]: Failed to read applications from disk:', err);
+  }
+  return [];
+}
+
+function saveMakerAppsToDisk(apps: any[]): void {
+  try {
+    ensureDataFileExists(MAKER_APPS_FILE_PATH);
+    fs.writeFileSync(MAKER_APPS_FILE_PATH, JSON.stringify(apps, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Maker Apps Warning]: Failed to persist applications to disk:', err);
+  }
+}
+
+function loadUsersFromDisk(): any[] {
+  try {
+    ensureDataFileExists(ALL_USERS_FILE_PATH);
+    if (fs.existsSync(ALL_USERS_FILE_PATH)) {
+      const content = fs.readFileSync(ALL_USERS_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.warn('[Users Store Warning]: Failed to read users from disk:', err);
+  }
+  return [];
+}
+
+function saveUsersToDisk(users: any[]): void {
+  try {
+    ensureDataFileExists(ALL_USERS_FILE_PATH);
+    fs.writeFileSync(ALL_USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Users Store Warning]: Failed to persist users to disk:', err);
+  }
+}
+
+// POST /api/maker-applications/submit
+app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (req: Request, res: Response) => {
+  try {
+    const {
+      applicant_id,
+      user_id,
+      full_name,
+      applicant_name,
+      email,
+      applicant_email,
+      craft_type,
+      school,
+      portfolio_url,
+      grade_class,
+      message,
+    } = req.body || {};
+
+    const userId = applicant_id || user_id || `usr_app_${Date.now()}`;
+    const name = full_name || applicant_name || 'Artisan Applicant';
+    const contactEmail = (email || applicant_email || '').trim().toLowerCase();
+    const craft = craft_type || school || 'Handicrafts Studio';
+    const portfolio = portfolio_url || grade_class || 'Studio Crafts Series';
+    const appMsg = message || 'Handcrafted artisan application.';
+
+    if (!contactEmail) {
+      return res.status(400).json({ success: false, error: 'Applicant email is required.' });
+    }
+
+    const newApp = {
+      id: `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      user_id: userId,
+      applicant_id: userId,
+      applicant_name: name,
+      applicant_email: contactEmail,
+      craft_type: craft,
+      school: craft,
+      portfolio_url: portfolio,
+      grade_class: portfolio,
+      message: appMsg,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. Save to disk
+    const diskApps = loadMakerAppsFromDisk();
+    const filtered = diskApps.filter((a) => a.user_id !== userId && a.applicant_email !== contactEmail);
+    filtered.unshift(newApp);
+    saveMakerAppsToDisk(filtered);
+
+    // 2. Persist in Supabase site_settings as backup
+    try {
+      await supabaseAdmin.from('site_settings').upsert({
+        key: 'maker_applications_v1',
+        value: filtered,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+    } catch (dbErr) {
+      console.warn('[Maker Applications DB Notice]:', dbErr);
+    }
+
+    // 3. Attempt direct write into Supabase maker_applications table if it exists
+    try {
+      await supabaseAdmin.from('maker_applications').insert({
+        user_id: userId,
+        school: craft,
+        grade_class: portfolio,
+        message: appMsg,
+        status: 'pending',
+        created_at: newApp.created_at,
+      });
+    } catch (e) {}
+
+    console.log(`🔨 [Maker Application Received] From ${name} (${contactEmail})`);
+
+    return res.status(201).json({
+      success: true,
+      application: newApp,
+      message: 'Your Maker application has been logged and submitted for Master Admin review!',
+    });
+  } catch (err: any) {
+    console.error('❌ [/api/maker-applications/submit Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to submit application.' });
+  }
+});
+
+// GET /api/maker-applications
+app.get('/api/maker-applications', async (req: Request, res: Response) => {
+  try {
+    let apps = loadMakerAppsFromDisk();
+
+    // Fallback/Merge with Supabase site_settings or maker_applications table
+    try {
+      const { data: dbData } = await supabaseAdmin
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'maker_applications_v1')
+        .maybeSingle();
+
+      if (dbData?.value && Array.isArray(dbData.value) && dbData.value.length > 0) {
+        // Merge without duplicates
+        const existingIds = new Set(apps.map((a) => a.id));
+        for (const item of dbData.value) {
+          if (!existingIds.has(item.id)) {
+            apps.push(item);
+          }
+        }
+      }
+    } catch (e) {}
+
+    // Sort descending by created_at
+    apps.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+
+    const targetUserId = req.query.userId as string;
+    if (targetUserId) {
+      apps = apps.filter((a) => a.user_id === targetUserId || a.applicant_id === targetUserId);
+    }
+
+    return res.json({ success: true, count: apps.length, applications: apps });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/maker-applications/update-status
+app.post('/api/maker-applications/update-status', async (req: Request, res: Response) => {
+  try {
+    const { id, user_id, applicant_id, status } = req.body || {};
+    const newStatus = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'pending';
+    const targetUserId = user_id || applicant_id;
+
+    if (!id && !targetUserId) {
+      return res.status(400).json({ success: false, error: 'Application ID or User ID is required.' });
+    }
+
+    // 1. Update in-memory / disk store
+    const apps = loadMakerAppsFromDisk();
+    let updatedApp: any = null;
+
+    const nextApps = apps.map((a) => {
+      if ((id && a.id === id) || (targetUserId && a.user_id === targetUserId)) {
+        updatedApp = { ...a, status: newStatus, reviewed_at: new Date().toISOString() };
+        return updatedApp;
+      }
+      return a;
+    });
+
+    if (updatedApp) {
+      saveMakerAppsToDisk(nextApps);
+      try {
+        await supabaseAdmin.from('site_settings').upsert({
+          key: 'maker_applications_v1',
+          value: nextApps,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'key' });
+      } catch (e) {}
+    }
+
+    // 2. If approved, update user's profile to Maker using Service Role Key
+    if (newStatus === 'approved' && targetUserId) {
+      try {
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('*')
+          .eq('id', targetUserId)
+          .maybeSingle();
+
+        const schoolName = updatedApp?.school || updatedApp?.craft_type || profile?.school || 'Independent Studio Guild';
+
+        await supabaseAdmin
+          .from('profiles')
+          .upsert({
+            id: targetUserId,
+            email: profile?.email || updatedApp?.applicant_email || '',
+            full_name: profile?.full_name || updatedApp?.applicant_name || '',
+            role: 'maker',
+            status: 'approved',
+            school: schoolName,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        // Update auth user metadata if present
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+            user_metadata: { role: 'maker', status: 'approved', school: schoolName },
+          });
+        } catch (authErr) {}
+
+        console.log(`🎉 [Maker Promoted] User ${targetUserId} upgraded to Maker ('approved')`);
+      } catch (roleErr: any) {
+        console.warn('[Maker Role Upgrade Warning]:', roleErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      application: updatedApp,
+      message: `Maker application set to ${newStatus}.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/update-role
+app.post('/api/admin/update-role', async (req: Request, res: Response) => {
+  try {
+    const { targetUserId, userId, email, role, status, school, full_name, name } = req.body || {};
+    const cleanUserId = targetUserId || userId;
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const isMaster = cleanEmail === 'ssumollah@gmail.com';
+
+    const targetRole = isMaster ? 'master_admin' : (role || 'customer');
+    const targetStatus = isMaster ? 'approved' : (status || 'approved');
+    const targetSchool = school || (isMaster ? 'ArtisansKart Platform Headquarters' : '');
+    const fullName = full_name || name || (cleanEmail ? cleanEmail.split('@')[0] : 'User');
+
+    let updatedProfile: any = null;
+
+    // 1. Update Supabase profiles table via Service Role Key (bypasses RLS)
+    if (cleanUserId || cleanEmail) {
+      let queryId = cleanUserId;
+      if (!queryId && cleanEmail) {
+        const { data: found } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+        if (found?.id) queryId = found.id;
+      }
+
+      if (queryId) {
+        const payload: any = {
+          id: queryId,
+          email: cleanEmail,
+          full_name: fullName,
+          role: targetRole === 'master_admin' ? 'admin' : targetRole, // Enum resilience
+          status: targetStatus,
+          school: targetSchool,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data, error } = await supabaseAdmin
+          .from('profiles')
+          .upsert(payload, { onConflict: 'id' })
+          .select()
+          .single();
+
+        if (error) {
+          console.warn('[Supabase Role Update Notice]:', error.message);
+        } else {
+          updatedProfile = data;
+        }
+
+        // Try updating Supabase Auth Metadata
+        try {
+          await supabaseAdmin.auth.admin.updateUserById(queryId, {
+            user_metadata: { role: targetRole, status: targetStatus, school: targetSchool },
+          });
+        } catch (authErr) {}
+      }
+    }
+
+    // 2. Persist in server disk user store
+    const users = loadUsersFromDisk();
+    const existingIndex = users.findIndex(
+      (u) => (cleanUserId && u.id === cleanUserId) || (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+    );
+
+    const userObj = {
+      id: cleanUserId || (existingIndex >= 0 ? users[existingIndex].id : `usr_${Date.now()}`),
+      email: cleanEmail,
+      name: fullName,
+      role: targetRole,
+      status: targetStatus,
+      school: targetSchool,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      users[existingIndex] = { ...users[existingIndex], ...userObj };
+    } else {
+      users.unshift(userObj);
+    }
+    saveUsersToDisk(users);
+
+    // Also backup in site_settings
+    try {
+      await supabaseAdmin.from('site_settings').upsert({
+        key: 'all_users_v1',
+        value: users,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'key' });
+    } catch (e) {}
+
+    console.log(`🛡️ [Role Updated via Service Role] ${cleanEmail || cleanUserId}: ${targetRole} (${targetStatus})`);
+
+    return res.json({
+      success: true,
+      role: targetRole,
+      status: targetStatus,
+      user: updatedProfile || userObj,
+      message: `User role successfully updated to ${targetRole}.`,
+    });
+  } catch (err: any) {
+    console.error('❌ [/api/admin/update-role Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/admin/users
+app.get('/api/admin/users', async (_req: Request, res: Response) => {
+  try {
+    let profiles: any[] = [];
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        profiles = data;
+      }
+    } catch (e) {}
+
+    // Merge with disk users
+    const diskUsers = loadUsersFromDisk();
+    const profileEmails = new Set(profiles.map((p) => (p.email || '').toLowerCase()));
+
+    for (const du of diskUsers) {
+      if (du.email && !profileEmails.has(du.email.toLowerCase())) {
+        profiles.push({
+          id: du.id,
+          email: du.email,
+          full_name: du.name || du.full_name,
+          role: du.role,
+          status: du.status,
+          school: du.school,
+        });
+      }
+    }
+
+    // Ensure Master Admin email always has master_admin
+    profiles = profiles.map((p) => {
+      if ((p.email || '').trim().toLowerCase() === 'ssumollah@gmail.com') {
+        return {
+          ...p,
+          role: 'master_admin',
+          status: 'approved',
+          school: p.school || 'ArtisansKart Platform Headquarters',
+        };
+      }
+      return p;
+    });
+
+    return res.json({ success: true, count: profiles.length, users: profiles });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
