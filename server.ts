@@ -307,6 +307,99 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 // -------------------------------------------------------------
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// Helper: Secure Server-Side Razorpay Credential Resolution
+// Supports all standard Vercel / Next.js / Vite environment variable aliases.
+// Thoroughly sanitizes whitespace, carriage returns, and quotes.
+// STRICTLY NEVER EXPOSES KEY SECRET IN LOGS OR CLIENT RESPONSES.
+// -------------------------------------------------------------
+export function getRazorpayCredentials(): {
+  keyId: string;
+  keySecret: string;
+  hasKeyId: boolean;
+  hasKeySecret: boolean;
+  keyPrefix: 'rzp_live' | 'rzp_test' | 'custom' | 'none';
+  isLive: boolean;
+  maskedKeyId: string;
+  secretLength: number;
+  configured: boolean;
+} {
+  const sanitize = (val: string | undefined): string => {
+    if (!val) return '';
+    return String(val)
+      .replace(/[\r\n\t]/g, '')
+      .replace(/^["'`]|["'`]$/g, '')
+      .trim();
+  };
+
+  const keyId = sanitize(
+    process.env.RAZORPAY_KEY_ID ||
+    process.env.VITE_RAZORPAY_KEY_ID ||
+    process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+    process.env.RAZORPAY_LIVE_KEY_ID
+  );
+
+  const keySecret = sanitize(
+    process.env.RAZORPAY_KEY_SECRET ||
+    process.env.RAZORPAY_SECRET ||
+    process.env.VITE_RAZORPAY_KEY_SECRET ||
+    process.env.RAZORPAY_LIVE_KEY_SECRET
+  );
+
+  const hasKeyId = keyId.length > 0;
+  const hasKeySecret = keySecret.length > 0;
+  const keyPrefix: 'rzp_live' | 'rzp_test' | 'custom' | 'none' =
+    keyId.startsWith('rzp_live_')
+      ? 'rzp_live'
+      : keyId.startsWith('rzp_test_')
+      ? 'rzp_test'
+      : hasKeyId
+      ? 'custom'
+      : 'none';
+
+  const isLive = keyPrefix === 'rzp_live' || (hasKeyId && hasKeySecret && keyPrefix !== 'rzp_test');
+  const maskedKeyId = hasKeyId
+    ? `${keyId.slice(0, 8)}...${keyId.slice(-4)}`
+    : 'none';
+
+  return {
+    keyId,
+    keySecret,
+    hasKeyId,
+    hasKeySecret,
+    keyPrefix,
+    isLive,
+    maskedKeyId,
+    secretLength: keySecret.length,
+    configured: hasKeyId && hasKeySecret,
+  };
+}
+
+// -------------------------------------------------------------
+// API Route 2b: Safe Razorpay Integration Diagnostics
+// Safely inspects credential status without exposing any secrets
+// -------------------------------------------------------------
+app.get('/api/payment/diagnostics', (_req: Request, res: Response) => {
+  const creds = getRazorpayCredentials();
+  const webhookSecret = (process.env.RAZORPAY_WEBHOOK_SECRET || '').trim();
+
+  return res.json({
+    status: 'ok',
+    gateway: 'razorpay',
+    configured: creds.configured,
+    keyIdPresent: creds.hasKeyId,
+    keyPrefix: creds.keyPrefix,
+    maskedKeyId: creds.maskedKeyId,
+    keySecretPresent: creds.hasKeySecret,
+    keySecretLength: creds.secretLength,
+    isLive: creds.isLive,
+    webhookSecretConfigured: Boolean(webhookSecret),
+    environment: process.env.NODE_ENV || 'development',
+    officialApiEndpoint: 'https://api.razorpay.com/v1/orders',
+  });
+});
+
+// -------------------------------------------------------------
 // API Route 2: Create Gateway Payment Order (Razorpay Live & Official API)
 // -------------------------------------------------------------
 app.post('/api/payment/create-order', async (req: Request, res: Response) => {
@@ -314,15 +407,16 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     const { amount, receipt, notes, orderNumber } = req.body || {};
     const targetOrderNumber = orderNumber || notes?.order_number;
 
-    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
-    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
-
-    // Strip any surrounding single/double quotes or accidental whitespace
-    const keyId = rawKeyId.replace(/^["']|["']$/g, '').trim();
-    const keySecret = rawKeySecret.replace(/^["']|["']$/g, '').trim();
-
-    const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
+    const creds = getRazorpayCredentials();
+    const { keyId, keySecret, hasKeyId, hasKeySecret, keyPrefix, isLive, maskedKeyId, secretLength } = creds;
     const isProd = process.env.NODE_ENV === 'production' || isLive;
+
+    // Safe diagnostic logging (strictly never logs the secret key)
+    console.log(
+      `[Razorpay Safe Audit] KeyID: ${hasKeyId ? 'Present' : 'MISSING'} (${keyPrefix}, ${maskedKeyId}) | KeySecret: ${
+        hasKeySecret ? `Present (${secretLength} chars)` : 'MISSING'
+      } | Mode: ${isLive ? 'LIVE' : 'TEST'} | Prod: ${isProd}`
+    );
 
     const numAmount = Number(amount) || 0;
     if (numAmount <= 0) {
@@ -354,7 +448,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       }
 
       try {
-        console.log(`[Razorpay Order Creation] Initiating ₹${numAmount} (${amountInPaise} paise) | KeyID: ${keyId.slice(0, 12)}*** | Receipt: ${cleanReceipt}`);
+        console.log(`[Razorpay Order Creation] Requesting https://api.razorpay.com/v1/orders | ₹${numAmount} (${amountInPaise} paise) | Key: ${maskedKeyId} | Receipt: ${cleanReceipt}`);
 
         const response = await fetch('https://api.razorpay.com/v1/orders', {
           method: 'POST',
@@ -371,6 +465,8 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
         });
 
         const data = await response.json();
+        console.log(`[Razorpay Order Response] HTTP ${response.status} ${response.statusText}`);
+
         if (response.ok && data.id) {
           // Link Razorpay order ID to internal order in both Supabase and SERVER_ORDERS
           if (targetOrderNumber) {
@@ -416,11 +512,34 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             errMsg = data.message;
           }
 
-          console.error('[Razorpay Order Creation Failed]:', JSON.stringify(data));
+          console.error(`[Razorpay Order Creation Failed - HTTP ${response.status}]:`, JSON.stringify(data));
 
-          return res.status(400).json({
+          if (errMsg.toLowerCase().includes('authentication failed')) {
+            console.error(
+              `[Razorpay Authentication Failure Diagnostic]:\n` +
+              `  - HTTP Status: ${response.status}\n` +
+              `  - Key ID configured: ${hasKeyId} (Prefix: ${keyPrefix}, Masked: ${maskedKeyId})\n` +
+              `  - Key Secret configured: ${hasKeySecret} (Length: ${secretLength} chars)\n` +
+              `  - Cause: Razorpay's API server rejected this Key ID / Secret pair.\n` +
+              `  - Resolution:\n` +
+              `    1. In Razorpay Dashboard (dashboard.razorpay.com), verify if the account is in Live Mode.\n` +
+              `    2. Go to Settings -> API Keys and confirm the Active Key ID matches "${maskedKeyId}".\n` +
+              `    3. If the key was regenerated, update RAZORPAY_KEY_SECRET in Vercel Environment Variables and redeploy.\n` +
+              `    4. Ensure Live payments are activated and KYC is approved on this Razorpay account.`
+            );
+          }
+
+          return res.status(response.status >= 400 && response.status < 500 ? response.status : 400).json({
             error: `Razorpay Live API Error: ${errMsg}. Please verify RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET.`,
             details: data.error || data,
+            diagnostic: {
+              httpStatus: response.status,
+              keyIdConfigured: hasKeyId,
+              keyPrefix,
+              keySecretConfigured: hasKeySecret,
+              keySecretLength: secretLength,
+              isLive,
+            },
           });
         }
       } catch (razorErr: any) {
@@ -432,11 +551,16 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     }
 
     // When in live/production mode or when rzp_live_ is used without complete keys:
-    if (isProd || keyId.startsWith('rzp_live_')) {
-      const missingVar = !keyId ? 'RAZORPAY_KEY_ID' : 'RAZORPAY_KEY_SECRET';
+    if (isProd || keyPrefix === 'rzp_live') {
+      const missingVar = !hasKeyId ? 'RAZORPAY_KEY_ID' : 'RAZORPAY_KEY_SECRET';
       console.error(`[Razorpay Configuration Error] ${missingVar} is missing on the server.`);
       return res.status(400).json({
         error: `Razorpay Live Configuration Error: ${missingVar} environment variable is missing on the server. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Vercel environment variables.`,
+        diagnostic: {
+          keyIdConfigured: hasKeyId,
+          keyPrefix,
+          keySecretConfigured: hasKeySecret,
+        },
       });
     }
 
@@ -596,11 +720,8 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
 app.post('/api/payment/verify', async (req: Request, res: Response) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
-    const rawKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
-    const rawKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
-    const keyId = rawKeyId.replace(/^["']|["']$/g, '').trim();
-    const keySecret = rawKeySecret.replace(/^["']|["']$/g, '').trim();
-    const isLive = keyId.startsWith('rzp_live_') || (Boolean(keyId && keySecret) && !keyId.startsWith('rzp_test_'));
+    const creds = getRazorpayCredentials();
+    const { keySecret, isLive, keyPrefix } = creds;
     const isProd = process.env.NODE_ENV === 'production' || isLive;
 
     if (keySecret) {
@@ -1558,19 +1679,18 @@ app.post('/api/shipping/cancel', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.get('/api/shipping/config-status', (_req: Request, res: Response) => {
   const nimbusStatus = getNimbusPostIntegrationStatus();
-  const rawKeyId = (process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '').trim();
-  const rawKeySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const hasRazorpay = Boolean(rawKeyId && rawKeySecret);
-  const isLive = rawKeyId.startsWith('rzp_live_') || (hasRazorpay && process.env.NODE_ENV === 'production');
+  const creds = getRazorpayCredentials();
 
   return res.json({
     shipping: nimbusStatus,
     nimbuspost: nimbusStatus,
     razorpay: {
-      configured: hasRazorpay,
-      mode: isLive ? 'live' : (hasRazorpay ? 'test' : 'not_configured'),
-      keyIdSet: Boolean(rawKeyId),
-      keyIdMasked: rawKeyId ? `${rawKeyId.slice(0, 8)}...` : null,
+      configured: creds.configured,
+      mode: creds.isLive ? 'live' : (creds.configured ? 'test' : 'not_configured'),
+      keyIdSet: creds.hasKeyId,
+      keyIdMasked: creds.hasKeyId ? creds.maskedKeyId : null,
+      keyPrefix: creds.keyPrefix,
+      secretLength: creds.secretLength,
     },
   });
 });
