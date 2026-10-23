@@ -721,7 +721,7 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
     const creds = getRazorpayCredentials();
-    const { keySecret, isLive, keyPrefix } = creds;
+    const { keyId, keySecret, isLive, keyPrefix } = creds;
     const isProd = process.env.NODE_ENV === 'production' || isLive;
 
     if (keySecret) {
@@ -1130,14 +1130,19 @@ interface CachedPostalResult {
 
 const postalLookupCache = new Map<string, CachedPostalResult>();
 
+export interface PostalFetchResult {
+  success: boolean;
+  data?: CachedPostalResult;
+  errorCode?: 'INVALID_PINCODE' | 'PINCODE_NOT_FOUND' | 'LOOKUP_FAILED' | string;
+  message?: string;
+  status?: number;
+}
+
 /**
  * Fetch Authentic Postal Data across all of India using official India Post records.
  * Never invents, fabricates, or defaults to prefix-based guesses.
  */
-async function fetchAuthenticPostalData(cleanPin: string): Promise<
-  | { success: true; data: CachedPostalResult }
-  | { success: false; errorCode: 'INVALID_PINCODE' | 'PINCODE_NOT_FOUND' | 'LOOKUP_FAILED'; message: string; status: number }
-> {
+async function fetchAuthenticPostalData(cleanPin: string): Promise<PostalFetchResult> {
   if (!cleanPin || !/^[1-9][0-9]{5}$/.test(cleanPin)) {
     return {
       success: false,
@@ -1380,8 +1385,12 @@ app.get('/api/postal/lookup/:pincode', async (req: Request, res: Response) => {
   const cleanPin = String(req.params.pincode || '').replace(/\D/g, '').slice(0, 6);
   const result = await fetchAuthenticPostalData(cleanPin);
 
-  if (!result.success) {
-    return res.status(result.status).json(result);
+  if (!result.success || !result.data) {
+    return res.status(result.status || 400).json({
+      success: false,
+      errorCode: result.errorCode || 'LOOKUP_FAILED',
+      message: result.message || 'Postal lookup failed',
+    });
   }
 
   return res.json({
@@ -1394,8 +1403,12 @@ app.post('/api/postal/lookup', async (req: Request, res: Response) => {
   const cleanPin = String(req.body.pincode || '').replace(/\D/g, '').slice(0, 6);
   const result = await fetchAuthenticPostalData(cleanPin);
 
-  if (!result.success) {
-    return res.status(result.status).json(result);
+  if (!result.success || !result.data) {
+    return res.status(result.status || 400).json({
+      success: false,
+      errorCode: result.errorCode || 'LOOKUP_FAILED',
+      message: result.message || 'Postal lookup failed',
+    });
   }
 
   return res.json({
@@ -1415,12 +1428,12 @@ app.post('/api/shipping/pincode-intel', async (req: Request, res: Response) => {
 
     // Step 1: Real India Post Validation & Directory Lookup (Untouched working system)
     const postalResult = await fetchAuthenticPostalData(cleanPin);
-    if (!postalResult.success) {
-      return res.status(postalResult.status).json({
+    if (!postalResult.success || !postalResult.data) {
+      return res.status(postalResult.status || 400).json({
         success: false,
         isServiceable: false,
-        errorCode: postalResult.errorCode,
-        message: postalResult.message,
+        errorCode: postalResult.errorCode || 'LOOKUP_FAILED',
+        message: postalResult.message || 'Postal validation failed',
       });
     }
 
