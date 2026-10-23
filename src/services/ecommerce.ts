@@ -490,6 +490,15 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     return { isValid: false, code: '', discountAmount: 0, message: '' };
   }
 
+  if (clean === 'RAZORPAYTEST') {
+    return {
+      isValid: true,
+      code: clean,
+      discountAmount: 0,
+      message: 'RAZORPAYTEST applied: Packaging and shipping fees waived for live payment testing.',
+    };
+  }
+
   if (clean === 'WELCOME10') {
     const minOrder = 499;
     if (subtotal < minOrder) {

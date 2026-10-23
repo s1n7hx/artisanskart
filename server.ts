@@ -102,10 +102,45 @@ const SERVER_PRODUCT_CATALOG: Record<number, { title: string; price: number; sto
 // Authoritative Promotional Coupon Evaluation Engine
 // Enforces minimum order values, caps, and genuine active status
 // -------------------------------------------------------------
-export function evaluateCoupon(code: string, subtotal: number): { valid: boolean; code: string; discountAmount: number; message: string } {
+export function evaluateCoupon(code: string, subtotal: number, userEmail?: string, userRole?: string): { 
+  valid: boolean; 
+  code: string; 
+  discountAmount: number; 
+  message: string;
+  waivedPackaging?: boolean;
+  waivedShipping?: boolean;
+} {
   const clean = String(code || '').trim().toUpperCase();
   if (!clean) {
     return { valid: false, code: '', discountAmount: 0, message: 'Coupon code is required.' };
+  }
+
+  if (clean === 'RAZORPAYTEST') {
+    const allowedEmails = ['ssumollah@gmail.com', 'admin@artisanskart.in', 'test@artisanskart.in'];
+    const isAuthorized = 
+      userRole === 'admin' || 
+      userRole === 'master_admin' || 
+      userRole === 'maker' || 
+      (userEmail && allowedEmails.includes(userEmail.toLowerCase())) ||
+      process.env.NODE_ENV !== 'production';
+
+    if (!isAuthorized) {
+      return {
+        valid: false,
+        code: clean,
+        discountAmount: 0,
+        message: 'RAZORPAYTEST is restricted to authorized admin and test accounts.',
+      };
+    }
+
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: 0,
+      message: 'RAZORPAYTEST applied: Packaging and shipping fees waived for live payment testing.',
+      waivedPackaging: true,
+      waivedShipping: true,
+    };
   }
 
   if (clean === 'WELCOME10') {
@@ -235,7 +270,7 @@ export function evaluateCoupon(code: string, subtotal: number): { valid: boolean
 // -------------------------------------------------------------
 app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
   try {
-    const { items, couponCode, pincode, shippingFee } = req.body;
+    const { items, couponCode, pincode, shippingFee, userEmail, userRole } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Cart is empty or invalid.' });
@@ -269,19 +304,17 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       });
     }
 
-    // Packaging fee computation (Fixed: Small < 1kg = ₹30, Big >= 1kg = ₹60)
-    let packagingFee = 0;
-    for (const item of items) {
-      const weight = Number(item.weightKg || 0.5);
-      packagingFee += weight < 1 ? 30 : 60;
-    }
-
-    // Courier shipping fee validation
-    const validShippingFee = typeof shippingFee === 'number' && !isNaN(shippingFee) && shippingFee >= 0 ? Math.round(shippingFee) : 0;
-
     // Secure server-authoritative coupon evaluation
-    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
+    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal, userEmail, userRole) : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
+
+    // Fixed packaging fee (Flat ₹30 per order), waived if coupon specifies waivedPackaging
+    const FIXED_PACKAGING_FEE = 30;
+    const packagingFee = couponResult.waivedPackaging ? 0 : FIXED_PACKAGING_FEE;
+
+    // Courier shipping fee validation, waived if coupon specifies waivedShipping
+    const rawShipping = typeof shippingFee === 'number' && !isNaN(shippingFee) && shippingFee >= 0 ? Math.round(shippingFee) : 0;
+    const validShippingFee = couponResult.waivedShipping ? 0 : rawShipping;
 
     const finalPayable = Math.max(0, itemsTotal + packagingFee + validShippingFee - discountAmount);
 
@@ -293,7 +326,7 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
       discountAmount,
       totalAmount: finalPayable,
       validatedItems,
-      couponApplied: discountAmount > 0 ? couponResult.code : null,
+      couponApplied: (discountAmount > 0 || couponResult.valid) ? couponResult.code : null,
       couponMessage: couponResult.message || undefined,
       currency: 'INR',
       pincodeServiceable: Boolean(pincode && pincode.length === 6),
@@ -1002,10 +1035,10 @@ app.post('/api/payment/record-failure', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/coupons/validate', (req: Request, res: Response) => {
   try {
-    const { code, subtotal } = req.body;
+    const { code, subtotal, userEmail, userRole } = req.body;
     const cleanSubtotal = Math.max(0, Number(subtotal) || 0);
 
-    const result = evaluateCoupon(code, cleanSubtotal);
+    const result = evaluateCoupon(code, cleanSubtotal, userEmail, userRole);
     return res.json({
       valid: result.valid,
       code: result.code,
@@ -1023,7 +1056,7 @@ app.post('/api/coupons/validate', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
   try {
-    const { items, couponCode } = req.body;
+    const { items, couponCode, userEmail, userRole } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain items.' });
     }
@@ -1035,24 +1068,23 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
       itemsTotal += price * qty;
     }
 
-    // Packaging fee computation (Fixed: Small < 1kg = ₹30, Big >= 1kg = ₹60)
-    let packagingFee = 0;
-    for (const item of items) {
-      const weight = Number(item.weightKg || 0.5);
-      packagingFee += weight < 1 ? 30 : 60;
-    }
-
-    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal) : { valid: false, code: '', discountAmount: 0, message: '' };
+    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal, userEmail, userRole) : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
-    const grandTotal = Math.max(0, itemsTotal - discountAmount + packagingFee);
+
+    const FIXED_PACKAGING_FEE = 30;
+    const packagingFee = couponResult.waivedPackaging ? 0 : FIXED_PACKAGING_FEE;
+    const rawShipping = itemsTotal >= 499 ? 0 : 49;
+    const shippingFee = couponResult.waivedShipping ? 0 : rawShipping;
+    const grandTotal = Math.max(0, itemsTotal + packagingFee + shippingFee - discountAmount);
 
     return res.json({
       success: true,
       itemsTotal,
       discountAmount,
       packagingFee,
+      shippingFee,
       grandTotal,
-      couponApplied: discountAmount > 0 ? couponResult.code : null,
+      couponApplied: (discountAmount > 0 || couponResult.valid) ? couponResult.code : null,
       couponMessage: couponResult.message || '',
     });
   } catch (err: any) {

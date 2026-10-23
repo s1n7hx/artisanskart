@@ -43,7 +43,7 @@ import {
 export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { cart, products, currentUser, confirmCheckout, showToast, makerEarningPercent, addToCart, changeQty } = useApp();
+  const { cart, products, currentUser, userRole, confirmCheckout, showToast, makerEarningPercent, addToCart, changeQty } = useApp();
 
   // URL query params for direct "Order Now"
   const directProductSlug = searchParams.get('product');
@@ -299,16 +299,12 @@ export const CheckoutPage: React.FC = () => {
   // Pricing calculations
   const itemsSubtotal = checkoutItems.reduce((sum, item) => sum + item.subtotal, 0);
 
-  // Fixed packaging fee based on item weight: Small (<1kg) = ₹30, Big (>=1kg) = ₹60
-  const packagingFee = useMemo(() => {
-    return checkoutItems.reduce((acc, item) => {
-      const weight = Number(item.product?.weightKg || 0.5);
-      return acc + (weight < 1 ? 30 : 60);
-    }, 0);
-  }, [checkoutItems]);
-
   const [shippingFee, setShippingFee] = useState(0);
-  const grandTotal = Math.max(0, itemsSubtotal + packagingFee + shippingFee - couponDiscount);
+  // Fixed packaging fee (Flat ₹30 per order, or ₹0 if RAZORPAYTEST coupon applied)
+  const FIXED_PACKAGING_FEE = 30;
+  const packagingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : FIXED_PACKAGING_FEE;
+  const effectiveShippingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : shippingFee;
+  const grandTotal = Math.max(0, itemsSubtotal + packagingFee + effectiveShippingFee - couponDiscount);
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
   // Coupon handling
@@ -372,6 +368,8 @@ export const CheckoutPage: React.FC = () => {
           couponCode: appliedCoupon,
           pincode,
           shippingFee,
+          userEmail: currentUser?.email,
+          userRole: userRole,
         }),
       });
 
