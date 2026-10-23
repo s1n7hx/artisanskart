@@ -161,6 +161,35 @@ export const AdminPortalPage: React.FC = () => {
     description: '',
   });
 
+  // Custom category choices state
+  const [newProductCategoryChoice, setNewProductCategoryChoice] = useState<string>('Clay Crafts');
+  const [customCategoryInput, setCustomCategoryInput] = useState<string>('');
+
+  const [editProductCategoryChoice, setEditProductCategoryChoice] = useState<string>('Clay Crafts');
+  const [editCustomCategoryInput, setEditCustomCategoryInput] = useState<string>('');
+
+  const STANDARD_CATEGORIES = React.useMemo(() => [
+    'Paintings',
+    'Clay Crafts',
+    'Hand-painted Cards',
+    'Accessories',
+    'Keychains',
+    'Pottery & Ceramics',
+    'Resin & Glass Art',
+    'Textiles & Macramé',
+  ], []);
+
+  const startEditingProduct = (p: Product) => {
+    setEditingProduct(p);
+    if (p.category && STANDARD_CATEGORIES.includes(p.category)) {
+      setEditProductCategoryChoice(p.category);
+      setEditCustomCategoryInput('');
+    } else {
+      setEditProductCategoryChoice('Other');
+      setEditCustomCategoryInput(p.category || '');
+    }
+  };
+
   // User search & filter state
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'master_admin' | 'admin' | 'maker' | 'customer'>('all');
@@ -275,9 +304,11 @@ export const AdminPortalPage: React.FC = () => {
     if (success) {
       showToast(`Added craft "${prodToAdd.title}" with ${effectiveImages.length} photos!`, 'sparkles');
       setIsAddingProduct(false);
+      setNewProductCategoryChoice('Clay Crafts');
+      setCustomCategoryInput('');
       setNewProductForm({
         title: '',
-        category: 'Crochet',
+        category: 'Clay Crafts',
         price: 349,
         maker: '',
         cls: 'Class 10',
@@ -1703,11 +1734,19 @@ export const AdminPortalPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category / Product Type</label>
                   <select
-                    value={newProductForm.category}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                    value={newProductCategoryChoice}
+                    onChange={(e) => {
+                      const choice = e.target.value;
+                      setNewProductCategoryChoice(choice);
+                      if (choice !== 'Other') {
+                        setNewProductForm({ ...newProductForm, category: choice });
+                      } else {
+                        setNewProductForm({ ...newProductForm, category: customCategoryInput || 'Custom Craft' });
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
                   >
                     <option value="Paintings">Paintings &amp; Canvas Art</option>
                     <option value="Clay Crafts">Clay Crafts &amp; Pottery</option>
@@ -1717,8 +1756,26 @@ export const AdminPortalPage: React.FC = () => {
                     <option value="Pottery & Ceramics">Pottery &amp; Ceramics</option>
                     <option value="Resin & Glass Art">Resin &amp; Glass Art</option>
                     <option value="Textiles & Macramé">Textiles &amp; Macramé</option>
-                    <option value="Other Crafts">Other Crafts (Custom Type)</option>
+                    <option value="Other">Other (Type Custom Category)</option>
                   </select>
+
+                  {newProductCategoryChoice === 'Other' && (
+                    <div className="mt-2.5 animate-fade-in">
+                      <label className="block text-xs font-bold text-[#C85A32] mb-1">Custom Category Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., Wooden Crafts, Macramé, Batik Art"
+                        value={customCategoryInput}
+                        onChange={(e) => {
+                          const typed = e.target.value;
+                          setCustomCategoryInput(typed);
+                          setNewProductForm({ ...newProductForm, category: typed || 'Custom Craft' });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 text-sm bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#C85A32]"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
@@ -1813,11 +1870,19 @@ export const AdminPortalPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Category</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Category / Product Type</label>
                   <select
-                    value={editingProduct.category}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white"
+                    value={editProductCategoryChoice}
+                    onChange={(e) => {
+                      const choice = e.target.value;
+                      setEditProductCategoryChoice(choice);
+                      if (choice !== 'Other') {
+                        setEditingProduct({ ...editingProduct, category: choice });
+                      } else {
+                        setEditingProduct({ ...editingProduct, category: editCustomCategoryInput || 'Custom Craft' });
+                      }
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white font-medium"
                   >
                     <option value="Paintings">Paintings &amp; Canvas Art</option>
                     <option value="Clay Crafts">Clay Crafts &amp; Pottery</option>
@@ -1827,24 +1892,26 @@ export const AdminPortalPage: React.FC = () => {
                     <option value="Pottery & Ceramics">Pottery &amp; Ceramics</option>
                     <option value="Resin & Glass Art">Resin &amp; Glass Art</option>
                     <option value="Textiles & Macramé">Textiles &amp; Macramé</option>
-                    <option value="Other Crafts">Other Crafts</option>
-                    {editingProduct.category &&
-                      ![
-                        'Paintings',
-                        'Clay Crafts',
-                        'Hand-painted Cards',
-                        'Accessories',
-                        'Keychains',
-                        'Pottery & Ceramics',
-                        'Resin & Glass Art',
-                        'Textiles & Macramé',
-                        'Other Crafts',
-                      ].includes(editingProduct.category) && (
-                        <option value={editingProduct.category}>
-                          Custom: {editingProduct.category}
-                        </option>
-                      )}
+                    <option value="Other">Other (Custom Category)</option>
                   </select>
+
+                  {editProductCategoryChoice === 'Other' && (
+                    <div className="mt-2.5 animate-fade-in">
+                      <label className="block text-xs font-bold text-amber-900 mb-1">Custom Category Name</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g., Wooden Crafts, Macramé, Batik Art"
+                        value={editCustomCategoryInput}
+                        onChange={(e) => {
+                          const typed = e.target.value;
+                          setEditCustomCategoryInput(typed);
+                          setEditingProduct({ ...editingProduct, category: typed || 'Custom Craft' });
+                        }}
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 text-sm bg-white font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#C85A32]"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Price (₹)</label>
@@ -1942,9 +2009,9 @@ export const AdminPortalPage: React.FC = () => {
                         )}
                         <button
                           type="button"
-                          onClick={() => setEditingProduct(p)}
-                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700"
-                          title="Edit product"
+                          onClick={() => startEditingProduct(p)}
+                          className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 cursor-pointer"
+                          title="Edit product details & category"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
