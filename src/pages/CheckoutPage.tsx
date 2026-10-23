@@ -476,6 +476,18 @@ export const CheckoutPage: React.FC = () => {
         customerName: fullName.trim(),
         customerEmail: email.trim() || 'customer@artisanskart.in',
         customerPhone: phone.trim() || '9999999999',
+        items: checkoutItems.map((ci) => ({
+          id: ci.id,
+          qty: ci.qty,
+          title: ci.product?.title,
+          price: ci.product?.price,
+          maker: ci.product?.maker,
+          weightKg: ci.product?.weightKg || 0.5,
+        })),
+        couponCode: appliedCoupon,
+        shippingFee: effectiveShippingFee,
+        userEmail: currentUser?.email,
+        userRole: userRole,
         description: `ArtisansKart Order #${orderNum} for ${checkoutItems.reduce((s, c) => s + c.qty, 0)} handcrafted creations`,
         notes: {
           order_number: orderNum,

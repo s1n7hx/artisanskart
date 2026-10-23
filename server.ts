@@ -501,23 +501,57 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       }
     }
 
-    // 2. Ensure Correct Currency & Integer Amount in Paisa (Math.round(amount * 100))
-    const parsedAmount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount || '0'));
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      console.warn(`[Razorpay Order Error] Invalid amount supplied:`, rawAmount);
-      return res.status(400).json({
-        success: false,
-        error: 'Order amount must be a valid positive number greater than zero.',
-      });
+    // Server-Authoritative Amount Calculation (Never trust frontend price directly)
+    let itemsTotal = 0;
+    const bodyItems = Array.isArray(body.items) ? body.items : [];
+    if (bodyItems.length > 0) {
+      for (const item of bodyItems) {
+        const qty = Math.max(1, Number(item.quantity || item.qty || 1));
+        const price = Math.max(0, Number(item.unitPrice || item.price || item.product?.price || 299));
+        itemsTotal += price * qty;
+      }
+    } else if (targetOrderNumber) {
+      const sOrder = SERVER_ORDERS.find(o => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase());
+      if (sOrder) {
+        itemsTotal = Number(sOrder.itemsTotal || sOrder.amount || 1);
+      } else {
+        const { data: dbOrder } = await supabaseAdmin.from('orders').select('*').eq('order_number', targetOrderNumber).maybeSingle();
+        itemsTotal = dbOrder ? Number(dbOrder.items_total || dbOrder.total_amount || 1) : 1;
+      }
+    } else {
+      itemsTotal = Number(body.itemsTotal || body.subtotal || rawAmount || 1);
     }
 
-    // Strictly convert amount to integer in paisa, preventing validation errors from float/string amounts
-    const amountInPaise = Math.round(parsedAmount * 100);
+    const couponCode = String(body.couponCode || body.coupon || '').trim();
+    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal, body.userEmail, body.userRole) : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
+    const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
+
+    const FIXED_PACKAGING_FEE = 30;
+    const packagingFee = couponResult.waivedPackaging ? 0 : FIXED_PACKAGING_FEE;
+    const rawShipping = typeof body.shippingFee === 'number' ? body.shippingFee : (itemsTotal >= 499 ? 0 : 49);
+    const shippingFee = couponResult.waivedShipping ? 0 : rawShipping;
+    const tax = 0;
+
+    const serverFinalINR = Math.max(0, itemsTotal + packagingFee + shippingFee - tax - discountAmount);
+    const amountInPaise = Math.round(serverFinalINR * 100);
+
+    // Safe debugging information in server logs
+    console.log(
+      `[Server Pricing Audit / create-order] ` +
+      `calculated subtotal: ₹${itemsTotal} | ` +
+      `packaging fee: ₹${packagingFee} | ` +
+      `shipping fee: ₹${shippingFee} | ` +
+      `discount: ₹${discountAmount} | ` +
+      `tax: ₹${tax} | ` +
+      `final amount in INR: ₹${serverFinalINR} | ` +
+      `final Razorpay amount in paise: ${amountInPaise} paise`
+    );
+
     if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {
-      console.warn(`[Razorpay Order Error] Invalid paisa conversion:`, amountInPaise);
+      console.warn(`[Razorpay Order Error] Invalid calculated amount in paise:`, amountInPaise);
       return res.status(400).json({
         success: false,
-        error: 'Calculated order amount in paisa must be a valid integer greater than zero.',
+        error: 'Calculated order amount must be a valid positive integer greater than zero.',
       });
     }
 

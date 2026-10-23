@@ -20,6 +20,11 @@ export interface RazorpayPaymentOptions {
   customerPhone?: string;
   description?: string;
   notes?: Record<string, string>;
+  items?: any[];
+  couponCode?: string;
+  shippingFee?: number;
+  userEmail?: string;
+  userRole?: string;
   onSuccess: (paymentResult: {
     razorpayOrderId: string;
     razorpayPaymentId: string;
@@ -171,6 +176,11 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
         amount: options.amount,
         orderNumber: options.orderNumber,
         receipt: options.orderNumber || `rcpt_${Date.now()}`,
+        items: options.items,
+        couponCode: options.couponCode,
+        shippingFee: options.shippingFee,
+        userEmail: options.userEmail || options.customerEmail,
+        userRole: options.userRole,
         notes: {
           order_number: options.orderNumber || '',
           ...(options.notes || {}),
