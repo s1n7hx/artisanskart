@@ -2649,11 +2649,16 @@ app.post('/api/admin/update-role', async (req: Request, res: Response) => {
       }
 
       if (queryId) {
+      const validRoles = ['customer', 'maker', 'admin', 'master_admin'];
+      if (!validRoles.includes(targetRole)) {
+        return res.status(400).json({ success: false, error: `Invalid role: ${targetRole}` });
+      }
+
         const payload: any = {
           id: queryId,
           email: cleanEmail,
           full_name: fullName,
-          role: targetRole === 'master_admin' ? 'admin' : targetRole, // Enum resilience
+          role: targetRole,
           status: targetStatus,
           school: targetSchool,
           updated_at: new Date().toISOString(),
