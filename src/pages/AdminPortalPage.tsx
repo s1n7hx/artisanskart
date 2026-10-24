@@ -139,6 +139,7 @@ export const AdminPortalPage: React.FC = () => {
 
   // User Deletion modal state
   const [deletingUserModal, setDeletingUserModal] = useState<UserAccount | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [isDeletingUserAccount, setIsDeletingUserAccount] = useState(false);
 
   // Environment Variable Fallback: Check both import.meta.env.VITE_RAZORPAY_KEY_ID and process.env.RAZORPAY_KEY_ID
@@ -1462,11 +1463,12 @@ export const AdminPortalPage: React.FC = () => {
 
                         <button
                           type="button"
+                          disabled={deletingUserId === u.id}
                           onClick={() => setDeletingUserModal(u)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer ml-auto"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer ml-auto disabled:opacity-30"
                           title="Permanently delete user account"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          {deletingUserId === u.id ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
                       </div>
                     )}
@@ -2904,6 +2906,7 @@ export const AdminPortalPage: React.FC = () => {
                 disabled={isDeletingUserAccount}
                 onClick={async () => {
                   setIsDeletingUserAccount(true);
+                  setDeletingUserId(deletingUserModal.id);
                   try {
                     await removeUserAccount(deletingUserModal.id);
                     setDeletingUserModal(null);
@@ -2911,6 +2914,7 @@ export const AdminPortalPage: React.FC = () => {
                     showToast(`Failed to delete user: ${err.message}`, 'alert-circle');
                   } finally {
                     setIsDeletingUserAccount(false);
+                    setDeletingUserId(null);
                   }
                 }}
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"

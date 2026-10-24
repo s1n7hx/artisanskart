@@ -259,16 +259,31 @@ export async function authorizeNewEmail(payload: {
 }
 
 export async function deleteUserAccountApi(userId: string, email: string, adminEmail?: string) {
-  const res = await fetch('/api/admin/delete-user', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, email, adminEmail }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.error || 'Failed to delete user account.');
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+
+  try {
+    const res = await fetch('/api/admin/delete-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, email, adminEmail }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to delete user account.');
+    }
+    return data;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('User deletion request timed out.');
+    }
+    throw err;
   }
-  return data;
 }
 
 export async function deauthorizeEmail(email: string, id?: string, adminEmail?: string) {

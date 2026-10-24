@@ -3208,7 +3208,10 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
       existingOrdersCount = count || 0;
     } catch (e) {}
 
+    console.log(`[DELETE START] userId: ${resolvedUserId}, email: ${cleanEmail}`);
+
     // 1. Clean up from site_settings (authorized_emails)
+    console.log(`[SITE SETTINGS CLEANUP]`);
     try {
       const authList = await getAuthorizedEmailsFromSupabase();
       const filtered = authList.filter((item) => {
@@ -3222,6 +3225,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 2. Clean up from customer_addresses
+    console.log(`[ADDRESS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
         await supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
@@ -3235,6 +3239,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 3. Clean up from maker_applications
+    console.log(`[MAKER APPS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
         await supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`);
@@ -3248,6 +3253,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 4. Permanently delete row from public.profiles
+    console.log(`[PROFILE CLEANUP]`);
     try {
       if (resolvedUserId) {
         await supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId);
@@ -3260,6 +3266,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 5. Permanently delete user from Supabase Auth system
+    console.log(`[AUTH DELETE]`);
     let authUserDeleted = false;
     if (resolvedUserId && resolvedUserId.includes('-')) {
       try {
@@ -3289,7 +3296,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
       } catch (e) {}
     }
 
-    console.log(`🗑️ [User Account Deleted] ${cleanEmail || resolvedUserId} permanently deleted. Preserved orders: ${existingOrdersCount}`);
+    console.log(`[DELETE COMPLETE] ${cleanEmail || resolvedUserId}`);
 
     return res.json({
       success: true,
