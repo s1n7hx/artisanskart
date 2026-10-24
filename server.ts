@@ -13,9 +13,19 @@ import {
   cancelShipment,
   getNimbusPostIntegrationStatus,
 } from './src/server/nimbuspost.js';
+import nodemailer from 'nodemailer';
 
 dotenv.config({ path: '.env.local', override: true });
 dotenv.config();
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: Number(process.env.SMTP_PORT) || 587,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2491,6 +2501,18 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
     } catch (e) {}
 
     console.log(`🔨 [Maker Application Received] From ${name} (${contactEmail})`);
+
+    try {
+      await transporter.sendMail({
+        from: '"ArtisansKart" <no-reply@artisanskart.in>',
+        to: process.env.MASTER_ADMIN_EMAIL || 'admin@artisanskart.in',
+        subject: 'New Maker Application Received',
+        text: `A new maker application has been submitted by ${name} (${contactEmail}).\n\nApplication ID: ${newApp.id}\nCraft: ${craft}\n\nReview link: https://artisanskart.in/admin/applications`,
+      });
+      console.log('📧 [Maker Application Email Sent]');
+    } catch (emailErr) {
+      console.error('❌ Failed to send maker application email:', emailErr);
+    }
 
     return res.status(201).json({
       success: true,
