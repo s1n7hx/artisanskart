@@ -128,7 +128,7 @@ export const Modals: React.FC<ModalsProps> = ({
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-2xl font-bold text-[#1E293B]">Sell Your Crafts</h3>
-                <p className="text-sm text-slate-500">Join 150+ independent creators &amp; artisans earning from their crafts.</p>
+                <p className="text-sm text-slate-500">Join ArtisansKart and become independent creator/ artisan and start earning from your valuable crafts.</p>
               </div>
               <button
                 onClick={onCloseMakerSignup}
@@ -190,6 +190,8 @@ export const Modals: React.FC<ModalsProps> = ({
                   <option>Hand-painted Cards</option>
                   <option>Accessories</option>
                   <option>Keychains</option>
+                  <option>Crochet</option>
+                  <option>Others</option>
                 </select>
               </div>
               <div>
