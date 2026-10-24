@@ -36,6 +36,7 @@ import {
   getProfile,
   authorizeNewEmail,
   deauthorizeEmail,
+  deleteUserAccountApi,
 } from '../services/supabase';
 
 interface AppContextType {
@@ -415,7 +416,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Remove / revoke user account
+  // Remove / delete user account
   const removeUserAccount = async (userId: string) => {
     const targetUser = usersList.find((u) => u.id === userId);
     if (!targetUser) return;
@@ -425,7 +426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await deauthorizeEmail(targetUser.email, userId);
+      await deleteUserAccountApi(targetUser.id, targetUser.email, currentUser?.email || MASTER_ADMIN_EMAIL);
       const freshProfiles = await fetchAllProfiles();
       if (freshProfiles) {
         setUsersList(freshProfiles.map((p) => ({
@@ -438,10 +439,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
         })));
       }
-      showToast(`Revoked permissions for ${targetUser.email}.`, 'trash-2');
+      showToast(`Permanently deleted user account ${targetUser.email}.`, 'trash-2');
     } catch (err: any) {
-      console.error('Deauthorization error:', err);
-      showToast(`Failed to revoke user: ${err.message}`, 'alert-circle');
+      console.error('User deletion error:', err);
+      showToast(`Failed to delete user: ${err.message}`, 'alert-circle');
+      throw err;
     }
   };
 

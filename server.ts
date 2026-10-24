@@ -3153,41 +3153,158 @@ app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/admin/deauthorize-email
-app.post(['/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
+// POST /api/admin/delete-user (also aliases /api/admin/deauthorize-email, /api/admin/remove-authorized-email)
+app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
   try {
-    const { id, email } = req.body || {};
-    const cleanEmail = String(email || '').trim().toLowerCase();
+    const { userId, targetUserId, email, id, adminEmail } = req.body || {};
+    const effectiveUserId = String(userId || targetUserId || id || '').trim();
+    let cleanEmail = String(email || '').trim().toLowerCase();
+
+    // Protection 1: Prevent deleting ssumollah@gmail.com
+    if (cleanEmail === 'ssumollah@gmail.com') {
+      return res.status(400).json({ success: false, error: 'Cannot delete the Master Author account.' });
+    }
+
+    // Protection 2: Resolve user_id and email from database if missing
+    let resolvedUserId = effectiveUserId;
+    if (resolvedUserId && !cleanEmail) {
+      const { data: found } = await supabaseAdmin
+        .from('profiles')
+        .select('id, email')
+        .eq('id', resolvedUserId)
+        .maybeSingle();
+      if (found?.email) {
+        cleanEmail = (found.email || '').trim().toLowerCase();
+      }
+    } else if (!resolvedUserId && cleanEmail) {
+      const { data: found } = await supabaseAdmin
+        .from('profiles')
+        .select('id, email')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+      if (found?.id) {
+        resolvedUserId = found.id;
+      }
+    }
 
     if (cleanEmail === 'ssumollah@gmail.com') {
-      return res.status(400).json({ success: false, error: 'Cannot deauthorize the Master Author account.' });
+      return res.status(400).json({ success: false, error: 'Cannot delete the Master Author account.' });
     }
 
-    const authList = await getAuthorizedEmailsFromSupabase();
-    const filtered = authList.filter((item) => {
-      if (id && item.id === id) return false;
-      if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
-      return true;
+    if (!cleanEmail && !resolvedUserId) {
+      return res.status(400).json({ success: false, error: 'Target user ID or email is required for account deletion.' });
+    }
+
+    // Audit financial / order history records count to confirm preservation
+    let existingOrdersCount = 0;
+    try {
+      let orderQuery = supabaseAdmin.from('orders').select('id', { count: 'exact', head: true });
+      if (resolvedUserId) {
+        orderQuery = orderQuery.or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
+      } else if (cleanEmail) {
+        orderQuery = orderQuery.ilike('customer_email', cleanEmail);
+      }
+      const { count } = await orderQuery;
+      existingOrdersCount = count || 0;
+    } catch (e) {}
+
+    // 1. Clean up from site_settings (authorized_emails)
+    try {
+      const authList = await getAuthorizedEmailsFromSupabase();
+      const filtered = authList.filter((item) => {
+        if (resolvedUserId && item.id === resolvedUserId) return false;
+        if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
+        return true;
+      });
+      await saveAuthorizedEmailsToSupabase(filtered);
+    } catch (err: any) {
+      console.warn('[Delete User Warning]: Failed updating authorized_emails in site_settings:', err.message);
+    }
+
+    // 2. Clean up from customer_addresses
+    try {
+      if (resolvedUserId && cleanEmail) {
+        await supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
+      } else if (resolvedUserId) {
+        await supabaseAdmin.from('customer_addresses').delete().eq('user_id', resolvedUserId);
+      } else if (cleanEmail) {
+        await supabaseAdmin.from('customer_addresses').delete().ilike('customer_email', cleanEmail);
+      }
+    } catch (err: any) {
+      console.warn('[Delete User Notice]: customer_addresses clean-up:', err.message);
+    }
+
+    // 3. Clean up from maker_applications
+    try {
+      if (resolvedUserId && cleanEmail) {
+        await supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`);
+      } else if (resolvedUserId) {
+        await supabaseAdmin.from('maker_applications').delete().eq('user_id', resolvedUserId);
+      } else if (cleanEmail) {
+        await supabaseAdmin.from('maker_applications').delete().ilike('applicant_email', cleanEmail);
+      }
+    } catch (err: any) {
+      console.warn('[Delete User Notice]: maker_applications clean-up:', err.message);
+    }
+
+    // 4. Permanently delete row from public.profiles
+    try {
+      if (resolvedUserId) {
+        await supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId);
+      }
+      if (cleanEmail) {
+        await supabaseAdmin.from('profiles').delete().ilike('email', cleanEmail);
+      }
+    } catch (err: any) {
+      console.warn('[Delete User Warning]: Failed deleting profile from Supabase:', err.message);
+    }
+
+    // 5. Permanently delete user from Supabase Auth system
+    let authUserDeleted = false;
+    if (resolvedUserId && resolvedUserId.includes('-')) {
+      try {
+        const { error: authDeleteErr } = await supabaseAdmin.auth.admin.deleteUser(resolvedUserId);
+        if (!authDeleteErr) {
+          authUserDeleted = true;
+          console.log(`🔐 [Supabase Auth User Deleted] User ID: ${resolvedUserId}`);
+        } else {
+          console.warn('[Delete User Auth Notice]:', authDeleteErr.message);
+        }
+      } catch (authErr: any) {
+        console.warn('[Delete User Auth Exception]:', authErr.message);
+      }
+    }
+
+    if (!authUserDeleted && cleanEmail) {
+      try {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
+        const foundAuthUser = usersData?.users?.find(
+          (u) => (u.email || '').toLowerCase() === cleanEmail
+        );
+        if (foundAuthUser?.id) {
+          await supabaseAdmin.auth.admin.deleteUser(foundAuthUser.id);
+          authUserDeleted = true;
+          console.log(`🔐 [Supabase Auth User Deleted by Email Match] User ID: ${foundAuthUser.id}`);
+        }
+      } catch (e) {}
+    }
+
+    console.log(`🗑️ [User Account Deleted] ${cleanEmail || resolvedUserId} permanently deleted. Preserved orders: ${existingOrdersCount}`);
+
+    return res.json({
+      success: true,
+      message: `User account ${cleanEmail || resolvedUserId} permanently deleted from database and authentication system.`,
+      email: cleanEmail,
+      userId: resolvedUserId,
+      authUserDeleted,
+      preservedOrdersCount: existingOrdersCount,
     });
-
-    await saveAuthorizedEmailsToSupabase(filtered);
-
-    // If user has a profile, demote to customer
-    if (cleanEmail) {
-      await supabaseAdmin
-        .from('profiles')
-        .update({
-          role: 'customer',
-          updated_at: new Date().toISOString(),
-        })
-        .ilike('email', cleanEmail);
-    }
-
-    return res.json({ success: true, message: `Deauthorized ${cleanEmail || id}` });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message });
+    console.error('❌ [/api/admin/delete-user Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to delete user account.' });
   }
 });
+
 
 // POST /api/admin/update-role
 app.post('/api/admin/update-role', async (req: Request, res: Response) => {

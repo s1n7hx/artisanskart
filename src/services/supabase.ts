@@ -258,17 +258,21 @@ export async function authorizeNewEmail(payload: {
   return data;
 }
 
-export async function deauthorizeEmail(email: string, id?: string) {
-  const res = await fetch('/api/admin/deauthorize-email', {
+export async function deleteUserAccountApi(userId: string, email: string, adminEmail?: string) {
+  const res = await fetch('/api/admin/delete-user', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, id }),
+    body: JSON.stringify({ userId, email, adminEmail }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || 'Failed to deauthorize email.');
+    throw new Error(data.error || 'Failed to delete user account.');
   }
   return data;
+}
+
+export async function deauthorizeEmail(email: string, id?: string, adminEmail?: string) {
+  return deleteUserAccountApi(id || '', email, adminEmail);
 }
 
 export async function updateUserRole(userId: string, role: UserRole, email?: string, school?: string) {

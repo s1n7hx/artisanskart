@@ -137,6 +137,10 @@ export const AdminPortalPage: React.FC = () => {
   const [clearOrdersConfirmInput, setClearOrdersConfirmInput] = useState('');
   const [isProcessingClearOrders, setIsProcessingClearOrders] = useState(false);
 
+  // User Deletion modal state
+  const [deletingUserModal, setDeletingUserModal] = useState<UserAccount | null>(null);
+  const [isDeletingUserAccount, setIsDeletingUserAccount] = useState(false);
+
   // Environment Variable Fallback: Check both import.meta.env.VITE_RAZORPAY_KEY_ID and process.env.RAZORPAY_KEY_ID
   const envRazorpayKeyId =
     (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_RAZORPAY_KEY_ID) ||
@@ -1458,9 +1462,9 @@ export const AdminPortalPage: React.FC = () => {
 
                         <button
                           type="button"
-                          onClick={() => removeUserAccount(u.id)}
+                          onClick={() => setDeletingUserModal(u)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer ml-auto"
-                          title="Remove user account"
+                          title="Permanently delete user account"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -2827,6 +2831,94 @@ export const AdminPortalPage: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------
+          CONFIRMATION MODAL: PERMANENT USER ACCOUNT DELETION
+      ------------------------------------------------------------- */}
+      {deletingUserModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 border border-red-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Confirm Permanent User Deletion</h3>
+                  <p className="text-xs font-semibold text-slate-500">Master Admin Authoritative Action</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingUserModal(null)}
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Account Name:</span>
+                <span className="font-bold text-slate-900">{deletingUserModal.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Email Address:</span>
+                <span className="font-mono font-bold text-slate-900">{deletingUserModal.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-medium">Assigned Role:</span>
+                <span className="font-extrabold uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-800 text-[10px]">
+                  {deletingUserModal.role}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-bold text-red-900">
+                <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Permanent Account Removal</span>
+              </div>
+              <p className="leading-relaxed">
+                Are you sure you want to permanently delete user account <strong className="font-mono">{deletingUserModal.email}</strong>?
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-red-700 font-medium">
+                <li>Their profile and authorization records will be deleted from Supabase.</li>
+                <li>Their Google login access to ArtisansKart will be revoked.</li>
+                <li>Financial and order history records will be safely preserved for accounting compliance.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingUserModal(null)}
+                className="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold hover:bg-slate-100 text-xs transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingUserAccount}
+                onClick={async () => {
+                  setIsDeletingUserAccount(true);
+                  try {
+                    await removeUserAccount(deletingUserModal.id);
+                    setDeletingUserModal(null);
+                  } catch (err: any) {
+                    showToast(`Failed to delete user: ${err.message}`, 'alert-circle');
+                  } finally {
+                    setIsDeletingUserAccount(false);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                {isDeletingUserAccount ? 'Deleting Account...' : 'Permanently Delete User'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
