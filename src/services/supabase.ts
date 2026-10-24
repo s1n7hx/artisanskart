@@ -322,18 +322,13 @@ export async function updateUserRole(userId: string, role: UserRole, email?: str
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetUserId: userId, userId, email, role }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
-  } catch (e) {
-    console.warn('API update-role failed, falling back to direct Supabase:', e);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update role');
+    return data;
+  } catch (e: any) {
+    console.error('Role update failed:', e);
+    throw e;
   }
-
-  // Fallback to client Supabase SDK
-  const payload: any = { role: role === 'master_admin' ? 'admin' : role, updated_at: new Date().toISOString() };
-  const { data } = await supabase.from('profiles').update(payload).eq('id', userId);
-  return data;
 }
 
 export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected', email?: string) {
@@ -343,22 +338,12 @@ export async function updateUserStatus(userId: string, status: 'approved' | 'pen
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetUserId: userId, userId, email, status }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
-  } catch (e) {
-    console.warn('API update-role status failed, falling back to direct Supabase:', e);
-  }
-
-  try {
-    const { data } = await supabase
-      .from('profiles')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', userId);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update status');
     return data;
-  } catch (err: any) {
-    return null;
+  } catch (e: any) {
+    console.error('Status update failed:', e);
+    throw e;
   }
 }
 
@@ -375,31 +360,12 @@ export async function updateUserRoleAndStatus(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      return data;
-    }
-  } catch (e) {
-    console.warn('API update-role full failed, falling back to direct Supabase:', e);
-  }
-
-  try {
-    const payload: any = {
-      role: role === 'master_admin' ? 'admin' : role,
-      status,
-      updated_at: new Date().toISOString(),
-    };
-    if (school) payload.school = school;
-
-    let { data, error } = await supabase.from('profiles').update(payload).eq('id', userId);
-    if (error && error.message?.includes('status')) {
-      delete payload.status;
-      const retry = await supabase.from('profiles').update(payload).eq('id', userId);
-      data = retry.data;
-    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update role and status');
     return data;
-  } catch (err: any) {
-    return null;
+  } catch (e: any) {
+    console.error('Role/status update failed:', e);
+    throw e;
   }
 }
 
@@ -415,7 +381,7 @@ export interface MakerApplicationItem {
   reviewed_by?: string;
   reviewed_at?: string;
   applicant_name?: string;
-  applicant_email?: string;
+  applicant_email: string;
   craft_type?: string;
   portfolio_url?: string;
 }
@@ -453,6 +419,8 @@ export async function submitMakerApplication(payload: {
     .from('maker_applications')
     .insert({
       user_id: uid,
+      applicant_email: payload.applicant_email || payload.email,
+      applicant_name: payload.applicant_name || payload.full_name,
       school: payload.craft_type || payload.school || 'Handicrafts Studio',
       grade_class: payload.portfolio_url || payload.grade_class || 'Craft Series',
       message: payload.message || 'Artisan Application',

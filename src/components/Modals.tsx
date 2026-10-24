@@ -60,6 +60,14 @@ export const Modals: React.FC<ModalsProps> = ({
     }
   }, [currentUser]);
 
+  // Maker Signup state
+  const [makerEmail, setMakerEmail] = useState(currentUser?.email || '');
+  React.useEffect(() => {
+    if (currentUser?.email && !makerEmail) {
+      setMakerEmail(currentUser.email);
+    }
+  }, [currentUser]);
+
   const handlePaymentSubmit = async () => {
     if (cart.length === 0) return;
 
@@ -136,8 +144,21 @@ export const Modals: React.FC<ModalsProps> = ({
                 <input
                   required
                   type="text"
+                  name="full_name"
                   className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
                   placeholder="e.g. Aditi Sharma"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Email Address</label>
+                <input
+                  required
+                  type="email"
+                  name="applicant_email"
+                  value={makerEmail}
+                  onChange={(e) => setMakerEmail(e.target.value)}
+                  className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
+                  placeholder="e.g. aditi@example.com"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -146,6 +167,7 @@ export const Modals: React.FC<ModalsProps> = ({
                   <input
                     required
                     type="text"
+                    name="school"
                     className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
                     placeholder="Studio or brand name"
                   />
@@ -155,6 +177,7 @@ export const Modals: React.FC<ModalsProps> = ({
                   <input
                     required
                     type="text"
+                    name="grade_class"
                     className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
                     placeholder="e.g. Master Artisan / Independent"
                   />
@@ -162,7 +185,7 @@ export const Modals: React.FC<ModalsProps> = ({
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Craft Category</label>
-                <select className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm bg-white">
+                <select name="craft_type" className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm bg-white">
                   <option>Clay Crafts</option>
                   <option>Hand-painted Cards</option>
                   <option>Accessories</option>
@@ -172,6 +195,7 @@ export const Modals: React.FC<ModalsProps> = ({
               <div>
                 <label className="text-sm font-medium text-slate-700">Tell us about your craft</label>
                 <textarea
+                  name="message"
                   rows={3}
                   className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
                   placeholder="Describe your handmade product..."

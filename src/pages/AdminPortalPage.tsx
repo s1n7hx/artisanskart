@@ -34,7 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
-import { Product, HeroContent, UserAccount, UserRole, OrderStatus, Order, maskEmail } from '../types';
+import { Product, HeroContent, UserAccount, UserRole, UserStatus, OrderStatus, Order, maskEmail } from '../types';
 import { ImageUploader } from '../components/ImageUploader';
 import { MultiImageUploader } from '../components/MultiImageUploader';
 import {
@@ -42,6 +42,8 @@ import {
   fetchAllMakerApplications,
   reviewMakerApplication,
   MakerApplicationItem,
+  updateUserRole,
+  updateUserStatus,
 } from '../services/supabase';
 import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 
@@ -1389,14 +1391,52 @@ export const AdminPortalPage: React.FC = () => {
                     </div>
 
                     {!isTargetMaster && isMasterAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => removeUserAccount(u.id)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                        title="Remove user account"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2 pt-2 border-t border-[#e7e0d8] mt-2">
+                        <select
+                          className="text-[10px] font-bold bg-white border border-slate-300 rounded-lg px-2 py-1.5 focus:border-[#C85A32] focus:outline-hidden"
+                          value={u.role}
+                          onChange={async (e) => {
+                            const newRole = e.target.value as UserRole;
+                            try {
+                              await updateUserRole(u.id, newRole, u.email);
+                              showToast(`Role updated to ${newRole}!`, 'shield-check');
+                            } catch (err: any) {
+                              showToast(`Failed to update role: ${err.message}`, 'alert-circle');
+                            }
+                          }}
+                        >
+                          <option value="customer">Customer</option>
+                          <option value="maker">Maker</option>
+                          <option value="admin">Admin</option>
+                        </select>
+
+                        <select
+                          className="text-[10px] font-bold bg-white border border-slate-300 rounded-lg px-2 py-1.5 focus:border-[#C85A32] focus:outline-hidden"
+                          value={userStat}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value as UserStatus;
+                            try {
+                              await updateUserStatus(u.id, newStatus, u.email);
+                              showToast(`Status updated to ${newStatus}!`, 'sparkles');
+                            } catch (err: any) {
+                              showToast(`Failed to update status: ${err.message}`, 'alert-circle');
+                            }
+                          }}
+                        >
+                          <option value="approved">Approved</option>
+                          <option value="pending">Pending</option>
+                          <option value="rejected">Rejected</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => removeUserAccount(u.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer ml-auto"
+                          title="Remove user account"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
 
