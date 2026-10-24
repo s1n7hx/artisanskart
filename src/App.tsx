@@ -46,6 +46,9 @@ export default function App() {
               }
             />
             <Route path="become-a-maker" element={<BecomeAMakerPage />} />
+            <Route path="apply-maker" element={<BecomeAMakerPage />} />
+            <Route path="sell-crafts" element={<BecomeAMakerPage />} />
+            <Route path="become-maker" element={<BecomeAMakerPage />} />
             <Route
               path="admin"
               element={

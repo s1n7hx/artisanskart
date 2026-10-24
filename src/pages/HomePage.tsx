@@ -7,7 +7,15 @@ import { useApp } from '../context/AppContext';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { products, addToCart, setQuickViewId, setIsMakerSignupOpen, makerEarningPercent } = useApp();
+  const { products, addToCart, setQuickViewId, currentUser, makerEarningPercent } = useApp();
+
+  const handleOpenMaker = () => {
+    if (!currentUser) {
+      navigate('/login?redirectTo=/become-a-maker');
+    } else {
+      navigate('/become-a-maker');
+    }
+  };
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
   const starString = (rating: number) => {
@@ -22,7 +30,7 @@ export const HomePage: React.FC = () => {
       {/* Interactive Magnet Hero */}
       <Hero
         onExploreMarketplace={() => navigate('/marketplace')}
-        onOpenMakerSignup={() => setIsMakerSignupOpen(true)}
+        onOpenMakerSignup={handleOpenMaker}
       />
 
       {/* Dual-row Scroll-driven Marquee */}
@@ -212,7 +220,7 @@ export const HomePage: React.FC = () => {
           </div>
           <div className="flex flex-wrap gap-3 shrink-0">
             <button
-              onClick={() => setIsMakerSignupOpen(true)}
+              onClick={handleOpenMaker}
               className="btn-terracotta text-xs md:text-sm font-semibold px-6 py-3 rounded-full flex items-center gap-2 cursor-pointer shadow-md"
             >
               <Sparkles className="w-4 h-4" />

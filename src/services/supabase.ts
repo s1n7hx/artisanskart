@@ -374,16 +374,23 @@ export interface MakerApplicationItem {
   id: string;
   user_id: string;
   school: string;
+  studio_name?: string;
   grade_class: string;
   message: string;
+  description?: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   reviewed_by?: string;
   reviewed_at?: string;
   applicant_name?: string;
   applicant_email: string;
+  phone?: string;
+  applicant_phone?: string;
   craft_type?: string;
+  category?: string;
   portfolio_url?: string;
+  photos?: string[];
+  images?: string[];
 }
 
 export async function submitMakerApplication(payload: {
@@ -393,11 +400,17 @@ export async function submitMakerApplication(payload: {
   applicant_name?: string;
   email?: string;
   applicant_email?: string;
+  phone?: string;
+  applicant_phone?: string;
   craft_type?: string;
+  category?: string;
   school?: string;
+  studio_name?: string;
   portfolio_url?: string;
   grade_class?: string;
   message?: string;
+  description?: string;
+  photos?: string[];
 }) {
   try {
     const res = await fetch('/api/maker-applications/submit', {
@@ -405,29 +418,39 @@ export async function submitMakerApplication(payload: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    if (res.ok) {
-      const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.application) {
       return data.application;
     }
-  } catch (e) {
+    if (!res.ok) {
+      throw new Error(data.error || 'Failed to submit maker application');
+    }
+  } catch (e: any) {
+    if (e.message && e.message.includes('already have an active pending')) {
+      throw e;
+    }
     console.warn('Backend maker-applications submission failed, attempting direct Supabase:', e);
   }
 
   // Fallback direct Supabase insert
   const uid = payload.applicant_id || payload.user_id || `usr_${Date.now()}`;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('maker_applications')
     .insert({
       user_id: uid,
       applicant_email: payload.applicant_email || payload.email,
       applicant_name: payload.applicant_name || payload.full_name,
-      school: payload.craft_type || payload.school || 'Handicrafts Studio',
-      grade_class: payload.portfolio_url || payload.grade_class || 'Craft Series',
-      message: payload.message || 'Artisan Application',
+      school: payload.school || payload.studio_name || payload.craft_type || 'Handicrafts Studio',
+      grade_class: payload.craft_type || payload.category || payload.portfolio_url || 'Craft Series',
+      message: payload.message || payload.description || 'Artisan Application',
       status: 'pending',
     })
     .select()
     .single();
+
+  if (error) {
+    throw new Error(error.message || 'Could not submit maker application');
+  }
 
   return data;
 }

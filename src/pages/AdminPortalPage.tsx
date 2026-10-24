@@ -31,6 +31,8 @@ import {
   Truck,
   RefreshCw,
   CreditCard,
+  Phone,
+  ExternalLink,
   X,
 } from 'lucide-react';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
@@ -88,6 +90,7 @@ export const AdminPortalPage: React.FC = () => {
 
   const [makerApps, setMakerApps] = useState<MakerApplicationItem[]>([]);
   const [loadingApps, setLoadingApps] = useState(false);
+  const [appFilter, setAppFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
 
   // New authorized user state
   const [isAddingUser, setIsAddingUser] = useState(false);
@@ -1662,73 +1665,204 @@ export const AdminPortalPage: React.FC = () => {
             </button>
           </div>
 
-          {makerApps.length === 0 ? (
+          {/* Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+            {[
+              { id: 'all', label: 'All Applications', count: makerApps.length },
+              { id: 'pending', label: 'Pending Review', count: makerApps.filter((a) => a.status === 'pending').length },
+              { id: 'approved', label: 'Approved Makers', count: makerApps.filter((a) => a.status === 'approved').length },
+              { id: 'rejected', label: 'Rejected', count: makerApps.filter((a) => a.status === 'rejected').length },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setAppFilter(tab.id as any)}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border ${
+                  appFilter === tab.id
+                    ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-[#C85A32]'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                  appFilter === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {makerApps.filter((a) => appFilter === 'all' || a.status === appFilter).length === 0 ? (
             <div className="p-10 text-center rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] space-y-3">
               <Hammer className="w-10 h-10 text-slate-400 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800">No Maker Applications Found</h3>
+              <h3 className="text-base font-bold text-slate-800">
+                {appFilter === 'all' ? 'No Maker Applications Found' : `No ${appFilter.toUpperCase()} Applications`}
+              </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                When customers apply through <strong>"Become a Maker"</strong> or the <strong>"Sell Crafts"</strong> portal, their submissions appear here for review.
+                {appFilter === 'pending'
+                  ? 'There are no pending applications awaiting review right now.'
+                  : 'When customers apply through "Become a Maker" or the "Sell Crafts" portal, their submissions appear here for review.'}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {makerApps.map((app) => {
-                const userMatch = usersList.find((u) => u.id === app.user_id);
-                const applicantEmail = app.applicant_email || userMatch?.email || 'Independent Creator';
-                const applicantName = app.applicant_name || userMatch?.name || 'Applicant';
-                const isPending = app.status === 'pending';
-                const isApproved = app.status === 'approved';
-                const isRejected = app.status === 'rejected';
+              {makerApps
+                .filter((a) => appFilter === 'all' || a.status === appFilter)
+                .map((app) => {
+                  const userMatch = usersList.find((u) => u.id === app.user_id);
+                  const applicantEmail = app.applicant_email || (app as any).email || userMatch?.email || 'Independent Creator';
+                  const applicantName = app.applicant_name || (app as any).full_name || userMatch?.name || 'Applicant';
+                  const contactPhone = app.applicant_phone || app.phone || (app as any).contact_phone || '';
+                  const craftCategory = app.craft_type || app.category || app.grade_class || 'Handmade Crafts';
+                  const studioName = app.school || app.studio_name || 'Independent Artisan';
+                  const photoList = Array.isArray(app.photos)
+                    ? app.photos.filter(Boolean)
+                    : (Array.isArray(app.images) ? app.images.filter(Boolean) : []);
+                  const isPending = app.status === 'pending';
+                  const isApproved = app.status === 'approved';
+                  const isRejected = app.status === 'rejected';
 
-                return (
-                  <div
-                    key={app.id}
-                    className="p-5 rounded-2xl border border-[#e7e0d8] bg-[#FAF9F6] hover:bg-white hover:border-[#C85A32]/40 transition space-y-3"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="font-extrabold text-slate-900 text-sm">{applicantName}</h4>
-                          <span
-                            className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                              isApproved
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isPending
-                                ? 'bg-amber-100 text-amber-800 animate-pulse'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {app.status}
+                  return (
+                    <div
+                      key={app.id}
+                      className="p-5 rounded-2xl border border-[#e7e0d8] bg-[#FAF9F6] hover:bg-white hover:border-[#C85A32]/40 transition space-y-4 shadow-2xs"
+                    >
+                      {/* Top Header Row */}
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-extrabold text-slate-900 text-base">{applicantName}</h4>
+                            <span
+                              className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                                isApproved
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : isPending
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200 animate-pulse'
+                                  : 'bg-red-100 text-red-800 border border-red-200'
+                              }`}
+                            >
+                              {app.status}
+                            </span>
+                            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#C85A32]/10 text-[#C85A32]">
+                              {craftCategory}
+                            </span>
+                          </div>
+
+                          {/* Contact Info (Email & Phone) */}
+                          <div className="flex flex-wrap items-center gap-3 text-xs pt-0.5">
+                            <span className="text-slate-600 font-mono">
+                              ✉ {applicantEmail}
+                            </span>
+                            {contactPhone ? (
+                              <a
+                                href={`tel:${contactPhone}`}
+                                className="inline-flex items-center gap-1 font-bold text-slate-800 hover:text-[#C85A32] transition bg-white px-2 py-0.5 rounded-lg border border-slate-200"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-[#C85A32]" />
+                                <span>{contactPhone}</span>
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 italic">No phone provided</span>
+                            )}
+                            <span className="text-slate-700 font-medium">
+                              🏛️ Studio: <strong>{studioName}</strong>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[11px] text-slate-400 block">
+                            Submitted: {new Date(app.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">ID: {app.id.slice(0, 14)}</span>
+                        </div>
+                      </div>
+
+                      {/* Artist Statement / Description */}
+                      {(app.message || app.description) && (
+                        <div className="p-3.5 bg-white rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed space-y-1">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                            Craft Statement &amp; Description:
+                          </span>
+                          <p className="whitespace-pre-wrap">{app.message || app.description}</p>
+                        </div>
+                      )}
+
+                      {/* Uploaded Craft Photos Gallery */}
+                      {photoList.length > 0 && (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                            Uploaded Craft Photos ({photoList.length}):
+                          </span>
+                          <div className="flex flex-wrap gap-2.5">
+                            {photoList.map((imgUrl, pIdx) => (
+                              <a
+                                key={pIdx}
+                                href={imgUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="relative group w-20 h-20 rounded-xl overflow-hidden border border-slate-200 bg-white block shadow-2xs hover:border-[#C85A32] transition"
+                                title="Click to view full photograph"
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`Craft sample ${pIdx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                  <ExternalLink className="w-4 h-4 text-white" />
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bottom Action Bar */}
+                      <div className="pt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[#e7e0d8]">
+                        <div className="text-xs text-slate-500 flex items-center gap-2">
+                          <span>User Account Role:</span>
+                          <span className="font-bold text-slate-800 uppercase px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px]">
+                            {userMatch?.role || 'Customer'}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500 font-mono mt-0.5">{maskEmail(applicantEmail)}</p>
-                        <p className="text-xs text-slate-700 font-medium mt-1">
-                          🏛️ <strong>{app.school}</strong> • Series: <strong>{app.grade_class}</strong>
-                        </p>
-                      </div>
 
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(app.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-
-                    {app.message && (
-                      <div className="p-3 bg-white rounded-xl border border-slate-200 text-xs text-slate-700 leading-relaxed">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-                          Artist Statement / Proposal:
-                        </span>
-                        {app.message}
-                      </div>
-                    )}
-
-                    <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[#e7e0d8]">
-                      <div className="text-xs text-slate-500">
-                        Current role: <strong className="text-slate-800 uppercase">{userMatch?.role || 'Customer'}</strong>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {isPending ? (
-                          <>
+                        <div className="flex items-center gap-2">
+                          {isPending ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await reviewMakerApplication(app.id, app.user_id, 'approved');
+                                  setMakerApps((prev) =>
+                                    prev.map((a) => (a.id === app.id ? { ...a, status: 'approved' } : a))
+                                  );
+                                  promoteUserRole(app.user_id, 'maker', 'approved');
+                                  showToast(`Approved maker application for ${applicantName}! User is now a Maker.`, 'check-circle-2');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                              >
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Approve Maker</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await reviewMakerApplication(app.id, app.user_id, 'rejected');
+                                  setMakerApps((prev) =>
+                                    prev.map((a) => (a.id === app.id ? { ...a, status: 'rejected' } : a))
+                                  );
+                                  promoteUserRole(app.user_id, 'customer', 'rejected');
+                                  showToast(`Rejected application for ${applicantName}. User remains customer.`, 'alert-circle');
+                                }}
+                                className="px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
+                              >
+                                <X className="w-4 h-4" />
+                                <span>Reject</span>
+                              </button>
+                            </>
+                          ) : isRejected ? (
                             <button
                               type="button"
                               onClick={async () => {
@@ -1736,56 +1870,41 @@ export const AdminPortalPage: React.FC = () => {
                                 setMakerApps((prev) =>
                                   prev.map((a) => (a.id === app.id ? { ...a, status: 'approved' } : a))
                                 );
-                                if (userMatch) {
-                                  promoteUserRole(userMatch.id, 'maker', 'approved');
-                                }
-                                showToast(`Approved maker application for ${applicantName}!`, 'check-circle-2');
+                                promoteUserRole(app.user_id, 'maker', 'approved');
+                                showToast(`Re-approved maker application for ${applicantName}!`, 'check-circle-2');
                               }}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
                             >
-                              ✓ Approve Maker
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>Re-Approve as Maker</span>
                             </button>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await reviewMakerApplication(app.id, app.user_id, 'rejected');
-                                setMakerApps((prev) =>
-                                  prev.map((a) => (a.id === app.id ? { ...a, status: 'rejected' } : a))
-                                );
-                                showToast(`Rejected application for ${applicantName}.`, 'alert-circle');
-                              }}
-                              className="px-3 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold text-xs transition cursor-pointer"
-                            >
-                              ✗ Reject
-                            </button>
-                          </>
-                        ) : isRejected ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              await reviewMakerApplication(app.id, app.user_id, 'approved');
-                              setMakerApps((prev) =>
-                                prev.map((a) => (a.id === app.id ? { ...a, status: 'approved' } : a))
-                              );
-                              if (userMatch) {
-                                promoteUserRole(userMatch.id, 'maker', 'approved');
-                              }
-                              showToast(`Re-approved maker application for ${applicantName}!`, 'check-circle-2');
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer"
-                          >
-                            ✓ Re-Approve
-                          </button>
-                        ) : (
-                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                            <CheckCircle2 className="w-4 h-4" /> Approved Maker
-                          </span>
-                        )}
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Approved Maker &bull; Full /maker Portal Access</span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await reviewMakerApplication(app.id, app.user_id, 'rejected');
+                                  setMakerApps((prev) =>
+                                    prev.map((a) => (a.id === app.id ? { ...a, status: 'rejected' } : a))
+                                  );
+                                  promoteUserRole(app.user_id, 'customer', 'rejected');
+                                  showToast(`Revoked maker status for ${applicantName}.`, 'alert-circle');
+                                }}
+                                className="text-xs text-red-600 hover:text-red-800 font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                              >
+                                Revoke
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           )}
         </div>

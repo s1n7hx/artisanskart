@@ -1,10 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Instagram, Facebook, Youtube, Heart, Sparkles, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const Footer: React.FC = () => {
-  const { setActiveCategory, setIsMakerSignupOpen, userRole, makerEarningPercent } = useApp();
+  const navigate = useNavigate();
+  const { setActiveCategory, currentUser, userRole, makerEarningPercent } = useApp();
 
   const handleCategoryClick = (category: string) => {
     setActiveCategory(category);
@@ -117,7 +118,14 @@ export const Footer: React.FC = () => {
             </li>
             <li>
               <button
-                onClick={() => setIsMakerSignupOpen(true)}
+                type="button"
+                onClick={() => {
+                  if (!currentUser) {
+                    navigate('/login?redirectTo=/become-a-maker');
+                  } else {
+                    navigate('/become-a-maker');
+                  }
+                }}
                 className="hover:text-white transition text-left cursor-pointer flex items-center gap-1 text-[#E6A373]"
               >
                 <Sparkles className="w-3.5 h-3.5" /> Sell Your Crafts

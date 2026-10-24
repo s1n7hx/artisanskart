@@ -62,6 +62,7 @@ export const Modals: React.FC<ModalsProps> = ({
 
   // Maker Signup state
   const [makerEmail, setMakerEmail] = useState(currentUser?.email || '');
+  const [makerPhone, setMakerPhone] = useState('');
   React.useEffect(() => {
     if (currentUser?.email && !makerEmail) {
       setMakerEmail(currentUser.email);
@@ -159,6 +160,18 @@ export const Modals: React.FC<ModalsProps> = ({
                   onChange={(e) => setMakerEmail(e.target.value)}
                   className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
                   placeholder="e.g. aditi@example.com"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-slate-700">Contact Phone Number *</label>
+                <input
+                  required
+                  type="tel"
+                  name="phone"
+                  value={makerPhone}
+                  onChange={(e) => setMakerPhone(e.target.value)}
+                  className="w-full mt-1 px-4 py-2.5 rounded-xl border border-[#e7e0d8] text-sm"
+                  placeholder="e.g. +91 98765 43210"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

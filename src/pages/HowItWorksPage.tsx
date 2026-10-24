@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Sparkles, CheckCircle2, Package, ShieldCheck, Truck, HelpCircle } from 'lucide-react';
 import { HOW_IT_WORKS } from '../data';
 import { useApp } from '../context/AppContext';
 
 export const HowItWorksPage: React.FC = () => {
-  const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
+  const navigate = useNavigate();
+  const { currentUser, makerEarningPercent } = useApp();
   const [examplePrice, setExamplePrice] = useState<number>(850);
 
   const makerEarnings = Math.round(examplePrice * (makerEarningPercent / 100));
@@ -203,7 +204,13 @@ export const HowItWorksPage: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </Link>
             <button
-              onClick={() => setIsMakerSignupOpen(true)}
+              onClick={() => {
+                if (!currentUser) {
+                  navigate('/login?redirectTo=/become-a-maker');
+                } else {
+                  navigate('/become-a-maker');
+                }
+              }}
               className="bg-white border border-[#e7e0d8] text-[#1E293B] hover:border-[#1E293B] text-sm font-semibold px-6 py-3 rounded-full cursor-pointer transition"
             >
               Apply as Maker / Creator

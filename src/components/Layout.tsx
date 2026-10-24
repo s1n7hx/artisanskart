@@ -9,6 +9,7 @@ import { Toast } from './Toast';
 import { ScrollToTop } from './ScrollToTop';
 import { AuthModal } from './AuthModal';
 import { useApp } from '../context/AppContext';
+import { submitMakerApplication } from '../services/supabase';
 
 export const Layout: React.FC = () => {
   const {
@@ -28,6 +29,7 @@ export const Layout: React.FC = () => {
     toasts,
     showToast,
     confirmCheckout,
+    currentUser,
     userRole,
   } = useApp();
 
@@ -75,10 +77,49 @@ export const Layout: React.FC = () => {
     };
   }, [location.pathname]);
 
-  const handleSubmitMakerSignup = (e: React.FormEvent) => {
+  const handleSubmitMakerSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsMakerSignupOpen(false);
-    showToast("Application submitted! We'll review and get back within 48 hours.", 'party-popper');
+    if (!currentUser) {
+      setIsMakerSignupOpen(false);
+      navigate('/login?redirectTo=/become-a-maker');
+      return;
+    }
+
+    try {
+      const formEl = e.target as HTMLFormElement;
+      const formData = new FormData(formEl);
+      const fullName = String(formData.get('full_name') || currentUser.name || '').trim();
+      const applicantEmail = String(formData.get('applicant_email') || currentUser.email || '').trim();
+      const phone = String(formData.get('phone') || '').trim();
+      const school = String(formData.get('school') || '').trim();
+      const gradeClass = String(formData.get('grade_class') || '').trim();
+      const craftType = String(formData.get('craft_type') || '').trim();
+      const message = String(formData.get('message') || '').trim();
+
+      await submitMakerApplication({
+        applicant_id: currentUser.id,
+        user_id: currentUser.id,
+        full_name: fullName,
+        applicant_name: fullName,
+        email: applicantEmail,
+        applicant_email: applicantEmail,
+        phone,
+        applicant_phone: phone,
+        school,
+        studio_name: school,
+        craft_type: craftType,
+        category: craftType,
+        portfolio_url: gradeClass,
+        grade_class: gradeClass,
+        message,
+        description: message,
+      });
+
+      setIsMakerSignupOpen(false);
+      showToast("Application submitted! Master Admin review is underway.", 'party-popper');
+    } catch (err: any) {
+      showToast(err.message || 'Could not submit application.', 'alert-circle');
+    }
   };
 
   return (

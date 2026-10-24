@@ -190,7 +190,13 @@ export const Navbar: React.FC = () => {
           {/* Sell Your Crafts Action Button */}
           <button
             id="sellCraftsBtn"
-            onClick={() => setIsMakerSignupOpen(true)}
+            onClick={() => {
+              if (!currentUser) {
+                navigate('/login?redirectTo=/become-a-maker');
+              } else {
+                navigate('/become-a-maker');
+              }
+            }}
             className="hidden sm:flex items-center gap-1.5 btn-terracotta text-xs md:text-sm font-semibold px-4 py-2.5 rounded-full cursor-pointer shadow-xs touch-manipulation"
           >
             <Sparkles className="w-4 h-4" />
@@ -409,7 +415,11 @@ export const Navbar: React.FC = () => {
               type="button"
               onClick={() => {
                 setMobileMenuOpen(false);
-                setIsMakerSignupOpen(true);
+                if (!currentUser) {
+                  navigate('/login?redirectTo=/become-a-maker');
+                } else {
+                  navigate('/become-a-maker');
+                }
               }}
               className="flex-1 btn-terracotta text-xs font-semibold py-3 rounded-xl flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98] transition shadow-xs"
             >

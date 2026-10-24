@@ -2436,24 +2436,49 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
       user_id,
       full_name,
       applicant_name,
+      name: bodyName,
       email,
       applicant_email,
+      phone,
+      applicant_phone,
       craft_type,
+      category,
       school,
+      studio_name,
       portfolio_url,
       grade_class,
       message,
+      description,
+      photos,
+      images,
     } = req.body || {};
 
     const userId = applicant_id || user_id || `usr_app_${Date.now()}`;
-    const name = full_name || applicant_name || 'Artisan Applicant';
+    const name = full_name || applicant_name || bodyName || 'Artisan Applicant';
     const contactEmail = (email || applicant_email || '').trim().toLowerCase();
-    const craft = craft_type || school || 'Handicrafts Studio';
+    const contactPhone = (phone || applicant_phone || '').trim();
+    const craft = craft_type || category || school || 'Handicrafts Studio';
+    const studio = studio_name || school || 'Independent Creator Studio';
     const portfolio = portfolio_url || grade_class || 'Studio Crafts Series';
-    const appMsg = message || 'Handcrafted artisan application.';
+    const appMsg = message || description || 'Handcrafted artisan application.';
+    const photoList = Array.isArray(photos) ? photos.filter(Boolean) : (Array.isArray(images) ? images.filter(Boolean) : (photos ? [photos] : []));
 
     if (!contactEmail) {
       return res.status(400).json({ success: false, error: 'Applicant email is required.' });
+    }
+
+    const diskApps = loadMakerAppsFromDisk();
+
+    // Prevent duplicate pending applications from the same user
+    const existingPending = diskApps.find(
+      (a) => (a.user_id === userId || (contactEmail && (a.applicant_email || '').toLowerCase() === contactEmail)) && a.status === 'pending'
+    );
+    if (existingPending) {
+      return res.status(409).json({
+        success: false,
+        error: 'You already have an active pending Maker application under review. Please wait for Master Admin evaluation.',
+        application: existingPending,
+      });
     }
 
     const newApp = {
@@ -2462,22 +2487,27 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
       applicant_id: userId,
       applicant_name: name,
       applicant_email: contactEmail,
+      phone: contactPhone,
+      applicant_phone: contactPhone,
       craft_type: craft,
-      school: craft,
+      category: craft,
+      school: studio,
+      studio_name: studio,
       portfolio_url: portfolio,
       grade_class: portfolio,
       message: appMsg,
+      description: appMsg,
+      photos: photoList,
       status: 'pending',
       created_at: new Date().toISOString(),
     };
 
-    // 1. Save to disk
-    const diskApps = loadMakerAppsFromDisk();
+    // 1. Save to disk (replace previous non-pending if any)
     const filtered = diskApps.filter((a) => a.user_id !== userId && a.applicant_email !== contactEmail);
     filtered.unshift(newApp);
     saveMakerAppsToDisk(filtered);
 
-    // 2. Persist in Supabase site_settings as backup
+    // 2. Persist in Supabase site_settings as resilient backup
     try {
       await supabaseAdmin.from('site_settings').upsert({
         key: 'maker_applications_v1',
@@ -2492,26 +2522,91 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
     try {
       await supabaseAdmin.from('maker_applications').insert({
         user_id: userId,
-        school: craft,
-        grade_class: portfolio,
+        applicant_name: name,
+        applicant_email: contactEmail,
+        school: studio,
+        grade_class: craft,
         message: appMsg,
         status: 'pending',
         created_at: newApp.created_at,
       });
-    } catch (e) {}
+    } catch (e) {
+      // Fallback insert with standard columns
+      try {
+        await supabaseAdmin.from('maker_applications').insert({
+          user_id: userId,
+          school: studio,
+          grade_class: craft,
+          message: `${name} | ${contactEmail} | ${contactPhone} | ${appMsg}`,
+          status: 'pending',
+          created_at: newApp.created_at,
+        });
+      } catch (innerErr) {}
+    }
 
-    console.log(`🔨 [Maker Application Received] From ${name} (${contactEmail})`);
+    console.log(`🔨 [Maker Application Received] From ${name} (${contactEmail}, Phone: ${contactPhone || 'N/A'}, Craft: ${craft})`);
+
+    // 4. Send email notification to MASTER_ADMIN_EMAIL
+    const masterAdminEmail = process.env.MASTER_ADMIN_EMAIL || 'ssumollah@gmail.com';
+    const hostHeader = req.get('host') || 'artisanskart.in';
+    const adminReviewUrl = `${req.protocol}://${hostHeader}/admin/applications`;
+
+    const emailSubject = `[ArtisansKart] New Maker Application: ${name} (${craft})`;
+    const photoListHtml = photoList.length > 0
+      ? `<div style="margin-top: 15px;"><p><strong>Uploaded Craft Photos (${photoList.length}):</strong></p><div>${photoList.map((url: string) => `<a href="${url}" target="_blank" style="display:inline-block; margin-right:8px; margin-bottom:8px;"><img src="${url}" alt="Craft Photo" style="width:100px; height:100px; object-fit:cover; border-radius:8px; border:1px solid #ddd;" /></a>`).join('')}</div></div>`
+      : '';
+
+    const emailBodyHtml = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e7e0d8; border-radius: 16px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #C85A32; margin: 0; font-size: 24px;">ArtisansKart.in</h2>
+          <p style="color: #64748b; font-size: 13px; margin-top: 4px;">New Independent Creator & Maker Application</p>
+        </div>
+        
+        <div style="background-color: #FAF9F6; border: 1px solid #e7e0d8; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+          <h3 style="margin: 0 0 12px 0; color: #1e293b; font-size: 16px;">Applicant Information</h3>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Full Name:</strong> ${name}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Email:</strong> <a href="mailto:${contactEmail}" style="color: #C85A32;">${contactEmail}</a></p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Phone:</strong> ${contactPhone ? `<a href="tel:${contactPhone}" style="color: #1e293b;">${contactPhone}</a>` : 'Not provided'}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Studio / Brand:</strong> ${studio}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Craft Category:</strong> ${craft}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Application ID:</strong> <code>${newApp.id}</code></p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Submission Date:</strong> ${new Date(newApp.created_at).toLocaleString('en-IN')}</p>
+        </div>
+
+        <div style="background-color: #ffffff; border: 1px solid #e7e0d8; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+          <h4 style="margin: 0 0 8px 0; color: #1e293b; font-size: 14px;">Craft Description & Artist Statement:</h4>
+          <p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.6; white-space: pre-wrap;">${appMsg}</p>
+          ${photoListHtml}
+        </div>
+
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="${adminReviewUrl}" style="display: inline-block; background-color: #C85A32; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; padding: 14px 28px; border-radius: 9999px; box-shadow: 0 2px 4px rgba(200, 90, 50, 0.2);">
+            Review & Approve in Master Admin Dashboard →
+          </a>
+        </div>
+
+        <p style="text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8;">
+          ArtisansKart Administrative Control Center • <a href="${adminReviewUrl}" style="color: #94a3b8;">${adminReviewUrl}</a>
+        </p>
+      </div>
+    `;
 
     try {
-      await transporter.sendMail({
-        from: '"ArtisansKart" <no-reply@artisanskart.in>',
-        to: process.env.MASTER_ADMIN_EMAIL || 'admin@artisanskart.in',
-        subject: 'New Maker Application Received',
-        text: `A new maker application has been submitted by ${name} (${contactEmail}).\n\nApplication ID: ${newApp.id}\nCraft: ${craft}\n\nReview link: https://artisanskart.in/admin/applications`,
-      });
-      console.log('📧 [Maker Application Email Sent]');
-    } catch (emailErr) {
-      console.error('❌ Failed to send maker application email:', emailErr);
+      if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+        await transporter.sendMail({
+          from: `"ArtisansKart Platform" <${process.env.SMTP_USER}>`,
+          to: masterAdminEmail,
+          subject: emailSubject,
+          text: `A new maker application has been submitted by ${name} (${contactEmail}, Phone: ${contactPhone || 'N/A'}).\n\nCraft: ${craft}\nStudio: ${studio}\nDescription: ${appMsg}\nApplication ID: ${newApp.id}\n\nReview link: ${adminReviewUrl}`,
+          html: emailBodyHtml,
+        });
+        console.log(`📧 [Maker Application Email Sent to ${masterAdminEmail}]`);
+      } else {
+        console.log(`📧 [Maker Application Notification Formatted] (SMTP credentials pending in .env; notification prepared for Master Admin ${masterAdminEmail})`);
+      }
+    } catch (emailErr: any) {
+      console.error('❌ Failed to send maker application email:', emailErr.message);
     }
 
     return res.status(201).json({
@@ -2627,9 +2722,42 @@ app.post('/api/maker-applications/update-status', async (req: Request, res: Resp
           });
         } catch (authErr) {}
 
+        // Update in users disk store
+        const users = loadUsersFromDisk();
+        const userIdx = users.findIndex((u) => u.id === targetUserId || (profile?.email && u.email?.toLowerCase() === profile.email.toLowerCase()));
+        if (userIdx >= 0) {
+          users[userIdx].role = 'maker';
+          users[userIdx].status = 'approved';
+          saveUsersToDisk(users);
+        }
+
         console.log(`🎉 [Maker Promoted] User ${targetUserId} upgraded to Maker ('approved')`);
       } catch (roleErr: any) {
         console.warn('[Maker Role Upgrade Warning]:', roleErr.message);
+      }
+    } else if (newStatus === 'rejected' && targetUserId) {
+      // Rule 8: When rejected, keep user as customer and do not give maker access
+      try {
+        await supabaseAdmin
+          .from('profiles')
+          .update({
+            role: 'customer',
+            status: 'rejected',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', targetUserId);
+
+        const users = loadUsersFromDisk();
+        const userIdx = users.findIndex((u) => u.id === targetUserId);
+        if (userIdx >= 0) {
+          users[userIdx].role = 'customer';
+          users[userIdx].status = 'rejected';
+          saveUsersToDisk(users);
+        }
+
+        console.log(`🚫 [Maker Application Rejected] User ${targetUserId} remains Customer ('rejected')`);
+      } catch (rejectErr: any) {
+        console.warn('[Maker Role Reject Warning]:', rejectErr.message);
       }
     }
 
