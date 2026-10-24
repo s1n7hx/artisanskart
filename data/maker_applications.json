@@ -1,0 +1,18 @@
+[
+  {
+    "id": "c07fee9a-e796-4865-9339-7f9bb23c8e1f",
+    "user_id": "ec883a80-c119-43d3-8c6a-31b2633d7b81",
+    "applicant_name": "Indoor Forest Life",
+    "applicant_email": "indoorforestlife1@gmail.com",
+    "phone": "9876543210",
+    "studio_name": "Terrarium & Moss Guild",
+    "craft_type": "Clay Crafts & Pottery",
+    "message": "Hand-sculpted bonsai planters and botanical terracotta pots made with love.",
+    "status": "approved",
+    "created_at": "2026-10-24T16:51:38.311+00:00",
+    "reviewed_at": "2026-10-24T16:51:40.887Z",
+    "photos": [
+      "https://images.pexels.com/photos/35473885/pexels-photo-35473885.jpeg"
+    ]
+  }
+]

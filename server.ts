@@ -1078,6 +1078,23 @@ app.post('/api/payment/record-failure', async (req: Request, res: Response) => {
 // API Route 3b: Validated Promotional Coupon Evaluation (Server-Side)
 // Never invents discounts without genuine eligibility.
 // -------------------------------------------------------------
+app.get('/api/debug/check-table', async (req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('maker_applications')
+      .select('*')
+      .limit(1);
+    
+    if (error) {
+      return res.status(500).json({ error: error.message, details: error.details, hint: error.hint });
+    }
+    
+    return res.json({ success: true, data });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/coupons/validate', (req: Request, res: Response) => {
   try {
     const { code, subtotal, userEmail, userRole } = req.body;
@@ -2363,10 +2380,12 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
 
 
 // -------------------------------------------------------------
-// Server Persistent Storage for Maker Applications & User Roles
+// Server Persistent Storage & Supabase Database Integrations
+// Maker Applications, Authorized Emails, and Role RBAC
 // -------------------------------------------------------------
 const MAKER_APPS_FILE_PATH = path.resolve(__dirname, 'data', 'maker_applications.json');
 const ALL_USERS_FILE_PATH = path.resolve(__dirname, 'data', 'all_users.json');
+const AUTHORIZED_EMAILS_FILE_PATH = path.resolve(__dirname, 'data', 'authorized_emails.json');
 
 function ensureDataFileExists(filePath: string, defaultContent: any = []): void {
   try {
@@ -2405,29 +2424,52 @@ function saveMakerAppsToDisk(apps: any[]): void {
   }
 }
 
-function loadUsersFromDisk(): any[] {
+async function getAuthorizedEmailsFromSupabase(): Promise<any[]> {
   try {
-    ensureDataFileExists(ALL_USERS_FILE_PATH);
-    if (fs.existsSync(ALL_USERS_FILE_PATH)) {
-      const content = fs.readFileSync(ALL_USERS_FILE_PATH, 'utf-8');
+    const { data, error } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'authorized_emails')
+      .maybeSingle();
+
+    if (!error && data?.value && Array.isArray(data.value)) {
+      return data.value;
+    }
+  } catch (err) {
+    console.warn('[Authorized Emails Read Notice]:', err);
+  }
+
+  try {
+    ensureDataFileExists(AUTHORIZED_EMAILS_FILE_PATH);
+    if (fs.existsSync(AUTHORIZED_EMAILS_FILE_PATH)) {
+      const content = fs.readFileSync(AUTHORIZED_EMAILS_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) return parsed;
     }
-  } catch (err) {
-    console.warn('[Users Store Warning]: Failed to read users from disk:', err);
-  }
+  } catch (e) {}
   return [];
 }
 
-function saveUsersToDisk(users: any[]): void {
+async function saveAuthorizedEmailsToSupabase(list: any[]): Promise<void> {
   try {
-    ensureDataFileExists(ALL_USERS_FILE_PATH);
-    fs.writeFileSync(ALL_USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf-8');
+    ensureDataFileExists(AUTHORIZED_EMAILS_FILE_PATH);
+    fs.writeFileSync(AUTHORIZED_EMAILS_FILE_PATH, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (e) {}
+
+  try {
+    await supabaseAdmin.from('site_settings').upsert({
+      key: 'authorized_emails',
+      value: list,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
   } catch (err) {
-    console.warn('[Users Store Warning]: Failed to persist users to disk:', err);
+    console.warn('[Authorized Emails Supabase Save Warning]:', err);
   }
 }
 
+// -------------------------------------------------------------
+// API Route 8: Maker Applications Submission (Supabase + Notifications)
+// -------------------------------------------------------------
 // POST /api/maker-applications/submit
 app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (req: Request, res: Response) => {
   try {
@@ -2445,111 +2487,120 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
       category,
       school,
       studio_name,
-      portfolio_url,
-      grade_class,
       message,
       description,
       photos,
       images,
     } = req.body || {};
 
-    const userId = applicant_id || user_id || `usr_app_${Date.now()}`;
-    const name = full_name || applicant_name || bodyName || 'Artisan Applicant';
-    const contactEmail = (email || applicant_email || '').trim().toLowerCase();
-    const contactPhone = (phone || applicant_phone || '').trim();
-    const craft = craft_type || category || school || 'Handicrafts Studio';
-    const studio = studio_name || school || 'Independent Creator Studio';
-    const portfolio = portfolio_url || grade_class || 'Studio Crafts Series';
-    const appMsg = message || description || 'Handcrafted artisan application.';
-    const photoList = Array.isArray(photos) ? photos.filter(Boolean) : (Array.isArray(images) ? images.filter(Boolean) : (photos ? [photos] : []));
+    const rawUserId = String(applicant_id || user_id || '').trim();
+    const name = String(full_name || applicant_name || bodyName || 'Artisan Applicant').trim();
+    const contactEmail = String(email || applicant_email || '').trim().toLowerCase();
+    const contactPhone = String(phone || applicant_phone || '').trim();
+    const craft = String(craft_type || category || 'Handicrafts').trim();
+    const studio = String(studio_name || school || `${name}'s Studio`).trim();
+    const appMsg = String(message || description || 'Handcrafted artisan application.').trim();
+    const photoList = Array.isArray(photos)
+      ? photos.filter(Boolean)
+      : Array.isArray(images)
+      ? images.filter(Boolean)
+      : photos
+      ? [photos]
+      : [];
 
-    if (!contactEmail) {
-      return res.status(400).json({ success: false, error: 'Applicant email is required.' });
+    if (!contactEmail || !contactEmail.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Valid applicant email is required.' });
     }
 
-    const diskApps = loadMakerAppsFromDisk();
+    // Verify UUID format for user_id to satisfy PostgreSQL uuid type constraint
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let validUserId = uuidRegex.test(rawUserId) ? rawUserId : null;
 
-    // Prevent duplicate pending applications from the same user
-    const existingPending = diskApps.find(
-      (a) => (a.user_id === userId || (contactEmail && (a.applicant_email || '').toLowerCase() === contactEmail)) && a.status === 'pending'
-    );
-    if (existingPending) {
-      return res.status(409).json({
+    if (!validUserId) {
+      // Look up user by email in profiles
+      const { data: foundProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('email', contactEmail)
+        .maybeSingle();
+
+      if (foundProfile?.id && uuidRegex.test(foundProfile.id)) {
+        validUserId = foundProfile.id;
+      }
+    }
+
+    if (!validUserId) {
+      return res.status(401).json({
         success: false,
-        error: 'You already have an active pending Maker application under review. Please wait for Master Admin evaluation.',
-        application: existingPending,
+        error: 'Please sign in with your Google account before submitting a Maker Application.',
       });
     }
 
-    const newApp = {
-      id: `app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      user_id: userId,
-      applicant_id: userId,
+    // 1. Prevent duplicate pending applications from the same user or email in Supabase
+    const { data: existingPendingDb } = await supabaseAdmin
+      .from('maker_applications')
+      .select('*')
+      .or(`user_id.eq.${validUserId},applicant_email.ilike.${contactEmail}`)
+      .eq('status', 'pending')
+      .limit(1)
+      .maybeSingle();
+
+    if (existingPendingDb) {
+      return res.status(409).json({
+        success: false,
+        error: 'You already have an active pending Maker application under review. Please wait for Master Admin evaluation.',
+        application: existingPendingDb,
+      });
+    }
+
+    // 2. Insert into Supabase maker_applications table with exact schema columns
+    const dbPayload = {
+      user_id: validUserId,
       applicant_name: name,
       applicant_email: contactEmail,
       phone: contactPhone,
-      applicant_phone: contactPhone,
-      craft_type: craft,
-      category: craft,
-      school: studio,
       studio_name: studio,
-      portfolio_url: portfolio,
-      grade_class: portfolio,
+      craft_type: craft,
       message: appMsg,
-      description: appMsg,
       photos: photoList,
       status: 'pending',
       created_at: new Date().toISOString(),
     };
 
-    // 1. Save to disk (replace previous non-pending if any)
-    const filtered = diskApps.filter((a) => a.user_id !== userId && a.applicant_email !== contactEmail);
-    filtered.unshift(newApp);
-    saveMakerAppsToDisk(filtered);
+    const { data: insertedDbApp, error: dbInsertError } = await supabaseAdmin
+      .from('maker_applications')
+      .insert(dbPayload)
+      .select()
+      .single();
 
-    // 2. Persist in Supabase site_settings as resilient backup
+    if (dbInsertError) {
+      console.error('❌ [Supabase maker_applications Insert Error]:', dbInsertError.message);
+      return res.status(500).json({
+        success: false,
+        error: `Database error storing application: ${dbInsertError.message}`,
+      });
+    }
+
+    // 3. Keep local disk store and site_settings synchronized
+    const diskApps = loadMakerAppsFromDisk();
+    const filteredDisk = diskApps.filter((a) => a.user_id !== validUserId && a.applicant_email !== contactEmail);
+    filteredDisk.unshift(insertedDbApp);
+    saveMakerAppsToDisk(filteredDisk);
+
     try {
       await supabaseAdmin.from('site_settings').upsert({
         key: 'maker_applications_v1',
-        value: filtered,
+        value: filteredDisk,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'key' });
-    } catch (dbErr) {
-      console.warn('[Maker Applications DB Notice]:', dbErr);
-    }
+    } catch (e) {}
 
-    // 3. Attempt direct write into Supabase maker_applications table if it exists
-    try {
-      await supabaseAdmin.from('maker_applications').insert({
-        user_id: userId,
-        applicant_name: name,
-        applicant_email: contactEmail,
-        school: studio,
-        grade_class: craft,
-        message: appMsg,
-        status: 'pending',
-        created_at: newApp.created_at,
-      });
-    } catch (e) {
-      // Fallback insert with standard columns
-      try {
-        await supabaseAdmin.from('maker_applications').insert({
-          user_id: userId,
-          school: studio,
-          grade_class: craft,
-          message: `${name} | ${contactEmail} | ${contactPhone} | ${appMsg}`,
-          status: 'pending',
-          created_at: newApp.created_at,
-        });
-      } catch (innerErr) {}
-    }
-
-    console.log(`🔨 [Maker Application Received] From ${name} (${contactEmail}, Phone: ${contactPhone || 'N/A'}, Craft: ${craft})`);
+    console.log(`🔨 [Maker Application Stored in Supabase] ID: ${insertedDbApp.id} from ${name} (${contactEmail}, Studio: ${studio})`);
 
     // 4. Send email notification to MASTER_ADMIN_EMAIL
     const masterAdminEmail = process.env.MASTER_ADMIN_EMAIL || 'ssumollah@gmail.com';
     const hostHeader = req.get('host') || 'artisanskart.in';
-    const adminReviewUrl = `${req.protocol}://${hostHeader}/admin/applications`;
+    const adminReviewUrl = `${req.protocol}://${hostHeader}/admin`;
 
     const emailSubject = `[ArtisansKart] New Maker Application: ${name} (${craft})`;
     const photoListHtml = photoList.length > 0
@@ -2570,8 +2621,8 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
           <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Phone:</strong> ${contactPhone ? `<a href="tel:${contactPhone}" style="color: #1e293b;">${contactPhone}</a>` : 'Not provided'}</p>
           <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Studio / Brand:</strong> ${studio}</p>
           <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Craft Category:</strong> ${craft}</p>
-          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Application ID:</strong> <code>${newApp.id}</code></p>
-          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Submission Date:</strong> ${new Date(newApp.created_at).toLocaleString('en-IN')}</p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Application ID:</strong> <code>${insertedDbApp.id}</code></p>
+          <p style="margin: 6px 0; font-size: 14px; color: #334155;"><strong>Submission Date:</strong> ${new Date(insertedDbApp.created_at).toLocaleString('en-IN')}</p>
         </div>
 
         <div style="background-color: #ffffff; border: 1px solid #e7e0d8; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
@@ -2585,10 +2636,6 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
             Review & Approve in Master Admin Dashboard →
           </a>
         </div>
-
-        <p style="text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8;">
-          ArtisansKart Administrative Control Center • <a href="${adminReviewUrl}" style="color: #94a3b8;">${adminReviewUrl}</a>
-        </p>
       </div>
     `;
 
@@ -2598,21 +2645,19 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
           from: `"ArtisansKart Platform" <${process.env.SMTP_USER}>`,
           to: masterAdminEmail,
           subject: emailSubject,
-          text: `A new maker application has been submitted by ${name} (${contactEmail}, Phone: ${contactPhone || 'N/A'}).\n\nCraft: ${craft}\nStudio: ${studio}\nDescription: ${appMsg}\nApplication ID: ${newApp.id}\n\nReview link: ${adminReviewUrl}`,
+          text: `New maker application from ${name} (${contactEmail}, Phone: ${contactPhone}). Craft: ${craft}. Studio: ${studio}. Link: ${adminReviewUrl}`,
           html: emailBodyHtml,
         });
         console.log(`📧 [Maker Application Email Sent to ${masterAdminEmail}]`);
-      } else {
-        console.log(`📧 [Maker Application Notification Formatted] (SMTP credentials pending in .env; notification prepared for Master Admin ${masterAdminEmail})`);
       }
     } catch (emailErr: any) {
-      console.error('❌ Failed to send maker application email:', emailErr.message);
+      console.warn('Notice: Failed to send maker application email notification:', emailErr.message);
     }
 
     return res.status(201).json({
       success: true,
-      application: newApp,
-      message: 'Your Maker application has been logged and submitted for Master Admin review!',
+      application: insertedDbApp,
+      message: 'Your Maker application has been received and stored in Supabase for Master Admin review!',
     });
   } catch (err: any) {
     console.error('❌ [/api/maker-applications/submit Error]:', err.message);
@@ -2623,33 +2668,39 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
 // GET /api/maker-applications
 app.get('/api/maker-applications', async (req: Request, res: Response) => {
   try {
-    let apps = loadMakerAppsFromDisk();
+    const targetUserId = req.query.userId as string;
+    const targetEmail = (req.query.email as string || '').trim().toLowerCase();
 
-    // Fallback/Merge with Supabase site_settings or maker_applications table
-    try {
-      const { data: dbData } = await supabaseAdmin
-        .from('site_settings')
-        .select('value')
-        .eq('key', 'maker_applications_v1')
-        .maybeSingle();
+    // Query real Supabase maker_applications table
+    let query = supabaseAdmin
+      .from('maker_applications')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (dbData?.value && Array.isArray(dbData.value) && dbData.value.length > 0) {
-        // Merge without duplicates
-        const existingIds = new Set(apps.map((a) => a.id));
-        for (const item of dbData.value) {
-          if (!existingIds.has(item.id)) {
-            apps.push(item);
+    if (targetUserId) {
+      query = query.eq('user_id', targetUserId);
+    } else if (targetEmail) {
+      query = query.ilike('applicant_email', targetEmail);
+    }
+
+    const { data: dbApps, error } = await query;
+    if (error) {
+      console.warn('[Supabase maker_applications fetch notice]:', error.message);
+    }
+
+    let apps = dbApps || [];
+
+    // Fallback merge with disk storage if any local records exist
+    const diskApps = loadMakerAppsFromDisk();
+    const existingIds = new Set(apps.map((a: any) => a.id));
+    for (const da of diskApps) {
+      if (!existingIds.has(da.id)) {
+        if (!targetUserId || da.user_id === targetUserId) {
+          if (!targetEmail || (da.applicant_email || '').toLowerCase() === targetEmail) {
+            apps.push(da);
           }
         }
       }
-    } catch (e) {}
-
-    // Sort descending by created_at
-    apps.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-
-    const targetUserId = req.query.userId as string;
-    if (targetUserId) {
-      apps = apps.filter((a) => a.user_id === targetUserId || a.applicant_id === targetUserId);
     }
 
     return res.json({ success: true, count: apps.length, applications: apps });
@@ -2669,103 +2720,238 @@ app.post('/api/maker-applications/update-status', async (req: Request, res: Resp
       return res.status(400).json({ success: false, error: 'Application ID or User ID is required.' });
     }
 
-    // 1. Update in-memory / disk store
-    const apps = loadMakerAppsFromDisk();
-    let updatedApp: any = null;
+    let updatedDbApp: any = null;
 
-    const nextApps = apps.map((a) => {
-      if ((id && a.id === id) || (targetUserId && a.user_id === targetUserId)) {
-        updatedApp = { ...a, status: newStatus, reviewed_at: new Date().toISOString() };
-        return updatedApp;
+    // 1. Update in Supabase maker_applications table
+    if (id) {
+      const { data, error } = await supabaseAdmin
+        .from('maker_applications')
+        .update({
+          status: newStatus,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        updatedDbApp = data;
       }
-      return a;
-    });
+    } else if (targetUserId) {
+      const { data, error } = await supabaseAdmin
+        .from('maker_applications')
+        .update({
+          status: newStatus,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('user_id', targetUserId)
+        .select()
+        .single();
 
-    if (updatedApp) {
-      saveMakerAppsToDisk(nextApps);
-      try {
-        await supabaseAdmin.from('site_settings').upsert({
-          key: 'maker_applications_v1',
-          value: nextApps,
+      if (!error && data) {
+        updatedDbApp = data;
+      }
+    }
+
+    const effectiveUserId = targetUserId || updatedDbApp?.user_id;
+
+    // 2. If approved, upgrade user's profile to Maker in Supabase
+    if (newStatus === 'approved' && effectiveUserId) {
+      const studioName = updatedDbApp?.studio_name || updatedDbApp?.craft_type || 'Independent Maker Studio';
+
+      const { error: profErr } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          role: 'maker',
+          school: studioName,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'key' });
+        })
+        .eq('id', effectiveUserId);
+
+      if (profErr) {
+        console.warn('[Maker Role Upgrade Warning]:', profErr.message);
+      }
+
+      // Also update auth user metadata
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(effectiveUserId, {
+          user_metadata: { role: 'maker', status: 'approved', school: studioName },
+        });
+      } catch (authErr) {}
+
+      console.log(`🎉 [Maker Application Approved] User ${effectiveUserId} upgraded to Maker`);
+    } else if (newStatus === 'rejected' && effectiveUserId) {
+      // Revert user to customer
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          role: 'customer',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', effectiveUserId);
+
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(effectiveUserId, {
+          user_metadata: { role: 'customer', status: 'rejected' },
+        });
       } catch (e) {}
+
+      console.log(`🚫 [Maker Application Rejected] User ${effectiveUserId} remains Customer`);
     }
 
-    // 2. If approved, update user's profile to Maker using Service Role Key
-    if (newStatus === 'approved' && targetUserId) {
-      try {
-        const { data: profile } = await supabaseAdmin
-          .from('profiles')
-          .select('*')
-          .eq('id', targetUserId)
-          .maybeSingle();
-
-        const schoolName = updatedApp?.school || updatedApp?.craft_type || profile?.school || 'Independent Studio Guild';
-
-        await supabaseAdmin
-          .from('profiles')
-          .upsert({
-            id: targetUserId,
-            email: profile?.email || updatedApp?.applicant_email || '',
-            full_name: profile?.full_name || updatedApp?.applicant_name || '',
-            role: 'maker',
-            status: 'approved',
-            school: schoolName,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-
-        // Update auth user metadata if present
-        try {
-          await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
-            user_metadata: { role: 'maker', status: 'approved', school: schoolName },
-          });
-        } catch (authErr) {}
-
-        // Update in users disk store
-        const users = loadUsersFromDisk();
-        const userIdx = users.findIndex((u) => u.id === targetUserId || (profile?.email && u.email?.toLowerCase() === profile.email.toLowerCase()));
-        if (userIdx >= 0) {
-          users[userIdx].role = 'maker';
-          users[userIdx].status = 'approved';
-          saveUsersToDisk(users);
-        }
-
-        console.log(`🎉 [Maker Promoted] User ${targetUserId} upgraded to Maker ('approved')`);
-      } catch (roleErr: any) {
-        console.warn('[Maker Role Upgrade Warning]:', roleErr.message);
-      }
-    } else if (newStatus === 'rejected' && targetUserId) {
-      // Rule 8: When rejected, keep user as customer and do not give maker access
-      try {
-        await supabaseAdmin
-          .from('profiles')
-          .update({
-            role: 'customer',
-            status: 'rejected',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', targetUserId);
-
-        const users = loadUsersFromDisk();
-        const userIdx = users.findIndex((u) => u.id === targetUserId);
-        if (userIdx >= 0) {
-          users[userIdx].role = 'customer';
-          users[userIdx].status = 'rejected';
-          saveUsersToDisk(users);
-        }
-
-        console.log(`🚫 [Maker Application Rejected] User ${targetUserId} remains Customer ('rejected')`);
-      } catch (rejectErr: any) {
-        console.warn('[Maker Role Reject Warning]:', rejectErr.message);
+    // 3. Keep local disk store in sync
+    const diskApps = loadMakerAppsFromDisk();
+    for (const a of diskApps) {
+      if (a.id === id || (effectiveUserId && a.user_id === effectiveUserId)) {
+        a.status = newStatus;
+        a.reviewed_at = new Date().toISOString();
       }
     }
+    saveMakerAppsToDisk(diskApps);
 
     return res.json({
       success: true,
-      application: updatedApp,
-      message: `Maker application set to ${newStatus}.`,
+      application: updatedDbApp || { id, status: newStatus },
+      message: `Maker application marked as ${newStatus}.`,
     });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// API Route 9: Authorized Emails & Persistent User Role Management
+// -------------------------------------------------------------
+
+// GET /api/admin/authorized-emails
+app.get('/api/admin/authorized-emails', async (_req: Request, res: Response) => {
+  try {
+    const list = await getAuthorizedEmailsFromSupabase();
+    return res.json({ success: true, count: list.length, authorizedEmails: list });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/authorize-email
+app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
+  try {
+    const { email, role, school, full_name, name, authorized_by } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const cleanRole = String(role || 'maker').trim().toLowerCase();
+    const cleanSchool = String(school || '').trim();
+    const authorizer = String(authorized_by || 'ssumollah@gmail.com').trim();
+    const displayName = String(full_name || name || cleanEmail.split('@')[0]).trim();
+
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+    }
+
+    const validRoles = ['admin', 'maker', 'customer'];
+    if (!validRoles.includes(cleanRole)) {
+      return res.status(400).json({ success: false, error: `Invalid role: ${cleanRole}. Must be admin, maker, or customer.` });
+    }
+
+    // 1. Load existing authorized emails from Supabase
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const existingIndex = authList.findIndex((item) => (item.email || '').toLowerCase() === cleanEmail);
+
+    const record = {
+      id: existingIndex >= 0 ? authList[existingIndex].id : `auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      email: cleanEmail,
+      name: displayName,
+      role: cleanRole,
+      school: cleanSchool || (cleanRole === 'admin' ? 'ArtisansKart Platform Headquarters' : 'Independent Studio Guild'),
+      status: 'approved',
+      authorized_by: authorizer,
+      created_at: existingIndex >= 0 ? authList[existingIndex].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      authList[existingIndex] = record;
+    } else {
+      authList.unshift(record);
+    }
+
+    // 2. Persist authorized emails directly into Supabase site_settings
+    await saveAuthorizedEmailsToSupabase(authList);
+
+    // 3. Check if user already exists in Supabase profiles: if so, update their role immediately!
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, role')
+      .ilike('email', cleanEmail)
+      .maybeSingle();
+
+    if (existingProfile?.id) {
+      const isMaster = cleanEmail === 'ssumollah@gmail.com';
+      const targetDbRole = isMaster ? 'admin' : cleanRole;
+
+      const { error: profileUpdateErr } = await supabaseAdmin
+        .from('profiles')
+        .update({
+          role: targetDbRole,
+          school: record.school,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingProfile.id);
+
+      if (profileUpdateErr) {
+        console.warn('Notice: Failed updating existing profile for authorized email:', profileUpdateErr.message);
+      }
+
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(existingProfile.id, {
+          user_metadata: { role: cleanRole, status: 'approved', school: record.school },
+        });
+      } catch (authErr) {}
+    }
+
+    console.log(`🛡️ [Email Authorized in Supabase] ${cleanEmail} -> ${cleanRole.toUpperCase()} (by ${authorizer})`);
+
+    return res.json({
+      success: true,
+      authorizedEmail: record,
+      message: `Email ${cleanEmail} successfully authorized for ${cleanRole.toUpperCase()} role.`,
+    });
+  } catch (err: any) {
+    console.error('❌ [/api/admin/authorize-email Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/admin/deauthorize-email
+app.post(['/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
+  try {
+    const { id, email } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    if (cleanEmail === 'ssumollah@gmail.com') {
+      return res.status(400).json({ success: false, error: 'Cannot deauthorize the Master Author account.' });
+    }
+
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const filtered = authList.filter((item) => {
+      if (id && item.id === id) return false;
+      if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
+      return true;
+    });
+
+    await saveAuthorizedEmailsToSupabase(filtered);
+
+    // If user has a profile, demote to customer
+    if (cleanEmail) {
+      await supabaseAdmin
+        .from('profiles')
+        .update({
+          role: 'customer',
+          updated_at: new Date().toISOString(),
+        })
+        .ilike('email', cleanEmail);
+    }
+
+    return res.json({ success: true, message: `Deauthorized ${cleanEmail || id}` });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -2775,106 +2961,111 @@ app.post('/api/maker-applications/update-status', async (req: Request, res: Resp
 app.post('/api/admin/update-role', async (req: Request, res: Response) => {
   try {
     const { targetUserId, userId, email, role, status, school, full_name, name } = req.body || {};
-    const cleanUserId = targetUserId || userId;
+    const cleanUserId = String(targetUserId || userId || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
     const isMaster = cleanEmail === 'ssumollah@gmail.com';
 
-    const targetRole = isMaster ? 'master_admin' : (role || 'customer');
-    const targetStatus = isMaster ? 'approved' : (status || 'approved');
+    let targetRole = isMaster ? 'master_admin' : String(role || 'customer').trim().toLowerCase();
     const targetSchool = school || (isMaster ? 'ArtisansKart Platform Headquarters' : '');
-    const fullName = full_name || name || (cleanEmail ? cleanEmail.split('@')[0] : 'User');
+    const fullName = full_name || name || (cleanEmail ? cleanEmail.split('@')[0] : '');
+
+    const validRoles = ['customer', 'maker', 'admin', 'master_admin'];
+    if (!validRoles.includes(targetRole)) {
+      return res.status(400).json({ success: false, error: `Invalid role: ${targetRole}. Must be customer, maker, or admin.` });
+    }
+
+    // Database enum for public.user_role in Supabase is ('customer', 'maker', 'admin')
+    const dbRole = (targetRole === 'master_admin' ? 'admin' : targetRole) as 'customer' | 'maker' | 'admin';
 
     let updatedProfile: any = null;
 
-    // 1. Update Supabase profiles table via Service Role Key (bypasses RLS)
-    if (cleanUserId || cleanEmail) {
-      let queryId = cleanUserId;
-      if (!queryId && cleanEmail) {
-        const { data: found } = await supabaseAdmin
-          .from('profiles')
-          .select('id')
-          .ilike('email', cleanEmail)
-          .maybeSingle();
-        if (found?.id) queryId = found.id;
-      }
-
-      if (queryId) {
-      const validRoles = ['customer', 'maker', 'admin', 'master_admin'];
-      if (!validRoles.includes(targetRole)) {
-        return res.status(400).json({ success: false, error: `Invalid role: ${targetRole}` });
-      }
-
-        const payload: any = {
-          id: queryId,
-          email: cleanEmail,
-          full_name: fullName,
-          role: targetRole,
-          status: targetStatus,
-          school: targetSchool,
-          updated_at: new Date().toISOString(),
-        };
-
-        const { data, error } = await supabaseAdmin
-          .from('profiles')
-          .upsert(payload, { onConflict: 'id' })
-          .select()
-          .single();
-
-        if (error) {
-          console.warn('[Supabase Role Update Notice]:', error.message);
-        } else {
-          updatedProfile = data;
-        }
-
-        // Try updating Supabase Auth Metadata
-        try {
-          await supabaseAdmin.auth.admin.updateUserById(queryId, {
-            user_metadata: { role: targetRole, status: targetStatus, school: targetSchool },
-          });
-        } catch (authErr) {}
-      }
+    // 1. Update Supabase profiles table via Service Role Key
+    let queryId = cleanUserId;
+    if (!queryId && cleanEmail) {
+      const { data: found } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+      if (found?.id) queryId = found.id;
     }
 
-    // 2. Persist in server disk user store
-    const users = loadUsersFromDisk();
-    const existingIndex = users.findIndex(
-      (u) => (cleanUserId && u.id === cleanUserId) || (cleanEmail && u.email?.toLowerCase() === cleanEmail)
-    );
-
-    const userObj = {
-      id: cleanUserId || (existingIndex >= 0 ? users[existingIndex].id : `usr_${Date.now()}`),
-      email: cleanEmail,
-      name: fullName,
-      role: targetRole,
-      status: targetStatus,
-      school: targetSchool,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (existingIndex >= 0) {
-      users[existingIndex] = { ...users[existingIndex], ...userObj };
-    } else {
-      users.unshift(userObj);
-    }
-    saveUsersToDisk(users);
-
-    // Also backup in site_settings
-    try {
-      await supabaseAdmin.from('site_settings').upsert({
-        key: 'all_users_v1',
-        value: users,
+    if (queryId) {
+      // NOTE: profiles schema has: id, email, full_name, avatar_url, role, school, grade_class, bio, payout_upi, created_at, updated_at
+      // DO NOT pass 'status' to profiles as that column does not exist!
+      const updateData: any = {
+        role: dbRole,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'key' });
-    } catch (e) {}
+      };
+      if (targetSchool !== undefined) updateData.school = targetSchool;
+      if (fullName) updateData.full_name = fullName;
 
-    console.log(`🛡️ [Role Updated via Service Role] ${cleanEmail || cleanUserId}: ${targetRole} (${targetStatus})`);
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .update(updateData)
+        .eq('id', queryId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ [Supabase profiles update failed]:', error.message);
+        return res.status(400).json({
+          success: false,
+          error: `Database role update failed: ${error.message}`,
+        });
+      }
+
+      updatedProfile = data;
+
+      // Update auth user metadata
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(queryId, {
+          user_metadata: { role: targetRole, status: status || 'approved', school: targetSchool },
+        });
+      } catch (authErr) {}
+    } else if (cleanEmail) {
+      // If user hasn't signed up yet, authorize their email in authorized_emails table!
+      const authList = await getAuthorizedEmailsFromSupabase();
+      const existingIdx = authList.findIndex((item) => (item.email || '').toLowerCase() === cleanEmail);
+      const record = {
+        id: existingIdx >= 0 ? authList[existingIdx].id : `auth_${Date.now()}`,
+        email: cleanEmail,
+        name: fullName || cleanEmail.split('@')[0],
+        role: targetRole,
+        school: targetSchool,
+        status: status || 'approved',
+        authorized_by: 'ssumollah@gmail.com',
+        created_at: existingIdx >= 0 ? authList[existingIdx].created_at : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (existingIdx >= 0) authList[existingIdx] = record;
+      else authList.unshift(record);
+
+      await saveAuthorizedEmailsToSupabase(authList);
+      updatedProfile = record;
+    }
+
+    // 2. Also keep authorized_emails synchronized if email matches
+    if (cleanEmail) {
+      const authList = await getAuthorizedEmailsFromSupabase();
+      const authIdx = authList.findIndex((item) => (item.email || '').toLowerCase() === cleanEmail);
+      if (authIdx >= 0) {
+        authList[authIdx].role = targetRole;
+        authList[authIdx].school = targetSchool;
+        authList[authIdx].updated_at = new Date().toISOString();
+        await saveAuthorizedEmailsToSupabase(authList);
+      }
+    }
+
+    console.log(`🛡️ [Role Successfully Persisted to Supabase] ${cleanEmail || queryId}: ${targetRole}`);
 
     return res.json({
       success: true,
       role: targetRole,
-      status: targetStatus,
-      user: updatedProfile || userObj,
-      message: `User role successfully updated to ${targetRole}.`,
+      status: status || 'approved',
+      user: updatedProfile || { id: queryId, email: cleanEmail, role: targetRole },
+      message: `User role successfully persisted in Supabase as ${targetRole}.`,
     });
   } catch (err: any) {
     console.error('❌ [/api/admin/update-role Error]:', err.message);
@@ -2885,50 +3076,149 @@ app.post('/api/admin/update-role', async (req: Request, res: Response) => {
 // GET /api/admin/users
 app.get('/api/admin/users', async (_req: Request, res: Response) => {
   try {
-    let profiles: any[] = [];
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+    // 1. Fetch real profiles from Supabase
+    const { data: profiles, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-      if (!error && data) {
-        profiles = data;
-      }
-    } catch (e) {}
+    if (error) {
+      console.warn('Notice: Failed fetching profiles from Supabase:', error.message);
+    }
 
-    // Merge with disk users
-    const diskUsers = loadUsersFromDisk();
-    const profileEmails = new Set(profiles.map((p) => (p.email || '').toLowerCase()));
+    const userList: any[] = (profiles || []).map((p: any) => {
+      const isMaster = (p.email || '').trim().toLowerCase() === 'ssumollah@gmail.com';
+      return {
+        id: p.id,
+        email: p.email,
+        name: p.full_name || (p.email ? p.email.split('@')[0] : 'User'),
+        full_name: p.full_name,
+        role: isMaster ? 'master_admin' : (p.role || 'customer'),
+        status: 'approved',
+        school: p.school || (isMaster ? 'ArtisansKart Platform Headquarters' : ''),
+        avatar_url: p.avatar_url,
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+      };
+    });
 
-    for (const du of diskUsers) {
-      if (du.email && !profileEmails.has(du.email.toLowerCase())) {
-        profiles.push({
-          id: du.id,
-          email: du.email,
-          full_name: du.name || du.full_name,
-          role: du.role,
-          status: du.status,
-          school: du.school,
+    // 2. Fetch authorized emails from Supabase site_settings
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const existingEmails = new Set(userList.map((u) => (u.email || '').toLowerCase()));
+
+    // 3. For any authorized email that hasn't signed in yet, add them as pre-authorized
+    for (const item of authList) {
+      const emailLower = (item.email || '').toLowerCase();
+      if (emailLower && !existingEmails.has(emailLower)) {
+        userList.push({
+          id: item.id || `auth_${Date.now()}`,
+          email: item.email,
+          name: item.name || item.email.split('@')[0],
+          full_name: item.name,
+          role: item.role || 'maker',
+          status: 'approved',
+          school: item.school || 'Authorized Pre-Registration',
+          isAuthorizedPreLogin: true,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
         });
       }
     }
 
-    // Ensure Master Admin email always has master_admin
-    profiles = profiles.map((p) => {
-      if ((p.email || '').trim().toLowerCase() === 'ssumollah@gmail.com') {
-        return {
-          ...p,
-          role: 'master_admin',
-          status: 'approved',
-          school: p.school || 'ArtisansKart Platform Headquarters',
-        };
-      }
-      return p;
-    });
-
-    return res.json({ success: true, count: profiles.length, users: profiles });
+    return res.json({ success: true, count: userList.length, users: userList });
   } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/auth/sync-profile
+// Critical: Called when any user signs in with Google OAuth to resolve persistent role from Supabase database
+app.post('/api/auth/sync-profile', async (req: Request, res: Response) => {
+  try {
+    const { userId, email, fullName, avatarUrl } = req.body || {};
+    const cleanUserId = String(userId || '').trim();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const displayName = String(fullName || '').trim() || cleanEmail.split('@')[0];
+    const avatar = String(avatarUrl || '').trim();
+
+    if (!cleanUserId || !cleanEmail) {
+      return res.status(400).json({ success: false, error: 'User ID and email are required.' });
+    }
+
+    const isMaster = cleanEmail === 'ssumollah@gmail.com';
+
+    // 1. Fetch authorized emails from Supabase
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const matchingAuth = authList.find((item) => (item.email || '').toLowerCase() === cleanEmail);
+
+    // 2. Fetch current profile from Supabase
+    const { data: existingProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', cleanUserId)
+      .maybeSingle();
+
+    // 3. Determine authoritative role:
+    // - ssumollah@gmail.com -> master_admin
+    // - matching pre-authorized email -> authorized role (admin or maker)
+    // - existing maker or admin in database -> PRESERVE! Never downgrade to customer
+    // - otherwise -> customer
+    let assignedRole: 'customer' | 'maker' | 'admin' | 'master_admin' = 'customer';
+    let assignedSchool = '';
+
+    if (isMaster) {
+      assignedRole = 'master_admin';
+      assignedSchool = 'ArtisansKart Platform Headquarters';
+    } else if (matchingAuth && matchingAuth.role && matchingAuth.role !== 'customer') {
+      assignedRole = matchingAuth.role;
+      assignedSchool = matchingAuth.school || '';
+    } else if (existingProfile && existingProfile.role && existingProfile.role !== 'customer') {
+      assignedRole = existingProfile.role;
+      assignedSchool = existingProfile.school || '';
+    }
+
+    const dbRole = (assignedRole === 'master_admin' ? 'admin' : assignedRole) as 'customer' | 'maker' | 'admin';
+
+    // 4. Update or insert into Supabase profiles
+    const profilePayload = {
+      id: cleanUserId,
+      email: cleanEmail,
+      full_name: displayName,
+      avatar_url: avatar || existingProfile?.avatar_url || '',
+      role: dbRole,
+      school: assignedSchool || existingProfile?.school || '',
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data: finalProfile, error: upsertErr } = await supabaseAdmin
+      .from('profiles')
+      .upsert(profilePayload, { onConflict: 'id' })
+      .select()
+      .single();
+
+    if (upsertErr) {
+      console.warn('Notice: Profile sync error in Supabase:', upsertErr.message);
+    }
+
+    // 5. Update auth user metadata
+    try {
+      await supabaseAdmin.auth.admin.updateUserById(cleanUserId, {
+        user_metadata: { role: assignedRole, status: 'approved', school: assignedSchool },
+      });
+    } catch (e) {}
+
+    console.log(`👤 [Auth Profile Synchronized] ${cleanEmail} -> ${assignedRole} in Supabase`);
+
+    return res.json({
+      success: true,
+      profile: {
+        ...(finalProfile || profilePayload),
+        role: assignedRole,
+        status: 'approved',
+      },
+    });
+  } catch (err: any) {
+    console.error('❌ [/api/auth/sync-profile Error]:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });

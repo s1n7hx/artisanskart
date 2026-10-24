@@ -99,6 +99,8 @@ export const AdminPortalPage: React.FC = () => {
   const [newUserRole, setNewUserRole] = useState<'admin' | 'maker' | 'customer'>('maker');
   const [newUserStatus, setNewUserStatus] = useState<'approved' | 'pending'>('approved');
   const [newUserStudio, setNewUserStudio] = useState('');
+  const [isAuthorizingUser, setIsAuthorizingUser] = useState(false);
+  const [authorizeUserError, setAuthorizeUserError] = useState<string | null>(null);
 
   // Local CMS form state
   const [cmsForm, setCmsForm] = useState<HeroContent>({ ...heroContent });
@@ -1196,18 +1198,34 @@ export const AdminPortalPage: React.FC = () => {
                 </span>
               </div>
 
+              {authorizeUserError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                  <span>{authorizeUserError}</span>
+                </div>
+              )}
+
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!newUserEmail.trim()) {
-                    showToast('Please enter a valid email.', 'alert-circle');
+                  const cleanEmail = newUserEmail.trim().toLowerCase();
+                  if (!cleanEmail || !cleanEmail.includes('@')) {
+                    showToast('Please enter a valid Google email address.', 'alert-circle');
                     return;
                   }
-                  await addNewUserAccount(newUserEmail, newUserName, newUserRole, newUserStudio);
-                  setNewUserEmail('');
-                  setNewUserName('');
-                  setNewUserStudio('');
-                  setIsAddingUser(false);
+                  setIsAuthorizingUser(true);
+                  setAuthorizeUserError(null);
+                  try {
+                    await addNewUserAccount(cleanEmail, newUserName, newUserRole, 'approved', newUserStudio);
+                    setNewUserEmail('');
+                    setNewUserName('');
+                    setNewUserStudio('');
+                    setIsAddingUser(false);
+                  } catch (err: any) {
+                    setAuthorizeUserError(err.message || 'Failed to authorize email.');
+                  } finally {
+                    setIsAuthorizingUser(false);
+                  }
                 }}
                 className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
               >
@@ -1263,9 +1281,10 @@ export const AdminPortalPage: React.FC = () => {
                   />
                   <button
                     type="submit"
-                    className="bg-[#1E293B] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#C85A32] transition cursor-pointer shrink-0"
+                    disabled={isAuthorizingUser}
+                    className="bg-[#1E293B] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#C85A32] disabled:opacity-50 transition cursor-pointer shrink-0"
                   >
-                    Save &amp; Grant
+                    {isAuthorizingUser ? 'Authorizing...' : 'Save & Grant'}
                   </button>
                 </div>
               </form>
@@ -1401,8 +1420,7 @@ export const AdminPortalPage: React.FC = () => {
                           onChange={async (e) => {
                             const newRole = e.target.value as UserRole;
                             try {
-                              await updateUserRole(u.id, newRole, u.email);
-                              showToast(`Role updated to ${newRole}!`, 'shield-check');
+                              await promoteUserRole(u.id, newRole, (u.status as any) || 'approved');
                             } catch (err: any) {
                               showToast(`Failed to update role: ${err.message}`, 'alert-circle');
                             }

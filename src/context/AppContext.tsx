@@ -34,6 +34,8 @@ import {
   updateUserRoleAndStatus as updateSupabaseUserRoleAndStatus,
   ensureUserProfile,
   getProfile,
+  authorizeNewEmail,
+  deauthorizeEmail,
 } from '../services/supabase';
 
 interface AppContextType {
@@ -282,74 +284,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Master Admin grants/elevates user permissions
   const grantUserRole = async (userId: string, newRole: UserRole) => {
     const targetUser = usersList.find((u) => u.id === userId);
-    setUsersList((prev) => {
-      const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u));
-      try {
-        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
-
-    if (currentUser && currentUser.id === userId) {
-      setUserRole(newRole);
-    }
-
     try {
-      await updateSupabaseUserRole(userId, newRole, targetUser?.email);
-    } catch (err) {
-      console.warn('Supabase profile role update error:', err);
+      await updateSupabaseUserRole(userId, newRole, targetUser?.email, targetUser?.school);
+      const freshProfiles = await fetchAllProfiles();
+      if (freshProfiles) {
+        setUsersList(freshProfiles.map((p) => ({
+          id: p.id,
+          email: p.email,
+          name: p.full_name || p.email.split('@')[0],
+          role: p.role,
+          status: p.status || 'approved',
+          school: p.school || '',
+          isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+        })));
+      }
+      if (currentUser && currentUser.id === userId) {
+        setUserRole(newRole);
+      }
+      showToast(`Role updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
+    } catch (err: any) {
+      console.error('Supabase profile role update error:', err);
+      showToast(`Failed to update role: ${err.message}`, 'alert-circle');
+      throw err;
     }
-
-    showToast(`Role updated! User is now ${newRole.toUpperCase()}.`, 'shield-check');
   };
 
   // Master Admin updates approval status
   const grantUserStatus = async (userId: string, newStatus: UserStatus) => {
     const targetUser = usersList.find((u) => u.id === userId);
-    setUsersList((prev) => {
-      const next = prev.map((u) => (u.id === userId ? { ...u, status: newStatus } : u));
-      try {
-        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
-
-    if (currentUser && currentUser.id === userId) {
-      setUserStatus(newStatus);
-    }
-
     try {
       await updateSupabaseUserStatus(userId, newStatus, targetUser?.email);
-    } catch (err) {
-      console.warn('Supabase status update error:', err);
+      const freshProfiles = await fetchAllProfiles();
+      if (freshProfiles) {
+        setUsersList(freshProfiles.map((p) => ({
+          id: p.id,
+          email: p.email,
+          name: p.full_name || p.email.split('@')[0],
+          role: p.role,
+          status: p.status || 'approved',
+          school: p.school || '',
+          isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+        })));
+      }
+      if (currentUser && currentUser.id === userId) {
+        setUserStatus(newStatus);
+      }
+      showToast(`Account status set to ${newStatus.toUpperCase()}`, 'check-circle-2');
+    } catch (err: any) {
+      console.error('Supabase status update error:', err);
+      showToast(`Failed to update status: ${err.message}`, 'alert-circle');
+      throw err;
     }
-
-    showToast(`Account status set to ${newStatus.toUpperCase()}`, 'check-circle-2');
   };
 
   // Combined role and status update
   const promoteUserRole = async (userId: string, newRole: UserRole, newStatus: UserStatus = 'approved') => {
     const targetUser = usersList.find((u) => u.id === userId);
-    setUsersList((prev) => {
-      const next = prev.map((u) => (u.id === userId ? { ...u, role: newRole, status: newStatus } : u));
-      try {
-        localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
-
-    if (currentUser && currentUser.id === userId) {
-      setUserRole(newRole);
-      setUserStatus(newStatus);
-    }
-
     try {
-      await updateSupabaseUserRoleAndStatus(userId, newRole, newStatus, targetUser?.email, targetUser?.school);
-    } catch (err) {
-      console.warn('Supabase role/status update error:', err);
+      await updateSupabaseUserRole(userId, newRole, targetUser?.email, targetUser?.school);
+      const freshProfiles = await fetchAllProfiles();
+      if (freshProfiles) {
+        setUsersList(freshProfiles.map((p) => ({
+          id: p.id,
+          email: p.email,
+          name: p.full_name || p.email.split('@')[0],
+          role: p.role,
+          status: p.status || 'approved',
+          school: p.school || '',
+          isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+        })));
+      }
+      if (currentUser && currentUser.id === userId) {
+        setUserRole(newRole);
+        setUserStatus(newStatus);
+      }
+      showToast(`Updated to ${newRole.toUpperCase()} in Supabase!`, 'sparkles');
+    } catch (err: any) {
+      console.error('Supabase role update error:', err);
+      showToast(`Database error updating role: ${err.message}`, 'alert-circle');
+      throw err;
     }
-
-    showToast(`Updated to ${newRole.toUpperCase()} (${newStatus})!`, 'sparkles');
   };
 
   // Add new authorized email / user account
@@ -361,58 +375,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     school?: string
   ) => {
     const trimmedEmail = email.trim().toLowerCase();
-    const existingIndex = usersList.findIndex((u) => u.email.toLowerCase() === trimmedEmail);
+    const displayName = name.trim() || trimmedEmail.split('@')[0];
+    const studioName = school?.trim() || (role === 'admin' ? 'ArtisansKart Platform Headquarters' : 'Independent Studio Guild');
 
-    const newUser: UserAccount = {
-      id: existingIndex >= 0 ? usersList[existingIndex].id : `usr_custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      email: trimmedEmail,
-      name: name.trim() || (existingIndex >= 0 ? usersList[existingIndex].name : trimmedEmail.split('@')[0]),
-      role: role,
-      status: status,
-      school: school?.trim() || (role === 'admin' ? 'HQ Administrator' : role === 'maker' ? 'Independent Studio' : 'Customer Patron'),
-    };
-
-    let nextList: UserAccount[];
-    if (existingIndex >= 0) {
-      nextList = usersList.map((u, i) => (i === existingIndex ? { ...u, role, status, name: newUser.name, school: newUser.school } : u));
-    } else {
-      nextList = [newUser, ...usersList];
-    }
-
-    setUsersList(nextList);
     try {
-      localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
-    } catch (e) {}
+      await authorizeNewEmail({
+        email: trimmedEmail,
+        name: displayName,
+        role: role,
+        school: studioName,
+        authorized_by: currentUser?.email || MASTER_ADMIN_EMAIL,
+      });
 
-    // Send role promotion to backend API with SUPABASE_SERVICE_ROLE_KEY
-    try {
-      await updateSupabaseUserRoleAndStatus(newUser.id, role, status, trimmedEmail, newUser.school);
-    } catch (e) {}
+      // Reload fresh database list from Supabase
+      const freshProfiles = await fetchAllProfiles();
+      if (freshProfiles) {
+        setUsersList(freshProfiles.map((p) => ({
+          id: p.id,
+          email: p.email,
+          name: p.full_name || p.email.split('@')[0],
+          role: p.role,
+          status: p.status || 'approved',
+          school: p.school || '',
+          isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+        })));
+      }
 
-    // If active user is the one being updated
-    if (currentUser && currentUser.email.toLowerCase() === trimmedEmail) {
-      setUserRole(role);
-      setUserStatus(status);
+      // If active user is the one being updated
+      if (currentUser && currentUser.email.toLowerCase() === trimmedEmail) {
+        setUserRole(role);
+        setUserStatus(status);
+      }
+
+      showToast(`Authorized ${trimmedEmail} for ${role.toUpperCase()} role in Supabase!`, 'check-circle-2');
+    } catch (err: any) {
+      console.error('Authorization error:', err);
+      showToast(`Failed to authorize email: ${err.message}`, 'alert-circle');
+      throw err;
     }
-
-    showToast(`Added ${trimmedEmail} with ${role.toUpperCase()} (${status}) access!`, 'check-circle-2');
   };
 
   // Remove / revoke user account
   const removeUserAccount = async (userId: string) => {
     const targetUser = usersList.find((u) => u.id === userId);
-    if (targetUser?.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
+    if (!targetUser) return;
+    if (targetUser.email.toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase()) {
       showToast('Cannot delete the Master Admin account!', 'alert-circle');
       return;
     }
 
-    const nextList = usersList.filter((u) => u.id !== userId);
-    setUsersList(nextList);
     try {
-      localStorage.setItem(LOCAL_STORAGE_USERS_LIST_KEY, JSON.stringify(nextList));
-    } catch (e) {}
-
-    showToast('User removed successfully.', 'trash-2');
+      await deauthorizeEmail(targetUser.email, userId);
+      const freshProfiles = await fetchAllProfiles();
+      if (freshProfiles) {
+        setUsersList(freshProfiles.map((p) => ({
+          id: p.id,
+          email: p.email,
+          name: p.full_name || p.email.split('@')[0],
+          role: p.role,
+          status: p.status || 'approved',
+          school: p.school || '',
+          isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+        })));
+      }
+      showToast(`Revoked permissions for ${targetUser.email}.`, 'trash-2');
+    } catch (err: any) {
+      console.error('Deauthorization error:', err);
+      showToast(`Failed to revoke user: ${err.message}`, 'alert-circle');
+    }
   };
 
   // Real Google OAuth Authentication Handler - No mock path
@@ -572,26 +602,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         const remoteProfiles = await fetchAllProfiles();
         if (remoteProfiles && remoteProfiles.length > 0) {
-          setUsersList((prev) => {
-            const remoteMap = new Map(remoteProfiles.map((p) => [p.id, p]));
-            const merged = prev.map((u) => {
-              const r = remoteMap.get(u.id);
-              return r ? { ...u, role: r.role, name: r.full_name || u.name } : u;
-            });
-            // Add new remote profiles
-            remoteProfiles.forEach((rp) => {
-              if (!merged.some((m) => m.id === rp.id)) {
-                merged.push({
-                  id: rp.id,
-                  email: rp.email,
-                  name: rp.full_name || 'Independent Creator',
-                  role: rp.role,
-                  school: rp.school || 'Independent Studio Guild',
-                });
-              }
-            });
-            return merged;
-          });
+          setUsersList(remoteProfiles.map((p) => ({
+            id: p.id,
+            email: p.email,
+            name: p.full_name || p.email.split('@')[0],
+            role: p.role,
+            status: p.status || 'approved',
+            school: p.school || '',
+            isAuthorizedPreLogin: (p as any).isAuthorizedPreLogin,
+          })));
         }
         const remoteProducts = await fetchSupabaseProducts();
         if (remoteProducts && remoteProducts.length > 0) {
