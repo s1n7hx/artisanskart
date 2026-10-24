@@ -1281,6 +1281,165 @@ app.post('/api/orders', async (req: Request, res: Response) => {
 });
 
 // -------------------------------------------------------------
+// API Route: Administrative Clear Order List (Master Admin Only)
+// -------------------------------------------------------------
+app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
+  try {
+    const { mode, email, confirmationText } = req.body || {};
+    const cleanEmail = String(email || '').trim().toLowerCase();
+
+    // Verify master_admin authorization
+    const isMaster = cleanEmail === 'ssumollah@gmail.com';
+    if (!isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Clearing order lists is strictly restricted to the Master Administrator (ssumollah@gmail.com).',
+      });
+    }
+
+    if (mode === 'all') {
+      if (confirmationText !== 'CLEAR ORDERS') {
+        return res.status(400).json({
+          success: false,
+          error: 'Confirmation text mismatch. You must type "CLEAR ORDERS" exactly to confirm clearing all orders.',
+        });
+      }
+
+      // 1. Delete all order items from Supabase
+      const { data: deletedItems, error: itemErr } = await supabaseAdmin
+        .from('order_items')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id');
+
+      // 2. Delete all order status history from Supabase if table exists
+      try {
+        await supabaseAdmin
+          .from('order_status_history')
+          .delete()
+          .neq('id', '00000000-0000-0000-0000-000000000000');
+      } catch (e) {}
+
+      // 3. Delete all orders from Supabase
+      const { data: deletedOrders, error: orderErr } = await supabaseAdmin
+        .from('orders')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000')
+        .select('id, order_number');
+
+      if (orderErr) {
+        console.error('❌ [Clear All Orders Supabase Error]:', orderErr.message);
+        return res.status(500).json({
+          success: false,
+          error: `Failed to clear orders from database: ${orderErr.message}`,
+        });
+      }
+
+      // 4. Clear in-memory and disk persistent orders
+      const countBefore = SERVER_ORDERS.length;
+      SERVER_ORDERS = [];
+      saveOrdersToDisk(SERVER_ORDERS);
+
+      console.log(`🗑️ [Clear All Orders Executed by ${cleanEmail}] Removed ${deletedOrders?.length || countBefore} orders.`);
+
+      return res.json({
+        success: true,
+        mode: 'all',
+        deletedOrdersCount: deletedOrders?.length || countBefore,
+        deletedItemsCount: deletedItems?.length || 0,
+        message: 'All order records have been permanently cleared from database and server storage.',
+      });
+
+    } else if (mode === 'test') {
+      // Query all orders from Supabase first
+      const { data: allDbOrders } = await supabaseAdmin.from('orders').select('*');
+
+      const isTestOrder = (o: any) => {
+        const coupon = String(o.coupon_applied || o.couponCode || '').toUpperCase();
+        const payId = String(o.payment_gateway_payment_id || o.paymentGatewayPaymentId || '').toLowerCase();
+        const payOrderId = String(o.payment_gateway_order_id || o.paymentGatewayOrderId || '').toLowerCase();
+        const custEmail = String(o.customer_email || o.customerEmail || '').toLowerCase();
+        const payStatus = String(o.payment_status || o.paymentStatus || '').toLowerCase();
+        const notesStr = String(JSON.stringify(o.notes || o.shipping_address || {})).toLowerCase();
+
+        return (
+          coupon === 'RAZORPAYTEST' ||
+          coupon.includes('TEST') ||
+          payId.includes('test') ||
+          payOrderId.includes('test') ||
+          payStatus === 'test_verified' ||
+          custEmail === 'test@artisanskart.in' ||
+          custEmail === 'admin@artisanskart.in' ||
+          custEmail === 'ssumollah@gmail.com' ||
+          notesStr.includes('test')
+        );
+      };
+
+      const testDbOrders = (allDbOrders || []).filter(isTestOrder);
+      const testDbOrderIds = testDbOrders.map((o) => o.id);
+      const testDbOrderNumbers = testDbOrders.map((o) => o.order_number).filter(Boolean);
+
+      let deletedItemCount = 0;
+      let deletedOrderCount = 0;
+
+      if (testDbOrderIds.length > 0) {
+        // Delete order items for test orders
+        const { data: delItems } = await supabaseAdmin
+          .from('order_items')
+          .delete()
+          .in('order_id', testDbOrderIds)
+          .select('id');
+
+        deletedItemCount = delItems?.length || 0;
+
+        // Delete status history for test orders
+        try {
+          await supabaseAdmin
+            .from('order_status_history')
+            .delete()
+            .in('order_id', testDbOrderIds);
+        } catch (e) {}
+
+        // Delete test orders from Supabase
+        const { data: delOrders } = await supabaseAdmin
+          .from('orders')
+          .delete()
+          .in('id', testDbOrderIds)
+          .select('id');
+
+        deletedOrderCount = delOrders?.length || 0;
+      }
+
+      // Also clean matching test orders from SERVER_ORDERS array and disk
+      const initialServerCount = SERVER_ORDERS.length;
+      SERVER_ORDERS = SERVER_ORDERS.filter(
+        (so) => !isTestOrder(so) && !testDbOrderNumbers.includes(so.orderNumber || so.id)
+      );
+      const removedServerCount = initialServerCount - SERVER_ORDERS.length;
+      saveOrdersToDisk(SERVER_ORDERS);
+
+      const totalRemoved = Math.max(deletedOrderCount, removedServerCount);
+
+      console.log(`🧹 [Clear Test Orders Executed by ${cleanEmail}] Cleared ${totalRemoved} test orders.`);
+
+      return res.json({
+        success: true,
+        mode: 'test',
+        deletedOrdersCount: totalRemoved,
+        deletedItemsCount: deletedItemCount,
+        message: `Successfully cleared ${totalRemoved} test order records. Genuine customer orders remain intact.`,
+      });
+
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid mode. Must be "test" or "all".' });
+    }
+  } catch (err: any) {
+    console.error('❌ [/api/admin/clear-orders Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
 // In-Memory Cache for Authentic India Post Registry Records
 // -------------------------------------------------------------
 interface CachedPostalResult {

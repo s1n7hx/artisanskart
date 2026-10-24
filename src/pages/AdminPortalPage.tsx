@@ -10,6 +10,7 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Plus,
   Trash2,
   Edit2,
@@ -46,6 +47,7 @@ import {
   MakerApplicationItem,
   updateUserRole,
   updateUserStatus,
+  clearOrdersApi,
 } from '../services/supabase';
 import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 
@@ -129,6 +131,11 @@ export const AdminPortalPage: React.FC = () => {
   const [targetOverrideStatus, setTargetOverrideStatus] = useState<string>('');
   const [overrideNote, setOverrideNote] = useState<string>('');
   const [isOverridingStatus, setIsOverridingStatus] = useState(false);
+
+  // Clear Order List modal state
+  const [clearOrdersModalMode, setClearOrdersModalMode] = useState<'test' | 'all' | null>(null);
+  const [clearOrdersConfirmInput, setClearOrdersConfirmInput] = useState('');
+  const [isProcessingClearOrders, setIsProcessingClearOrders] = useState(false);
 
   // Environment Variable Fallback: Check both import.meta.env.VITE_RAZORPAY_KEY_ID and process.env.RAZORPAY_KEY_ID
   const envRazorpayKeyId =
@@ -2296,6 +2303,51 @@ export const AdminPortalPage: React.FC = () => {
             </span>
           </div>
 
+          {/* Master Admin Clear Order List Action Bar */}
+          {isMasterAdmin && (
+            <div className="p-4 rounded-2xl bg-rose-50/70 border border-rose-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-rose-900 uppercase tracking-wider bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-rose-700" /> Master Admin Security Control
+                  </span>
+                </div>
+                <h3 className="text-sm font-black text-slate-900">Clear Order List Options</h3>
+                <p className="text-xs text-slate-600">
+                  Safely remove test orders from sandbox checkouts or perform a full order database reset. Product catalog, user profiles, and maker applications will not be affected.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearOrdersModalMode('test');
+                    setClearOrdersConfirmInput('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Remove test orders created during sandbox payment testing"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Test Orders</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearOrdersModalMode('all');
+                    setClearOrdersConfirmInput('');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  title="Master Admin only: Permanently wipe all order records"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <span>Clear All Orders</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* NimbusPost Logistics & Courier Integration Status */}
           <div className="p-5 rounded-2xl bg-gradient-to-r from-orange-50/80 to-amber-50/50 border border-orange-200/80 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -2616,6 +2668,160 @@ export const AdminPortalPage: React.FC = () => {
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+          {/* Clear Orders Confirmation Modal */}
+          {clearOrdersModalMode && (
+            <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 animate-fade-in">
+              <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${clearOrdersModalMode === 'all' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'}`}>
+                      {clearOrdersModalMode === 'all' ? <AlertTriangle className="w-5 h-5" /> : <Trash2 className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Master Admin Authorization</span>
+                      <h3 className="text-lg font-black text-slate-900">
+                        {clearOrdersModalMode === 'all' ? 'Clear All Orders' : 'Clear Test Orders'}
+                      </h3>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!isProcessingClearOrders) {
+                        setClearOrdersModalMode(null);
+                        setClearOrdersConfirmInput('');
+                      }
+                    }}
+                    className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {clearOrdersModalMode === 'test' ? (
+                  <div className="space-y-4 text-xs text-slate-600">
+                    <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5">
+                      <p className="font-bold text-sm">Clear Test Orders Action</p>
+                      <p className="leading-relaxed">
+                        This action will identify and remove orders created for testing (e.g. coupon <strong>RAZORPAYTEST</strong>, test accounts, or test gateway orders) from both Supabase database and server storage.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-[11px] text-slate-500">
+                      <p className="font-bold text-slate-700">Safety Guarantee:</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Genuine customer orders will remain intact.</li>
+                        <li>Products, customers, makers, applications, and Razorpay settings will NOT be modified.</li>
+                      </ul>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        disabled={isProcessingClearOrders}
+                        onClick={() => {
+                          setClearOrdersModalMode(null);
+                          setClearOrdersConfirmInput('');
+                        }}
+                        className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessingClearOrders}
+                        onClick={async () => {
+                          setIsProcessingClearOrders(true);
+                          try {
+                            const res = await clearOrdersApi('test', currentUser?.email || MASTER_ADMIN_EMAIL);
+                            showToast(res.message || 'Test orders cleared successfully!', 'check-circle-2');
+                            await refreshOrders();
+                            setClearOrdersModalMode(null);
+                          } catch (err: any) {
+                            showToast(`Failed to clear test orders: ${err.message}`, 'alert-circle');
+                          } finally {
+                            setIsProcessingClearOrders(false);
+                          }
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        {isProcessingClearOrders ? 'Clearing Test Orders...' : 'Confirm Clear Test Orders'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-xs text-slate-600">
+                    <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-900 space-y-2">
+                      <p className="font-bold text-sm flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-red-600" />
+                        Destructive Action: Permanent Order Deletion
+                      </p>
+                      <p className="leading-relaxed">
+                        This will permanently delete <strong>ALL {orders.length} order records</strong>, associated order items, and shipping history from the Supabase database and server persistent storage.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-1 text-[11px] text-slate-500">
+                      <p className="font-bold text-slate-700">Protected Systems (Unchanged):</p>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li>Products &amp; catalog photos</li>
+                        <li>User accounts &amp; roles</li>
+                        <li>Makers &amp; maker applications</li>
+                        <li>Razorpay credentials &amp; platform settings</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      <label className="font-extrabold text-slate-900 block">
+                        Type <code className="bg-slate-100 px-1.5 py-0.5 rounded text-red-600 font-mono">CLEAR ORDERS</code> to confirm:
+                      </label>
+                      <input
+                        type="text"
+                        value={clearOrdersConfirmInput}
+                        onChange={(e) => setClearOrdersConfirmInput(e.target.value)}
+                        placeholder="Type CLEAR ORDERS here"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-red-300 text-xs font-mono font-bold focus:outline-hidden focus:border-red-600 bg-red-50/30"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <button
+                        type="button"
+                        disabled={isProcessingClearOrders}
+                        onClick={() => {
+                          setClearOrdersModalMode(null);
+                          setClearOrdersConfirmInput('');
+                        }}
+                        className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isProcessingClearOrders || clearOrdersConfirmInput !== 'CLEAR ORDERS'}
+                        onClick={async () => {
+                          setIsProcessingClearOrders(true);
+                          try {
+                            const res = await clearOrdersApi('all', currentUser?.email || MASTER_ADMIN_EMAIL, clearOrdersConfirmInput);
+                            showToast(res.message || 'All order records cleared!', 'trash-2');
+                            await refreshOrders();
+                            setClearOrdersModalMode(null);
+                            setClearOrdersConfirmInput('');
+                          } catch (err: any) {
+                            showToast(`Failed to clear all orders: ${err.message}`, 'alert-circle');
+                          } finally {
+                            setIsProcessingClearOrders(false);
+                          }
+                        }}
+                        className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:hover:bg-red-600 text-white font-bold transition cursor-pointer flex items-center gap-1.5 shadow-xs"
+                      >
+                        {isProcessingClearOrders ? 'Deleting All Orders...' : 'Permanently Delete All Orders'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

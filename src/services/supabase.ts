@@ -797,3 +797,17 @@ function hashCode(str: string): number {
   }
   return hash;
 }
+
+export async function clearOrdersApi(mode: 'test' | 'all', email: string, confirmationText?: string) {
+  const res = await fetch('/api/admin/clear-orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode, email, confirmationText }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Failed to clear orders');
+  }
+  return data;
+}
+
