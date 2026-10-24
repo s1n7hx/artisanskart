@@ -2736,6 +2736,7 @@ export const AdminPortalPage: React.FC = () => {
                           setIsProcessingClearOrders(true);
                           try {
                             const res = await clearOrdersApi('test', currentUser?.email || MASTER_ADMIN_EMAIL);
+                            try { localStorage.removeItem('artisanskart_all_orders_v2'); } catch (e) {}
                             showToast(res.message || 'Test orders cleared successfully!', 'check-circle-2');
                             await refreshOrders();
                             setClearOrdersModalMode(null);
@@ -2805,6 +2806,7 @@ export const AdminPortalPage: React.FC = () => {
                           setIsProcessingClearOrders(true);
                           try {
                             const res = await clearOrdersApi('all', currentUser?.email || MASTER_ADMIN_EMAIL, clearOrdersConfirmInput);
+                            try { localStorage.removeItem('artisanskart_all_orders_v2'); } catch (e) {}
                             showToast(res.message || 'All order records cleared!', 'trash-2');
                             await refreshOrders();
                             setClearOrdersModalMode(null);

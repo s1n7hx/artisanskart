@@ -1158,11 +1158,84 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
 // API Route 3d: Server Order Management (Centralized Store)
 // Allows makers and customers to fetch, create, and track orders across browsers
 // -------------------------------------------------------------
-app.get('/api/orders', (req: Request, res: Response) => {
+app.get('/api/orders', async (req: Request, res: Response) => {
   try {
     const { makerId, status, orderNumber } = req.query;
-    let results = [...SERVER_ORDERS];
 
+    // Fetch live orders directly from Supabase DB
+    let query = supabaseAdmin
+      .from('orders')
+      .select('*, order_items(*)')
+      .order('created_at', { ascending: false });
+
+    if (orderNumber) {
+      query = query.ilike('order_number', String(orderNumber));
+    }
+    if (status) {
+      query = query.eq('status', String(status));
+    }
+
+    const { data: dbOrders, error: dbErr } = await query;
+
+    if (!dbErr && Array.isArray(dbOrders)) {
+      const mappedDbOrders = dbOrders.map((d: any) => {
+        const items = Array.isArray(d.order_items)
+          ? d.order_items.map((i: any) => ({
+              productId: i.product_id,
+              title: i.title,
+              imageUrl: i.image_url,
+              unitPrice: Number(i.unit_price),
+              quantity: i.quantity,
+              subtotal: Number(i.subtotal),
+              makerName: i.maker_name,
+              makerId: i.maker_id,
+              productionStatus: i.production_status,
+            }))
+          : [];
+
+        return {
+          id: d.id,
+          orderNumber: d.order_number,
+          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
+          product: items.map((i: any) => i.title).join(', ') || 'Handmade Creation',
+          qty: items.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
+          deadline: d.estimated_delivery || '3-5 business days',
+          status: d.status,
+          amount: Number(d.total_amount || d.amount || 0),
+          itemsTotal: Number(d.items_total || 0),
+          shippingFee: Number(d.shipping_fee || 0),
+          discountAmount: Number(d.discount_amount || 0),
+          customerName: d.customer_name,
+          customerEmail: d.customer_email,
+          customerPhone: d.customer_phone,
+          shippingAddress: d.shipping_address,
+          paymentStatus: d.payment_status,
+          paymentMethod: d.payment_method,
+          trackingAwb: d.tracking_awb,
+          courierName: d.courier_name || 'NimbusPost Express Partner',
+          createdAt: d.created_at,
+          makerId: d.maker_id,
+          items,
+        };
+      });
+
+      // Synchronize in-memory SERVER_ORDERS array with Supabase DB
+      SERVER_ORDERS = mappedDbOrders;
+      saveOrdersToDisk(SERVER_ORDERS);
+
+      let results = [...SERVER_ORDERS];
+      if (makerId) {
+        results = results.filter((o) =>
+          o.makerId === makerId ||
+          (Array.isArray(o.items) && o.items.some((i: any) => i.makerId === makerId))
+        );
+      }
+
+      return res.json({ success: true, count: results.length, orders: results });
+    }
+
+    // Fallback if DB unavailable
+    let results = [...SERVER_ORDERS];
     if (orderNumber) {
       results = results.filter((o) =>
         String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()

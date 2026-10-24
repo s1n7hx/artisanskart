@@ -854,17 +854,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     } catch (e) {}
 
-    let localOrders: Order[] = [];
-    try {
-      const saved = localStorage.getItem('artisanskart_all_orders_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) localOrders = parsed;
-      }
-    } catch {}
-
     const orderMap = new Map<string, Order>();
-    [...serverOrders, ...localOrders, ...remoteOrders].forEach((o) => {
+    [...serverOrders, ...remoteOrders].forEach((o) => {
       const key = o.orderNumber || String(o.id);
       if (!orderMap.has(key)) {
         orderMap.set(key, o);
