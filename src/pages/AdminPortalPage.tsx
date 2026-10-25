@@ -219,6 +219,25 @@ export const AdminPortalPage: React.FC = () => {
     loadGatewayConfig();
   }, []);
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (deletingUserModal && !isDeletingUserAccount) {
+          setDeletingUserModal(null);
+        }
+        if (clearOrdersModalMode && !isProcessingClearOrders) {
+          setClearOrdersModalMode(null);
+          setClearOrdersConfirmInput('');
+        }
+        if (selectedAdminOrder) {
+          setSelectedAdminOrder(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deletingUserModal, isDeletingUserAccount, clearOrdersModalMode, isProcessingClearOrders, selectedAdminOrder]);
+
   const handleTestNimbusAuth = async () => {
     setIsTestingNimbus(true);
     setNimbusTestResult(null);
@@ -1566,63 +1585,9 @@ export const AdminPortalPage: React.FC = () => {
                           )}
                         </div>
                       </div>
-                    ) : userRole === 'admin' ? (
-                      /* Co-admin management capabilities: Can manage makers and approval statuses, but CANNOT modify admin privileges */
-                      <div className="space-y-2">
-                        {u.role === 'admin' ? (
-                          <div className="p-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs flex items-center gap-1.5 font-medium">
-                            <Lock className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Administrator account &bull; Modification restricted to Master Author</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-bold text-slate-700">Artisan access:</span>
-                              {u.role === 'customer' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => promoteUserRole(u.id, 'maker', 'approved')}
-                                  className="px-3 py-1 rounded-xl bg-[#C85A32] text-white text-xs font-bold hover:bg-[#b04a25] transition cursor-pointer"
-                                >
-                                  Grant Maker Role
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => promoteUserRole(u.id, 'customer', 'approved')}
-                                  className="px-3 py-1 rounded-xl bg-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-300 transition cursor-pointer"
-                                >
-                                  Revoke Maker
-                                </button>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1.5 text-xs">
-                              {isPending && (
-                                <button
-                                  type="button"
-                                  onClick={() => grantUserStatus(u.id, 'approved')}
-                                  className="px-2.5 py-1 rounded-xl bg-emerald-600 text-white font-bold text-[11px] transition cursor-pointer"
-                                >
-                                  ✓ Approve
-                                </button>
-                              )}
-                              {isApproved && u.role === 'maker' && (
-                                <button
-                                  type="button"
-                                  onClick={() => grantUserStatus(u.id, 'rejected')}
-                                  className="px-2.5 py-1 rounded-xl bg-red-50 text-red-700 border border-red-200 font-bold text-[11px] transition cursor-pointer"
-                                >
-                                  Suspend Maker
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     ) : (
                       <div className="p-2.5 rounded-xl bg-slate-100 text-slate-500 text-xs italic">
-                        Role assignments and permissions are strictly managed by the Master Author.
+                        Role promotions, demotions, and user deletions are strictly restricted to the Master Administrator (ssumollah@gmail.com).
                       </div>
                     )}
                   </div>
@@ -2679,7 +2644,15 @@ export const AdminPortalPage: React.FC = () => {
           )}
           {/* Clear Orders Confirmation Modal */}
           {clearOrdersModalMode && (
-            <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 animate-fade-in">
+            <div
+              className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 animate-fade-in"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isProcessingClearOrders) {
+                  setClearOrdersModalMode(null);
+                  setClearOrdersConfirmInput('');
+                }
+              }}
+            >
               <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2.5">
@@ -2840,7 +2813,14 @@ export const AdminPortalPage: React.FC = () => {
           CONFIRMATION MODAL: PERMANENT USER ACCOUNT DELETION
       ------------------------------------------------------------- */}
       {deletingUserModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingUserAccount) {
+              setDeletingUserModal(null);
+            }
+          }}
+        >
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 md:p-8 space-y-5 border border-red-200 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">

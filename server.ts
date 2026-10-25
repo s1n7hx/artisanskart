@@ -1385,48 +1385,65 @@ app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
         });
       }
 
-      // 1. Delete all order items from Supabase
-      const { data: deletedItems, error: itemErr } = await supabaseAdmin
-        .from('order_items')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000')
-        .select('id');
-
-      // 2. Delete all order status history from Supabase if table exists
-      try {
-        await supabaseAdmin
-          .from('order_status_history')
-          .delete()
-          .neq('id', '00000000-0000-0000-0000-000000000000');
-      } catch (e) {}
-
-      // 3. Delete all orders from Supabase
-      const { data: deletedOrders, error: orderErr } = await supabaseAdmin
-        .from('orders')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000')
-        .select('id, order_number');
-
-      if (orderErr) {
-        console.error('❌ [Clear All Orders Supabase Error]:', orderErr.message);
-        return res.status(500).json({
-          success: false,
-          error: `Failed to clear orders from database: ${orderErr.message}`,
-        });
+      // 1. Fetch all orders from Supabase first
+      const { data: allOrders, error: fetchErr } = await supabaseAdmin.from('orders').select('id, order_number');
+      if (fetchErr) {
+        console.error('❌ [Clear All Orders Fetch Error]:', fetchErr.message);
       }
+      const orderIds = (allOrders || []).map((o: any) => o.id);
+
+      let deletedItemsCount = 0;
+      let deletedOrdersCount = 0;
+
+      if (orderIds.length > 0) {
+        // Delete order items for all orders
+        const { data: delItems } = await supabaseAdmin
+          .from('order_items')
+          .delete()
+          .in('order_id', orderIds)
+          .select('id');
+        deletedItemsCount = delItems?.length || 0;
+
+        // Delete order status history
+        try {
+          await supabaseAdmin
+            .from('order_status_history')
+            .delete()
+            .in('order_id', orderIds);
+        } catch (e) {}
+
+        // Delete orders
+        const { data: delOrders, error: delOrderErr } = await supabaseAdmin
+          .from('orders')
+          .delete()
+          .in('id', orderIds)
+          .select('id');
+
+        if (delOrderErr) {
+          console.error('❌ [Clear All Orders Delete Error]:', delOrderErr.message);
+          return res.status(500).json({ success: false, error: delOrderErr.message });
+        }
+        deletedOrdersCount = delOrders?.length || orderIds.length;
+      }
+
+      // Also ensure order_items and order_status_history are completely wiped
+      try {
+        await supabaseAdmin.from('order_items').delete().filter('id', 'not.is', null);
+        await supabaseAdmin.from('order_status_history').delete().filter('id', 'not.is', null);
+      } catch (e) {}
 
       // 4. Clear in-memory and disk persistent orders
       const countBefore = SERVER_ORDERS.length;
       SERVER_ORDERS = [];
       saveOrdersToDisk(SERVER_ORDERS);
 
-      console.log(`🗑️ [Clear All Orders Executed by ${cleanEmail}] Removed ${deletedOrders?.length || countBefore} orders.`);
+      console.log(`🗑️ [Clear All Orders Executed by ${cleanEmail}] Removed ${deletedOrdersCount || countBefore} orders from database.`);
 
       return res.json({
         success: true,
         mode: 'all',
-        deletedOrdersCount: deletedOrders?.length || countBefore,
-        deletedItemsCount: deletedItems?.length || 0,
+        deletedOrdersCount: deletedOrdersCount || countBefore,
+        deletedItemsCount: deletedItemsCount,
         message: 'All order records have been permanently cleared from database and server storage.',
       });
 
@@ -1434,7 +1451,22 @@ app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
       // Query all orders from Supabase first
       const { data: allDbOrders } = await supabaseAdmin.from('orders').select('*');
 
+      const explicitTestNumbers = [
+        'AK-2026-25425',
+        'AK-2026-39190',
+        'AK-2026-31266',
+        'AK-2026-TEST01',
+        'AK-TEST-88002',
+        'AK-TEST-88001',
+        'AK-2026-16270',
+        'AK-2026-40980',
+        'AK-2026-77889',
+      ];
+
       const isTestOrder = (o: any) => {
+        const orderNum = String(o.order_number || o.orderNumber || o.id || '').trim().toUpperCase();
+        if (explicitTestNumbers.includes(orderNum)) return true;
+
         const coupon = String(o.coupon_applied || o.couponCode || '').toUpperCase();
         const payId = String(o.payment_gateway_payment_id || o.paymentGatewayPaymentId || '').toLowerCase();
         const payOrderId = String(o.payment_gateway_order_id || o.paymentGatewayOrderId || '').toLowerCase();
@@ -1507,7 +1539,7 @@ app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
         mode: 'test',
         deletedOrdersCount: totalRemoved,
         deletedItemsCount: deletedItemCount,
-        message: `Successfully cleared ${totalRemoved} test order records. Genuine customer orders remain intact.`,
+        message: `Successfully cleared ${totalRemoved} test/old order records. Genuine customer orders remain intact.`,
       });
 
     } else {
@@ -3323,7 +3355,17 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
 // POST /api/admin/update-role
 app.post('/api/admin/update-role', async (req: Request, res: Response) => {
   try {
-    const { targetUserId, userId, email, role, status, school, full_name, name } = req.body || {};
+    const { targetUserId, userId, email, role, status, school, full_name, name, adminEmail } = req.body || {};
+    const requesterEmail = String(adminEmail || '').trim().toLowerCase();
+
+    // Security Enforcement: ONLY Master Admin (ssumollah@gmail.com) can promote or demote roles.
+    if (requesterEmail && requesterEmail !== 'ssumollah@gmail.com') {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized: Only the Master Administrator can promote or demote user roles.',
+      });
+    }
+
     const cleanUserId = String(targetUserId || userId || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
     const isMaster = cleanEmail === 'ssumollah@gmail.com';
@@ -3514,12 +3556,23 @@ app.post('/api/auth/sync-profile', async (req: Request, res: Response) => {
     const authList = await getAuthorizedEmailsFromSupabase();
     const matchingAuth = authList.find((item) => (item.email || '').toLowerCase() === cleanEmail);
 
-    // 2. Fetch current profile from Supabase
-    const { data: existingProfile } = await supabaseAdmin
+    // 2. Fetch current profile from Supabase by ID or Email
+    let { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', cleanUserId)
       .maybeSingle();
+
+    if (!existingProfile && cleanEmail) {
+      const { data: foundByEmail } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+      if (foundByEmail) {
+        existingProfile = foundByEmail;
+      }
+    }
 
     // 3. Determine authoritative role:
     // - ssumollah@gmail.com -> master_admin

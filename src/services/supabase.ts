@@ -37,14 +37,17 @@ export interface UserProfile {
 // Authentication Helpers
 // -------------------------------------------------------------
 export async function signInWithGoogle(redirectTo?: string) {
+  // Always use current browser window's origin so users stay on the active ArtisansKart domain/application
+  const currentOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : '';
+
   const prodSiteUrl =
     (typeof import.meta !== 'undefined' && ((import.meta as any).env?.VITE_SITE_URL || (import.meta as any).env?.VITE_PUBLIC_SITE_URL)) ||
     (typeof process !== 'undefined' && (process.env?.SITE_URL || process.env?.VITE_SITE_URL)) ||
     '';
 
-  const baseOrigin = prodSiteUrl
+  const baseOrigin = currentOrigin || (prodSiteUrl
     ? (prodSiteUrl.startsWith('http') ? prodSiteUrl.replace(/\/$/, '') : `https://${prodSiteUrl.replace(/\/$/, '')}`)
-    : (typeof window !== 'undefined' ? window.location.origin : '');
+    : '');
 
   let targetRedirect = `${baseOrigin}/auth/callback`;
 
@@ -52,8 +55,7 @@ export async function signInWithGoogle(redirectTo?: string) {
     if (redirectTo.startsWith('http://') || redirectTo.startsWith('https://')) {
       try {
         const urlObj = new URL(redirectTo);
-        // Only accept absolute URLs matching current app origin or base origin
-        if (urlObj.origin === baseOrigin || (typeof window !== 'undefined' && urlObj.origin === window.location.origin)) {
+        if (urlObj.origin === baseOrigin) {
           targetRedirect = redirectTo;
         }
       } catch (e) {}
@@ -320,11 +322,11 @@ export async function deauthorizeEmail(email: string, id?: string, adminEmail?: 
   return deleteUserAccountApi(id || '', email, adminEmail);
 }
 
-export async function updateUserRole(userId: string, role: UserRole, email?: string, school?: string) {
+export async function updateUserRole(userId: string, role: UserRole, email?: string, school?: string, adminEmail?: string) {
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, role, school }),
+    body: JSON.stringify({ targetUserId: userId, userId, email, role, school, adminEmail }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -333,11 +335,11 @@ export async function updateUserRole(userId: string, role: UserRole, email?: str
   return data;
 }
 
-export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected', email?: string) {
+export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected', email?: string, adminEmail?: string) {
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, status }),
+    body: JSON.stringify({ targetUserId: userId, userId, email, status, adminEmail }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -351,12 +353,13 @@ export async function updateUserRoleAndStatus(
   role: UserRole,
   status: 'approved' | 'pending' | 'rejected',
   email?: string,
-  school?: string
+  school?: string,
+  adminEmail?: string
 ) {
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school }),
+    body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school, adminEmail }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
