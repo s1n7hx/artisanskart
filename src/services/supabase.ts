@@ -37,20 +37,28 @@ export interface UserProfile {
 // Authentication Helpers
 // -------------------------------------------------------------
 export async function signInWithGoogle(redirectTo?: string) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  let targetRedirect = `${origin}/auth/callback`;
+  const prodSiteUrl =
+    (typeof import.meta !== 'undefined' && ((import.meta as any).env?.VITE_SITE_URL || (import.meta as any).env?.VITE_PUBLIC_SITE_URL)) ||
+    (typeof process !== 'undefined' && (process.env?.SITE_URL || process.env?.VITE_SITE_URL)) ||
+    '';
 
-  if (redirectTo && typeof window !== 'undefined') {
+  const baseOrigin = prodSiteUrl
+    ? (prodSiteUrl.startsWith('http') ? prodSiteUrl.replace(/\/$/, '') : `https://${prodSiteUrl.replace(/\/$/, '')}`)
+    : (typeof window !== 'undefined' ? window.location.origin : '');
+
+  let targetRedirect = `${baseOrigin}/auth/callback`;
+
+  if (redirectTo) {
     if (redirectTo.startsWith('http://') || redirectTo.startsWith('https://')) {
       try {
         const urlObj = new URL(redirectTo);
-        // Only accept absolute URLs matching current app origin
-        if (urlObj.origin === origin) {
+        // Only accept absolute URLs matching current app origin or base origin
+        if (urlObj.origin === baseOrigin || (typeof window !== 'undefined' && urlObj.origin === window.location.origin)) {
           targetRedirect = redirectTo;
         }
       } catch (e) {}
     } else if (redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
-      targetRedirect = `${origin}${redirectTo}`;
+      targetRedirect = `${baseOrigin}${redirectTo}`;
     }
   }
 
@@ -93,15 +101,21 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
         data.school = data.school || 'ArtisansKart Platform Headquarters';
         (async () => {
           try {
-            await supabase
+            const { data: updatedData, error: updateError } = await supabase
               .from('profiles')
               .update({
-                role: 'master_admin',
-                status: 'approved',
+                role: 'admin',
                 school: 'ArtisansKart Platform Headquarters',
                 updated_at: new Date().toISOString(),
               })
-              .eq('id', userId);
+              .eq('id', userId)
+              .select();
+
+            if (updateError) {
+              console.warn('[Supabase Profile Update Error]:', updateError.message);
+            } else if (!updatedData || updatedData.length === 0) {
+              console.warn('[Supabase Profile RLS Notice]: Update returned 0 rows. Check RLS UPDATE policy on public.profiles.');
+            }
           } catch (e) {}
         })();
       }
