@@ -3196,6 +3196,16 @@ app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
 app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
   try {
     const { userId, targetUserId, email, id, adminEmail } = req.body || {};
+    const requesterEmail = String(adminEmail || req.headers['x-admin-email'] || '').trim().toLowerCase();
+
+    // Security Enforcement: ONLY Master Admin (ssumollah@gmail.com) can delete users.
+    if (requesterEmail && requesterEmail !== 'ssumollah@gmail.com') {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Only the Master Administrator (ssumollah@gmail.com) can delete user accounts.',
+      });
+    }
+
     const effectiveUserId = String(userId || targetUserId || id || '').trim();
     let cleanEmail = String(email || '').trim().toLowerCase();
 
@@ -3226,6 +3236,17 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
       }
     }
 
+    // If still missing email, check authorized_emails list
+    if (!cleanEmail && resolvedUserId) {
+      try {
+        const authList = await getAuthorizedEmailsFromSupabase();
+        const matchedAuth = authList.find(item => item.id === resolvedUserId);
+        if (matchedAuth?.email) {
+          cleanEmail = String(matchedAuth.email).trim().toLowerCase();
+        }
+      } catch (e) {}
+    }
+
     if (cleanEmail === 'ssumollah@gmail.com') {
       return res.status(400).json({ success: false, error: 'Cannot delete the Master Author account.' });
     }
@@ -3247,10 +3268,9 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
       existingOrdersCount = count || 0;
     } catch (e) {}
 
-    console.log(`[DELETE START] userId: ${resolvedUserId}, email: ${cleanEmail}`);
+    console.log(`[USER DELETE START] userId: ${resolvedUserId}, email: ${cleanEmail}`);
 
-    // 1. Clean up from site_settings (authorized_emails)
-    console.log(`[SITE SETTINGS CLEANUP]`);
+    // 1. Clean up from site_settings (authorized_emails) so they never reappear on refresh
     try {
       const authList = await withTimeout(getAuthorizedEmailsFromSupabase(), 8000, 'getAuthorizedEmails');
       const filtered = authList.filter((item) => {
@@ -3264,7 +3284,6 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 2. Clean up from customer_addresses
-    console.log(`[ADDRESS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
         await withTimeout(supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`), 8000, 'deleteAddresses');
@@ -3278,7 +3297,6 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 3. Clean up from maker_applications
-    console.log(`[MAKER APPS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
         await withTimeout(supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`), 8000, 'deleteMakerApps');
@@ -3292,7 +3310,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     }
 
     // 4. Permanently delete row from public.profiles
-    console.log(`[PROFILE CLEANUP]`);
+    console.log(`[PROFILE UPDATE/DELETE]`);
     try {
       if (resolvedUserId) {
         await withTimeout(supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId), 8000, 'deleteProfile');
@@ -3335,7 +3353,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
       } catch (e) {}
     }
 
-    console.log(`[DELETE COMPLETE] ${cleanEmail || resolvedUserId}`);
+    console.log(`[USER DELETE COMPLETE] ${cleanEmail || resolvedUserId}`);
 
     return res.json({
       success: true,
