@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, Loader2, AlertCircle } from 'lucide-react';
-import { supabase, ensureUserProfile } from '../services/supabase';
+import { supabase, ensureUserProfile, getEffectiveAppUrl } from '../services/supabase';
 import { useApp, MASTER_ADMIN_EMAIL } from '../context/AppContext';
 import { UserAccount, UserRole, UserStatus } from '../types';
 
@@ -117,16 +117,26 @@ export const AuthCallbackPage: React.FC = () => {
 
           const safeNext = (next && next.startsWith('/') && !next.startsWith('//')) ? next : '';
 
+          const currentAppUrl = getEffectiveAppUrl();
+          console.log('[Auth Debug] Current application URL:', typeof window !== 'undefined' ? window.location.origin : '');
+          console.log('[Auth Debug] Auth callback URL:', typeof window !== 'undefined' ? window.location.href : '');
+          console.log('[Auth Debug] Authenticated user:', activeUser.email);
+          console.log('[Auth Debug] Detected role:', assignedRole);
+
+          let finalRedirect = '/';
           if (isMaster || assignedRole === 'master_admin' || assignedRole === 'admin') {
+            finalRedirect = safeNext || '/admin';
             showToast('Master Author verified! Welcome to the Admin Portal.', 'shield-check');
-            navigate(safeNext || '/admin', { replace: true });
           } else if (assignedRole === 'maker') {
+            finalRedirect = safeNext || '/maker';
             showToast(`Welcome back, Maker ${userAccount.name}!`, 'sparkles');
-            navigate(safeNext || '/maker', { replace: true });
           } else {
+            finalRedirect = safeNext || '/';
             showToast(`Signed in successfully as ${userAccount.name}`, 'check-circle-2');
-            navigate(safeNext || '/', { replace: true });
           }
+
+          console.log('[Auth Debug] Final redirect URL:', `${currentAppUrl}${finalRedirect}`);
+          navigate(finalRedirect, { replace: true });
         }
       } catch (err: any) {
         console.error('[Auth Callback Error]', err);
