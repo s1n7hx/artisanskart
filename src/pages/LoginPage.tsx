@@ -36,8 +36,12 @@ export const LoginPage: React.FC = () => {
       setErrorMsg('');
 
       const origin = window.location.origin;
-      const callbackUrl = redirectPath
-        ? `${origin}/auth/callback?next=${encodeURIComponent(redirectPath)}`
+      const safeRedirect = (redirectPath && redirectPath.startsWith('/') && !redirectPath.startsWith('//'))
+        ? redirectPath
+        : '';
+
+      const callbackUrl = safeRedirect
+        ? `${origin}/auth/callback?next=${encodeURIComponent(safeRedirect)}`
         : `${origin}/auth/callback`;
 
       await supabaseSignInWithGoogle(callbackUrl);

@@ -2909,12 +2909,13 @@ export const AdminPortalPage: React.FC = () => {
                   setDeletingUserId(deletingUserModal.id);
                   try {
                     await removeUserAccount(deletingUserModal.id);
-                    setDeletingUserModal(null);
                   } catch (err: any) {
-                    showToast(`Failed to delete user: ${err.message}`, 'alert-circle');
+                    console.error('Role/User deletion failed:', err);
+                    showToast(`Failed to delete user: ${err.message || 'Supabase request error'}`, 'alert-circle');
                   } finally {
                     setIsDeletingUserAccount(false);
                     setDeletingUserId(null);
+                    setDeletingUserModal(null);
                   }
                 }}
                 className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-xs"

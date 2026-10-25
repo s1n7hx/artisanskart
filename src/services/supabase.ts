@@ -37,7 +37,23 @@ export interface UserProfile {
 // Authentication Helpers
 // -------------------------------------------------------------
 export async function signInWithGoogle(redirectTo?: string) {
-  const targetRedirect = redirectTo || (typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : '/auth/callback');
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  let targetRedirect = `${origin}/auth/callback`;
+
+  if (redirectTo && typeof window !== 'undefined') {
+    if (redirectTo.startsWith('http://') || redirectTo.startsWith('https://')) {
+      try {
+        const urlObj = new URL(redirectTo);
+        // Only accept absolute URLs matching current app origin
+        if (urlObj.origin === origin) {
+          targetRedirect = redirectTo;
+        }
+      } catch (e) {}
+    } else if (redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
+      targetRedirect = `${origin}${redirectTo}`;
+    }
+  }
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {

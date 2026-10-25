@@ -115,15 +115,17 @@ export const AuthCallbackPage: React.FC = () => {
             localStorage.setItem('artisanskart_current_user_v1', JSON.stringify(userAccount));
           } catch (e) {}
 
+          const safeNext = (next && next.startsWith('/') && !next.startsWith('//')) ? next : '';
+
           if (isMaster || assignedRole === 'master_admin' || assignedRole === 'admin') {
             showToast('Master Author verified! Welcome to the Admin Portal.', 'shield-check');
-            navigate('/admin', { replace: true });
+            navigate(safeNext || '/admin', { replace: true });
           } else if (assignedRole === 'maker') {
             showToast(`Welcome back, Maker ${userAccount.name}!`, 'sparkles');
-            navigate(next || '/maker', { replace: true });
+            navigate(safeNext || '/maker', { replace: true });
           } else {
             showToast(`Signed in successfully as ${userAccount.name}`, 'check-circle-2');
-            navigate(next || '/', { replace: true });
+            navigate(safeNext || '/', { replace: true });
           }
         }
       } catch (err: any) {
