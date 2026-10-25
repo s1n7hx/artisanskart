@@ -47,6 +47,13 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms)
+  );
+  return Promise.race([promise, timeout]);
+}
+
 // -------------------------------------------------------------
 // Server Persistent Order Storage (Guarantees orders persist across sessions)
 // -------------------------------------------------------------
@@ -3213,13 +3220,13 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     // 1. Clean up from site_settings (authorized_emails)
     console.log(`[SITE SETTINGS CLEANUP]`);
     try {
-      const authList = await getAuthorizedEmailsFromSupabase();
+      const authList = await withTimeout(getAuthorizedEmailsFromSupabase(), 8000, 'getAuthorizedEmails');
       const filtered = authList.filter((item) => {
         if (resolvedUserId && item.id === resolvedUserId) return false;
         if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
         return true;
       });
-      await saveAuthorizedEmailsToSupabase(filtered);
+      await withTimeout(saveAuthorizedEmailsToSupabase(filtered), 8000, 'saveAuthorizedEmails');
     } catch (err: any) {
       console.warn('[Delete User Warning]: Failed updating authorized_emails in site_settings:', err.message);
     }
@@ -3228,11 +3235,11 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     console.log(`[ADDRESS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
-        await supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
+        await withTimeout(supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`), 8000, 'deleteAddresses');
       } else if (resolvedUserId) {
-        await supabaseAdmin.from('customer_addresses').delete().eq('user_id', resolvedUserId);
+        await withTimeout(supabaseAdmin.from('customer_addresses').delete().eq('user_id', resolvedUserId), 8000, 'deleteAddresses');
       } else if (cleanEmail) {
-        await supabaseAdmin.from('customer_addresses').delete().ilike('customer_email', cleanEmail);
+        await withTimeout(supabaseAdmin.from('customer_addresses').delete().ilike('customer_email', cleanEmail), 8000, 'deleteAddresses');
       }
     } catch (err: any) {
       console.warn('[Delete User Notice]: customer_addresses clean-up:', err.message);
@@ -3242,11 +3249,11 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     console.log(`[MAKER APPS CLEANUP]`);
     try {
       if (resolvedUserId && cleanEmail) {
-        await supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`);
+        await withTimeout(supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`), 8000, 'deleteMakerApps');
       } else if (resolvedUserId) {
-        await supabaseAdmin.from('maker_applications').delete().eq('user_id', resolvedUserId);
+        await withTimeout(supabaseAdmin.from('maker_applications').delete().eq('user_id', resolvedUserId), 8000, 'deleteMakerApps');
       } else if (cleanEmail) {
-        await supabaseAdmin.from('maker_applications').delete().ilike('applicant_email', cleanEmail);
+        await withTimeout(supabaseAdmin.from('maker_applications').delete().ilike('applicant_email', cleanEmail), 8000, 'deleteMakerApps');
       }
     } catch (err: any) {
       console.warn('[Delete User Notice]: maker_applications clean-up:', err.message);
@@ -3256,10 +3263,10 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     console.log(`[PROFILE CLEANUP]`);
     try {
       if (resolvedUserId) {
-        await supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId);
+        await withTimeout(supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId), 8000, 'deleteProfile');
       }
       if (cleanEmail) {
-        await supabaseAdmin.from('profiles').delete().ilike('email', cleanEmail);
+        await withTimeout(supabaseAdmin.from('profiles').delete().ilike('email', cleanEmail), 8000, 'deleteProfileByEmail');
       }
     } catch (err: any) {
       console.warn('[Delete User Warning]: Failed deleting profile from Supabase:', err.message);
@@ -3270,7 +3277,7 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
     let authUserDeleted = false;
     if (resolvedUserId && resolvedUserId.includes('-')) {
       try {
-        const { error: authDeleteErr } = await supabaseAdmin.auth.admin.deleteUser(resolvedUserId);
+        const { error: authDeleteErr } = await withTimeout(supabaseAdmin.auth.admin.deleteUser(resolvedUserId), 8000, 'deleteAuthUser');
         if (!authDeleteErr) {
           authUserDeleted = true;
           console.log(`🔐 [Supabase Auth User Deleted] User ID: ${resolvedUserId}`);
@@ -3284,12 +3291,12 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
 
     if (!authUserDeleted && cleanEmail) {
       try {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
+        const { data: usersData } = await withTimeout(supabaseAdmin.auth.admin.listUsers(), 8000, 'listAuthUsers');
         const foundAuthUser = usersData?.users?.find(
           (u) => (u.email || '').toLowerCase() === cleanEmail
         );
         if (foundAuthUser?.id) {
-          await supabaseAdmin.auth.admin.deleteUser(foundAuthUser.id);
+          await withTimeout(supabaseAdmin.auth.admin.deleteUser(foundAuthUser.id), 8000, 'deleteAuthUserByEmail');
           authUserDeleted = true;
           console.log(`🔐 [Supabase Auth User Deleted by Email Match] User ID: ${foundAuthUser.id}`);
         }
