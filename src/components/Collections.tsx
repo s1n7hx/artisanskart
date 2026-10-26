@@ -31,7 +31,7 @@ export const Collections: React.FC<CollectionsProps> = ({ onShopCollection }) =>
   return (
     <section
       id="collections"
-      className="bg-[#1E293B] rounded-t-[2.5rem] md:rounded-t-[3.75rem] -mt-8 relative z-10 px-4 md:px-10 pt-20 pb-32"
+      className="bg-[#1E293B] rounded-t-[2.5rem] md:rounded-t-[3.75rem] -mt-8 relative z-10 px-4 md:px-10 pt-20 pb-32 overflow-hidden max-w-full"
     >
       <h2
         className="fade-in hero-heading font-black uppercase text-center mb-16"

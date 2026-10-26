@@ -50,18 +50,18 @@ export const Navbar: React.FC = () => {
     }`;
 
   return (
-    <header className="sticky top-0 z-50 glass-panel border-b border-white/60 bg-[#FAF9F6]/95 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex items-center justify-between gap-3 md:gap-6">
+    <header className="sticky top-0 z-50 glass-panel border-b border-white/60 bg-[#FAF9F6]/95 backdrop-blur-md w-full max-w-full overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-3 md:gap-6 w-full">
         {/* Brand Logo */}
         <NavLink
           to="/"
-          className="flex items-center gap-2 shrink-0 text-left cursor-pointer group touch-manipulation"
+          className="flex items-center gap-2 shrink-0 text-left cursor-pointer group touch-manipulation min-w-0"
         >
-          <div className="w-10 h-10 rounded-2xl bg-[#C85A32] flex items-center justify-center text-white font-black text-lg transition-transform duration-300 group-hover:scale-105 shadow-sm">
+          <div className="w-10 h-10 rounded-2xl bg-[#C85A32] flex items-center justify-center text-white font-black text-lg transition-transform duration-300 group-hover:scale-105 shadow-sm shrink-0">
             AK
           </div>
-          <div className="leading-tight">
-            <p className="font-extrabold text-lg tracking-tight">
+          <div className="leading-tight truncate">
+            <p className="font-extrabold text-lg tracking-tight truncate">
               ArtisansKart<span className="text-[#C85A32]">.in</span>
             </p>
             <span className="hidden sm:inline-block badge-sage text-[10px] px-2 py-0.5 rounded-full font-medium tracking-wide">
@@ -84,7 +84,7 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* TOP RIGHT NAVIGATION & ACTIONS */}
-        <div className="flex items-center gap-2 md:gap-3 ml-auto">
+        <div className="flex items-center gap-2 md:gap-3 ml-auto shrink-0">
           {/* Desktop Nav Items */}
           <nav className="hidden lg:flex items-center gap-1 bg-white/70 border border-[#e7e0d8] p-1 rounded-full shadow-xs">
             <NavLink to="/" end className={navLinkClass}>

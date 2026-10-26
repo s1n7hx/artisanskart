@@ -123,7 +123,7 @@ export const Layout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F6] text-[#1E293B] flex flex-col font-sans">
+    <div className="min-h-screen bg-[#FAF9F6] text-[#1E293B] flex flex-col font-sans max-w-full overflow-x-hidden">
       <ScrollToTop />
 
       {/* Persistent Header with Route Navigation */}

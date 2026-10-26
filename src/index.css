@@ -13,6 +13,8 @@ html, body {
   color: var(--slate);
   font-family: 'Kanit', sans-serif;
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 ::-webkit-scrollbar {

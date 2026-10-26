@@ -248,7 +248,7 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
         <div
           ref={stageRef}
           id="heroCollageStage"
-          className="relative h-[430px] sm:h-[480px] md:h-[540px] flex items-center justify-center group"
+          className="relative h-[430px] sm:h-[480px] md:h-[540px] flex items-center justify-center group overflow-hidden max-w-full"
         >
           {/* Decorative rotating ambient orbit ring */}
           <div className="absolute w-[310px] sm:w-[380px] md:w-[440px] h-[310px] sm:h-[380px] md:h-[440px] rounded-full border-2 border-dashed border-[#C85A32]/25 pointer-events-none animate-[spin_45s_linear_infinite]" />
