@@ -62,7 +62,14 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-[85vh] bg-[#FAF9F6] text-slate-800 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
       <div className="max-w-md w-full space-y-8 bg-white p-8 sm:p-10 rounded-3xl border border-[#e7e0d8] shadow-xl">
         {/* Header Branding */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-3">
+          <div className="w-16 h-16 rounded-2xl overflow-hidden border border-slate-200 shadow-md mx-auto bg-white flex items-center justify-center">
+            <img
+              src="/assets/aistudio/Elegant_Copper_Ribbon_Monogram_A_be868c52.png"
+              alt="ArtisansKart Logo"
+              className="w-full h-full object-cover"
+            />
+          </div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#C85A32]/10 text-[#C85A32] text-xs font-bold">
             <Sparkles className="w-3.5 h-3.5" />
             <span>Fair-Trade Artisan Marketplace</span>

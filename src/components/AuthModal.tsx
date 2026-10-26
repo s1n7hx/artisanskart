@@ -60,8 +60,12 @@ export const AuthModal: React.FC = () => {
 
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center mx-auto mb-3 shadow-xs">
-            <ShieldCheck className="w-6 h-6" />
+          <div className="w-14 h-14 rounded-2xl overflow-hidden border border-slate-200 shadow-md mx-auto mb-3 bg-white flex items-center justify-center">
+            <img
+              src="/assets/aistudio/Elegant_Copper_Ribbon_Monogram_A_be868c52.png"
+              alt="ArtisansKart Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
             {currentUser ? 'Account & Session' : 'Sign in to ArtisansKart'}

@@ -57,8 +57,12 @@ export const Navbar: React.FC = () => {
           to="/"
           className="flex items-center gap-2 shrink-0 text-left cursor-pointer group touch-manipulation min-w-0"
         >
-          <div className="w-10 h-10 rounded-2xl bg-[#C85A32] flex items-center justify-center text-white font-black text-lg transition-transform duration-300 group-hover:scale-105 shadow-sm shrink-0">
-            AK
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white border border-[#e7e0d8] shadow-sm flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105">
+            <img
+              src="/assets/aistudio/Elegant_Copper_Ribbon_Monogram_A_be868c52.png"
+              alt="ArtisansKart Logo"
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="leading-tight truncate">
             <p className="font-extrabold text-lg tracking-tight truncate">

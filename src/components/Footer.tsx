@@ -16,9 +16,13 @@ export const Footer: React.FC = () => {
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10">
         {/* Brand info */}
         <div className="lg:col-span-2">
-          <Link to="/" className="inline-flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#C85A32] flex items-center justify-center text-white font-black text-sm">
-              AK
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-white border border-slate-700 shadow-sm flex items-center justify-center shrink-0">
+              <img
+                src="/assets/aistudio/Elegant_Copper_Ribbon_Monogram_A_be868c52.png"
+                alt="ArtisansKart Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <p className="text-xl font-extrabold text-white tracking-tight">
               ArtisansKart<span className="text-[#C85A32]">.in</span>
