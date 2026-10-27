@@ -897,11 +897,51 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
   }
 }
 
+// ... existing code ...
+async function assignOrderToMaker(orderId: string): Promise<void> {
+  // Find active makers ordered by last_assigned_at ASC
+  const { data: makers, error } = await supabaseAdmin
+    .from('profiles')
+    .select('id')
+    .eq('role', 'maker')
+    .eq('is_available', true)
+    .order('last_assigned_at', { ascending: true })
+    .limit(1);
+
+  let makerId: string | null = null;
+  if (makers && makers.length > 0) {
+    makerId = makers[0].id;
+  } else {
+    // Fallback to Master Admin
+    const { data: admin } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'ssumollah@gmail.com')
+      .single();
+    if (admin) makerId = admin.id;
+  }
+
+  if (makerId) {
+    // Update maker assignment
+    await supabaseAdmin
+      .from('profiles')
+      .update({ last_assigned_at: new Date().toISOString() })
+      .eq('id', makerId);
+
+    // Assign to order items
+    await supabaseAdmin
+      .from('order_items')
+      .update({ maker_id: makerId })
+      .eq('order_id', orderId);
+  }
+}
+
 // -------------------------------------------------------------
 // API Route 3: Verify Payment Signature & Authorize Order
 // Strictly enforces server-side cryptographic HMAC-SHA256 verification
 // -------------------------------------------------------------
 app.post('/api/payment/verify', async (req: Request, res: Response) => {
+// ... existing code ...
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
     const creds = getRazorpayCredentials();
@@ -985,11 +1025,29 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
 
       console.log(`✅ [Payment Verified] Order #${orderNumber || razorpayOrderId} verified via Razorpay ID: ${razorpayPaymentId}`);
 
+      // Perform Round-Robin Maker Assignment
+      try {
+        const { data: dbOrder } = await supabaseAdmin
+          .from('orders')
+          .select('id')
+          .eq(orderNumber ? 'order_number' : 'payment_gateway_order_id', orderNumber || razorpayOrderId)
+          .single();
+        
+        if (dbOrder) {
+          await assignOrderToMaker(dbOrder.id);
+          console.log(`👤 [Maker Assignment] Assigned order ${dbOrder.id} via Round-Robin.`);
+        }
+      } catch (err: any) {
+        console.error('❌ [Maker Assignment Error]:', err.message);
+      }
+
       // Auto-book shipment with NimbusPost
       autoBookShipmentForOrder(orderNumber || razorpayOrderId, sOrder).catch(() => {});
 
       return res.json({ verified: true, paymentId: razorpayPaymentId });
     }
+
+    // ... existing code ...
 
     // In production or live mode, unverified payments are strictly rejected
     if (isProd || keyId.startsWith('rzp_live_')) {
