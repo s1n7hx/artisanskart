@@ -334,10 +334,14 @@ export async function deauthorizeEmail(email: string, id?: string, adminEmail?: 
 }
 
 export async function updateUserRole(userId: string, role: UserRole, email?: string, school?: string, adminEmail?: string) {
+  const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, role, school, adminEmail }),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`
+    },
+    body: JSON.stringify({ targetUserId: userId, userId, email, role, school }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -347,10 +351,14 @@ export async function updateUserRole(userId: string, role: UserRole, email?: str
 }
 
 export async function updateUserStatus(userId: string, status: 'approved' | 'pending' | 'rejected', email?: string, adminEmail?: string) {
+  const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, status, adminEmail }),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`
+    },
+    body: JSON.stringify({ targetUserId: userId, userId, email, status }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -367,10 +375,14 @@ export async function updateUserRoleAndStatus(
   school?: string,
   adminEmail?: string
 ) {
+  const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch('/api/admin/update-role', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school, adminEmail }),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session?.access_token}`
+    },
+    body: JSON.stringify({ targetUserId: userId, userId, email, role, status, school }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {

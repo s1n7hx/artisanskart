@@ -54,6 +54,24 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   return Promise.race([promise, timeout]);
 }
 
+async function getAuthenticatedUser(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new Error('Unauthorized');
+  }
+  const token = authHeader.split(' ')[1];
+  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !user) throw new Error('Unauthorized');
+  
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('role, email')
+    .eq('id', user.id)
+    .single();
+
+  return { user, profile };
+}
+
 // -------------------------------------------------------------
 // Server Persistent Order Storage (Guarantees orders persist across sessions)
 // -------------------------------------------------------------
@@ -1167,6 +1185,7 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.get('/api/orders', async (req: Request, res: Response) => {
   try {
+    const { user, profile } = await getAuthenticatedUser(req);
     const { makerId, status, orderNumber } = req.query;
 
     // Fetch live orders directly from Supabase DB
@@ -1174,6 +1193,11 @@ app.get('/api/orders', async (req: Request, res: Response) => {
       .from('orders')
       .select('*, order_items(*)')
       .order('created_at', { ascending: false });
+
+    // Filter based on user profile role
+    if (profile.role === 'customer') {
+      query = query.eq('customer_email', user.email);
+    }
 
     if (orderNumber) {
       query = query.ilike('order_number', String(orderNumber));
@@ -1365,15 +1389,13 @@ app.post('/api/orders', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
   try {
-    const { mode, email, confirmationText } = req.body || {};
-    const cleanEmail = String(email || '').trim().toLowerCase();
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
 
-    // Verify master_admin authorization
-    const isMaster = cleanEmail === 'ssumollah@gmail.com';
     if (!isMaster) {
       return res.status(403).json({
         success: false,
-        error: 'Unauthorized: Clearing order lists is strictly restricted to the Master Administrator (ssumollah@gmail.com).',
+        error: 'Unauthorized.',
       });
     }
 
@@ -3095,8 +3117,14 @@ app.post('/api/maker-applications/update-status', async (req: Request, res: Resp
 // -------------------------------------------------------------
 
 // GET /api/admin/authorized-emails
-app.get('/api/admin/authorized-emails', async (_req: Request, res: Response) => {
+app.get('/api/admin/authorized-emails', async (req: Request, res: Response) => {
   try {
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
     const list = await getAuthorizedEmailsFromSupabase();
     return res.json({ success: true, count: list.length, authorizedEmails: list });
   } catch (err: any) {
@@ -3107,6 +3135,15 @@ app.get('/api/admin/authorized-emails', async (_req: Request, res: Response) => 
 // POST /api/admin/authorize-email
 app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
   try {
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+
+    if (!isMaster) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized.',
+      });
+    }
     const { email, role, school, full_name, name, authorized_by } = req.body || {};
     const cleanEmail = String(email || '').trim().toLowerCase();
     const cleanRole = String(role || 'maker').trim().toLowerCase();
@@ -3195,14 +3232,13 @@ app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
 // POST /api/admin/delete-user (also aliases /api/admin/deauthorize-email, /api/admin/remove-authorized-email)
 app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
   try {
-    const { userId, targetUserId, email, id, adminEmail } = req.body || {};
-    const requesterEmail = String(adminEmail || req.headers['x-admin-email'] || '').trim().toLowerCase();
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
 
-    // Security Enforcement: ONLY Master Admin (ssumollah@gmail.com) can delete users.
-    if (requesterEmail && requesterEmail !== 'ssumollah@gmail.com') {
+    if (!isMaster) {
       return res.status(403).json({
         success: false,
-        error: 'Forbidden: Only the Master Administrator (ssumollah@gmail.com) can delete user accounts.',
+        error: 'Unauthorized.',
       });
     }
 
@@ -3373,11 +3409,11 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
 // POST /api/admin/update-role
 app.post('/api/admin/update-role', async (req: Request, res: Response) => {
   try {
-    const { targetUserId, userId, email, role, status, school, full_name, name, adminEmail } = req.body || {};
-    const requesterEmail = String(adminEmail || '').trim().toLowerCase();
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
 
-    // Security Enforcement: ONLY Master Admin (ssumollah@gmail.com) can promote or demote roles.
-    if (requesterEmail && requesterEmail !== 'ssumollah@gmail.com') {
+    // Security Enforcement: ONLY Master Admin can promote or demote roles.
+    if (!isMaster) {
       return res.status(403).json({
         success: false,
         error: 'Unauthorized: Only the Master Administrator can promote or demote user roles.',
@@ -3497,8 +3533,14 @@ app.post('/api/admin/update-role', async (req: Request, res: Response) => {
 });
 
 // GET /api/admin/users
-app.get('/api/admin/users', async (_req: Request, res: Response) => {
+app.get('/api/admin/users', async (req: Request, res: Response) => {
   try {
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
     // 1. Fetch real profiles from Supabase
     const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
@@ -3731,6 +3773,12 @@ app.get('/api/products', async (_req: Request, res: Response) => {
 // POST /api/products/save
 app.post(['/api/products/save', '/api/products/create', '/api/admin/save-product'], async (req: Request, res: Response) => {
   try {
+    const { user, profile } = await getAuthenticatedUser(req);
+    const isAdmin = ['admin', 'master_admin'].includes(profile?.role || '');
+
+    if (!isAdmin) {
+      return res.status(403).json({ success: false, error: 'Unauthorized.' });
+    }
     const product = req.body || {};
 
     const title = String(product.title || '').trim();
