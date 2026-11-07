@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Link as LinkIcon, Image as ImageIcon, X, Check, Loader2, Sparkles } from 'lucide-react';
+import { Upload, Link as LinkIcon, Image as ImageIcon, X, Check, Loader2, Sparkles, Sliders } from 'lucide-react';
 import { processAndUploadImage } from '../services/supabase';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface ImageUploaderProps {
   value: string;
@@ -21,7 +22,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   previewHeight = 'h-36',
   placeholder = 'https://images.pexels.com/...',
 }) => {
-  // Determine initial tab: if value is already a data: URL or blob:, default to 'device', otherwise 'url'
   const isDataUrl = value?.startsWith('data:') || value?.startsWith('blob:');
   const [mode, setMode] = useState<'device' | 'url'>(isDataUrl ? 'device' : 'url');
   const [urlInput, setUrlInput] = useState(value && !isDataUrl ? value : '');
@@ -30,28 +30,56 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = async (file: File) => {
+  // Cropper modal state
+  const [rawImageForCrop, setRawImageForCrop] = useState<string | null>(null);
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+
+  const handleFileSelected = (file: File) => {
     if (!file.type.startsWith('image/')) {
       setErrorMsg('Please select a valid image file (JPEG, PNG, WebP, GIF).');
       return;
     }
 
+    const reader = new FileReader();
+    reader.onerror = () => setErrorMsg('Failed to read image file.');
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        setRawImageForCrop(result);
+        setIsCropperOpen(true);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = async (croppedDataUrl: string) => {
     try {
       setIsProcessing(true);
       setErrorMsg(null);
-      const processedUrl = await processAndUploadImage(file);
-      onChange(processedUrl);
+
+      // Convert cropped data url to File object
+      const res = await fetch(croppedDataUrl);
+      const blob = await res.blob();
+      const croppedFile = new File([blob], `cropped_image_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+      // Upload optimized cropped image to Supabase Storage bucket
+      const permanentUrl = await processAndUploadImage(croppedFile);
+      onChange(permanentUrl);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to process image file.');
+      setErrorMsg(err.message || 'Failed to upload cropped image.');
     } finally {
       setIsProcessing(false);
+      setRawImageForCrop(null);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleFile(file);
+      handleFileSelected(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -70,7 +98,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
     if (file) {
-      handleFile(file);
+      handleFileSelected(file);
     }
   };
 
@@ -111,7 +139,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           }`}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>Upload from Device</span>
+          <span>Upload &amp; Crop</span>
         </button>
         <button
           type="button"
@@ -127,7 +155,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         </button>
       </div>
 
-      {/* Mode 1: Device Upload Dropzone */}
+      {/* Mode 1: Device Upload & Crop Dropzone */}
       {mode === 'device' && (
         <div>
           <input
@@ -152,18 +180,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             {isProcessing ? (
               <div className="flex flex-col items-center justify-center py-3 space-y-2 text-[#C85A32]">
                 <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-xs font-bold">Optimizing &amp; uploading image...</span>
+                <span className="text-xs font-bold">Optimizing &amp; uploading cropped image...</span>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-2 space-y-1.5">
                 <div className="w-9 h-9 rounded-full bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center">
-                  <Upload className="w-4 h-4" />
+                  <Sliders className="w-4 h-4" />
                 </div>
                 <div className="text-xs font-bold text-slate-800">
-                  Click to browse from device <span className="font-normal text-slate-500">or drag &amp; drop</span>
+                  Click to upload &amp; crop <span className="font-normal text-slate-500">or drag &amp; drop</span>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Supports JPG, PNG, WEBP, GIF (camera, screenshot, phone gallery)
+                  Opens professional cropper (1:1, 4:5, 3:4 aspect ratios &amp; zoom)
                 </p>
               </div>
             )}
@@ -222,10 +250,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
               <span className="font-bold text-slate-700 truncate">
                 {value.startsWith('data:')
-                  ? 'Device Photo (Optimized & Embedded)'
+                  ? 'Cropped Photo (Embedded)'
                   : value.startsWith('blob:')
-                  ? 'Device Photo (Local Preview)'
-                  : 'Web Photo Link Active'}
+                  ? 'Local Preview'
+                  : 'Permanent Storage URL Active'}
               </span>
             </div>
 
@@ -260,6 +288,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           <ImageIcon className="w-6 h-6 mb-1 text-slate-300" />
           <span>No image selected yet</span>
         </div>
+      )}
+
+      {/* Image Cropper Modal */}
+      {rawImageForCrop && (
+        <ImageCropperModal
+          isOpen={isCropperOpen}
+          imageSrc={rawImageForCrop}
+          onClose={() => {
+            setIsCropperOpen(false);
+            setRawImageForCrop(null);
+          }}
+          onCropComplete={handleCropComplete}
+        />
       )}
     </div>
   );

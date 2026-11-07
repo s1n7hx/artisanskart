@@ -12,8 +12,11 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Trash2,
+  Sliders,
+  Crop,
 } from 'lucide-react';
 import { processAndUploadImage } from '../services/supabase';
+import { ImageCropperModal } from './ImageCropperModal';
 
 interface MultiImageUploaderProps {
   images: string[];
@@ -33,7 +36,7 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   maxImages = 8,
   minImages = 1,
   label = 'Product Photographs',
-  helperText = 'Upload 1 or more photos. First or starred photo is the primary storefront photo. Extra photos can be reordered or removed at any time.',
+  helperText = 'Upload 1 or more photos. First or starred photo is the primary storefront photo. Extra photos can be cropped, reordered or removed at any time.',
   className = '',
 }) => {
   const [urlInput, setUrlInput] = useState('');
@@ -43,13 +46,18 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Cropper modal state for gallery images
+  const [rawImageForCrop, setRawImageForCrop] = useState<string | null>(null);
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+  const [editingImageIndex, setEditingImageIndex] = useState<number | null>(null);
+
   // Normalize list: ensure primary is in the list
   const currentImages = Array.from(new Set([primaryImage, ...images].filter(Boolean)));
   const effectivePrimary = primaryImage && currentImages.includes(primaryImage)
     ? primaryImage
     : currentImages[0] || '';
 
-  const handleFiles = async (files: FileList | File[]) => {
+  const handleFilesSelected = async (files: FileList | File[]) => {
     setErrorMsg(null);
     const validFiles: File[] = [];
 
@@ -71,30 +79,61 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
       return;
     }
 
-    setIsUploading(true);
-    const uploadedUrls: string[] = [];
-
-    try {
-      for (let i = 0; i < validFiles.length; i++) {
-        setUploadProgress(`Uploading ${i + 1} of ${validFiles.length}...`);
-        const url = await processAndUploadImage(validFiles[i]);
-        if (url && !currentImages.includes(url) && !uploadedUrls.includes(url)) {
-          uploadedUrls.push(url);
-        }
+    // Open cropper for the first file, queue the rest
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        setRawImageForCrop(result);
+        setEditingImageIndex(null); // new upload
+        setIsCropperOpen(true);
       }
+    };
+    reader.readAsDataURL(validFiles[0]);
 
-      const updated = [...currentImages, ...uploadedUrls];
-      const newPrimary = effectivePrimary || updated[0] || '';
-      onChange(updated, newPrimary);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCropComplete = async (croppedDataUrl: string) => {
+    try {
+      setIsUploading(true);
+      setUploadProgress('Optimizing & uploading cropped image...');
+
+      const res = await fetch(croppedDataUrl);
+      const blob = await res.blob();
+      const croppedFile = new File([blob], `gallery_${Date.now()}.jpg`, { type: 'image/jpeg' });
+
+      const permanentUrl = await processAndUploadImage(croppedFile);
+
+      if (editingImageIndex !== null && editingImageIndex >= 0) {
+        // Replacing / updating existing image at index
+        const list = [...currentImages];
+        const oldUrl = list[editingImageIndex];
+        list[editingImageIndex] = permanentUrl;
+        const newPrimary = effectivePrimary === oldUrl ? permanentUrl : effectivePrimary;
+        onChange(list, newPrimary);
+      } else {
+        // Adding new cropped image
+        const updated = [...currentImages, permanentUrl];
+        const newPrimary = effectivePrimary || updated[0] || '';
+        onChange(updated, newPrimary);
+      }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error uploading photographs. Please retry.');
+      setErrorMsg(err.message || 'Error uploading cropped image.');
     } finally {
       setIsUploading(false);
       setUploadProgress(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setRawImageForCrop(null);
+      setEditingImageIndex(null);
     }
+  };
+
+  const handleOpenCropperForExisting = (imgUrl: string, index: number) => {
+    setRawImageForCrop(imgUrl);
+    setEditingImageIndex(index);
+    setIsCropperOpen(true);
   };
 
   const handleAddUrl = () => {
@@ -124,7 +163,6 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   };
 
   const handleSetPrimary = (targetUrl: string) => {
-    // Put primary at the front of images list for consistency
     const remaining = currentImages.filter((img) => img !== targetUrl);
     const reordered = [targetUrl, ...remaining];
     onChange(reordered, targetUrl);
@@ -151,7 +189,6 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
     list[index] = list[newIndex];
     list[newIndex] = temp;
 
-    // The first image remains or becomes primary
     onChange(list, list[0]);
   };
 
@@ -196,7 +233,7 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
           e.preventDefault();
           setIsDragging(false);
           if (e.dataTransfer.files) {
-            handleFiles(e.dataTransfer.files);
+            handleFilesSelected(e.dataTransfer.files);
           }
         }}
         className={`border-2 border-dashed rounded-2xl p-5 text-center transition cursor-pointer ${
@@ -214,7 +251,7 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
           className="hidden"
           onChange={(e) => {
             if (e.target.files) {
-              handleFiles(e.target.files);
+              handleFilesSelected(e.target.files);
             }
           }}
         />
@@ -224,17 +261,17 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
             {isUploading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <Upload className="w-5 h-5" />
+              <Sliders className="w-5 h-5" />
             )}
           </div>
           <div>
             <p className="text-xs font-bold text-slate-800">
               {isUploading
                 ? uploadProgress || 'Processing photographs...'
-                : 'Click to select multiple photos or drag and drop here'}
+                : 'Click to upload & crop photos or drag & drop here'}
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              High resolution JPG, PNG, WebP up to 10MB each
+              Individual cropper available for each gallery picture (1:1, 4:5, 3:4 ratios)
             </p>
           </div>
         </div>
@@ -342,18 +379,27 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                       </span>
                     )}
 
-                    {/* Persistent Remove Button (Top-Right) */}
+                    {/* Crop / Edit Button (Top-Right) */}
                     <button
                       type="button"
-                      onClick={() => handleRemoveImage(imgUrl)}
-                      title={isPrimary ? 'Remove photo' : 'Remove extra picture'}
-                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-rose-600 text-white flex items-center justify-center shadow-md cursor-pointer transition"
+                      onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                      title="Crop & Edit Image"
+                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-[#C85A32] text-white flex items-center justify-center shadow-md cursor-pointer transition"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Crop className="w-3.5 h-3.5" />
                     </button>
 
                     {/* Quick Action Overlay */}
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                        title="Crop & Edit"
+                        className="p-1.5 rounded-full bg-[#C85A32] text-white hover:bg-[#b04a25] shadow-md cursor-pointer transition"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                      </button>
+
                       {!isPrimary && (
                         <button
                           type="button"
@@ -402,23 +448,20 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                   <div className="p-2 flex items-center justify-between text-[11px] bg-slate-50 border-t border-slate-100">
                     <span className="font-bold text-slate-500">#{index + 1}</span>
                     <div className="flex items-center gap-2">
-                      {!isPrimary && (
-                        <button
-                          type="button"
-                          onClick={() => handleSetPrimary(imgUrl)}
-                          className="text-[10px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Make Primary
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                        className="text-[10px] font-bold text-[#C85A32] hover:underline cursor-pointer flex items-center gap-0.5"
+                      >
+                        <Crop className="w-3 h-3" /> Crop
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(imgUrl)}
-                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer flex items-center gap-0.5"
-                        title="Remove picture"
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                        title="Delete picture"
                       >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Delete</span>
+                        Delete
                       </button>
                     </div>
                   </div>
@@ -427,6 +470,20 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
             })}
           </div>
         </div>
+      )}
+
+      {/* Image Cropper Modal */}
+      {rawImageForCrop && (
+        <ImageCropperModal
+          isOpen={isCropperOpen}
+          imageSrc={rawImageForCrop}
+          onClose={() => {
+            setIsCropperOpen(false);
+            setRawImageForCrop(null);
+            setEditingImageIndex(null);
+          }}
+          onCropComplete={handleCropComplete}
+        />
       )}
     </div>
   );

@@ -48,6 +48,8 @@ import {
   updateUserRole,
   updateUserStatus,
   clearOrdersApi,
+  fetchAllProfiles,
+  UserProfile,
 } from '../services/supabase';
 import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
 
@@ -114,6 +116,31 @@ export const AdminPortalPage: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [customPercentInput, setCustomPercentInput] = useState<number>(makerEarningPercent);
   const [isSavingPercent, setIsSavingPercent] = useState(false);
+
+  // Approved Makers state for dynamic dropdown selection
+  const [approvedMakers, setApprovedMakers] = useState<UserProfile[]>([]);
+  const [loadingMakers, setLoadingMakers] = useState<boolean>(true);
+  const [makersError, setMakersError] = useState<string | null>(null);
+
+  const loadApprovedMakers = async () => {
+    setLoadingMakers(true);
+    setMakersError(null);
+    try {
+      const profiles = await fetchAllProfiles();
+      const makers = profiles.filter(
+        (p) => p.role === 'maker' || (p.email && p.email.toLowerCase() === 'ssumollah@gmail.com') || p.role === 'admin' || p.role === 'master_admin'
+      );
+      setApprovedMakers(makers);
+    } catch (err: any) {
+      setMakersError(err.message || 'Failed to load approved makers.');
+    } finally {
+      setLoadingMakers(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadApprovedMakers();
+  }, []);
 
   React.useEffect(() => {
     setCustomPercentInput(makerEarningPercent);
@@ -2013,14 +2040,47 @@ export const AdminPortalPage: React.FC = () => {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">Maker Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={newProductForm.maker}
-                    onChange={(e) => setNewProductForm({ ...newProductForm, maker: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
-                  />
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Select Maker / Creator *</label>
+                  {loadingMakers ? (
+                    <div className="text-xs text-slate-500 py-2.5 flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#C85A32]" />
+                      <span>Loading approved makers...</span>
+                    </div>
+                  ) : makersError ? (
+                    <div className="text-xs text-red-600 py-2.5 flex items-center justify-between">
+                      <span>{makersError}</span>
+                      <button type="button" onClick={loadApprovedMakers} className="underline font-bold">Retry</button>
+                    </div>
+                  ) : approvedMakers.length === 0 ? (
+                    <div className="text-xs text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                      No approved makers found. Authorize a maker in the Users tab first.
+                    </div>
+                  ) : (
+                    <select
+                      required
+                      value={(newProductForm as any).makerId || ''}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        const match = approvedMakers.find((m) => m.id === selId);
+                        if (match) {
+                          setNewProductForm({
+                            ...newProductForm,
+                            makerId: match.id,
+                            maker: match.full_name || match.email.split('@')[0],
+                            school: match.school || newProductForm.school || 'Independent Studio',
+                          });
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#C85A32]"
+                    >
+                      <option value="">-- Choose Approved Maker --</option>
+                      {approvedMakers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.full_name || m.email.split('@')[0]} ({m.email}) {m.school ? `• ${m.school}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Studio / Guild</label>
@@ -2028,7 +2088,7 @@ export const AdminPortalPage: React.FC = () => {
                     type="text"
                     value={newProductForm.school}
                     onChange={(e) => setNewProductForm({ ...newProductForm, school: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white"
                   />
                 </div>
               </div>
@@ -2142,6 +2202,51 @@ export const AdminPortalPage: React.FC = () => {
                     value={editingProduct.price}
                     onChange={(e) => setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-[#C85A32] bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Select Maker / Creator *</label>
+                  {loadingMakers ? (
+                    <div className="text-xs text-slate-500 py-2.5">Loading approved makers...</div>
+                  ) : approvedMakers.length === 0 ? (
+                    <div className="text-xs text-amber-700">No approved makers found.</div>
+                  ) : (
+                    <select
+                      required
+                      value={editingProduct.makerId || ''}
+                      onChange={(e) => {
+                        const selId = e.target.value;
+                        const match = approvedMakers.find((m) => m.id === selId);
+                        if (match) {
+                          setEditingProduct({
+                            ...editingProduct,
+                            makerId: match.id,
+                            maker: match.full_name || match.email.split('@')[0],
+                            school: match.school || editingProduct.school || 'Independent Studio',
+                          });
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#C85A32]"
+                    >
+                      <option value="">-- Choose Approved Maker --</option>
+                      {approvedMakers.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.full_name || m.email.split('@')[0]} ({m.email}) {m.school ? `• ${m.school}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Studio / Guild</label>
+                  <input
+                    type="text"
+                    value={editingProduct.school}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, school: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white"
                   />
                 </div>
               </div>
