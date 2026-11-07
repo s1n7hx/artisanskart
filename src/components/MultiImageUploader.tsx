@@ -445,23 +445,23 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                   </div>
 
                   {/* Photo Bottom Bar */}
-                  <div className="p-2 flex items-center justify-between text-[11px] bg-slate-50 border-t border-slate-100">
+                  <div className="p-2.5 flex items-center justify-between text-[11px] bg-slate-50 border-t border-slate-100">
                     <span className="font-bold text-slate-500">#{index + 1}</span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
                         onClick={() => handleOpenCropperForExisting(imgUrl, index)}
-                        className="text-[10px] font-bold text-[#C85A32] hover:underline cursor-pointer flex items-center gap-0.5"
+                        className="px-2.5 py-1 rounded-lg bg-[#C85A32] text-white font-bold hover:bg-[#b04a25] transition cursor-pointer flex items-center gap-1 shadow-2xs text-[10px]"
                       >
-                        <Crop className="w-3 h-3" /> Crop
+                        <Crop className="w-3 h-3" /> Crop Image
                       </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(imgUrl)}
-                        className="text-[10px] font-bold text-rose-600 hover:text-rose-800 cursor-pointer"
+                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold transition cursor-pointer text-[10px]"
                         title="Delete picture"
                       >
-                        Delete
+                        Remove
                       </button>
                     </div>
                   </div>
