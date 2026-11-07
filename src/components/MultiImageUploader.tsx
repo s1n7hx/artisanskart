@@ -36,7 +36,7 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   maxImages = 8,
   minImages = 1,
   label = 'Product Photographs',
-  helperText = 'Upload 1 or more photos. First or starred photo is the primary storefront photo. Extra photos can be cropped, reordered or removed at any time.',
+  helperText = 'Upload 1 or more photos. First or starred photo is the primary storefront photo. Use the buttons below each thumbnail to Crop, Set as Primary, or Remove.',
   className = '',
 }) => {
   const [urlInput, setUrlInput] = useState('');
@@ -193,14 +193,14 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
   };
 
   return (
-    <div className={`space-y-3.5 ${className}`}>
+    <div className={`space-y-4 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <label className="block text-xs font-bold text-slate-700">{label}</label>
           {helperText && <p className="text-[11px] text-slate-500 mt-0.5">{helperText}</p>}
         </div>
-        <span className="text-xs font-extrabold text-[#C85A32] bg-[#C85A32]/10 px-2.5 py-0.5 rounded-full">
+        <span className="text-xs font-extrabold text-[#C85A32] bg-[#C85A32]/10 px-3 py-1 rounded-full">
           {currentImages.length} / {maxImages} Photos
         </span>
       </div>
@@ -261,17 +261,17 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
             {isUploading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <Sliders className="w-5 h-5" />
+              <Crop className="w-5 h-5" />
             )}
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-800">
+            <p className="text-xs font-bold text-slate-900">
               {isUploading
                 ? uploadProgress || 'Processing photographs...'
                 : 'Click to upload & crop photos or drag & drop here'}
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Individual cropper available for each gallery picture (1:1, 4:5, 3:4 ratios)
+              Each photo can be cropped independently (1:1, 4:5, 3:4 aspect ratios &amp; zoom)
             </p>
           </div>
         </div>
@@ -292,14 +292,14 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
               }
             }}
             placeholder="Or paste an image web URL (https://...)"
-            className="w-full pl-8 pr-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
+            className="w-full pl-8 pr-3 py-2.5 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#C85A32]"
           />
         </div>
         <button
           type="button"
           onClick={handleAddUrl}
           disabled={!urlInput.trim() || currentImages.length >= maxImages}
-          className="px-3 py-2 rounded-xl bg-slate-800 text-white font-bold text-xs hover:bg-slate-900 disabled:opacity-50 transition cursor-pointer flex items-center gap-1 shrink-0"
+          className="px-4 py-2.5 rounded-xl bg-slate-800 text-white font-bold text-xs hover:bg-slate-900 disabled:opacity-50 transition cursor-pointer flex items-center gap-1 shrink-0"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Add URL</span>
@@ -308,24 +308,19 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
 
       {/* Minimum Photos Requirement Status */}
       {currentImages.length < minImages ? (
-        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+        <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
           <span>
             <strong>Please add at least 1 primary photograph</strong> of your craft to display in the marketplace.
           </span>
         </div>
       ) : (
-        <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex flex-wrap items-center justify-between gap-2">
+        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
             <span className="font-medium">
               Ready for catalog ({currentImages.length} {currentImages.length === 1 ? 'photo' : 'photos'}).
             </span>
-            {currentImages.length > 1 && (
-              <span className="text-slate-500 font-normal ml-1">
-                ({currentImages.length - 1} extra {currentImages.length - 1 === 1 ? 'picture' : 'pictures'})
-              </span>
-            )}
           </div>
           <span className="text-[11px] text-emerald-700 font-semibold">
             ★ Primary: #{currentImages.indexOf(effectivePrimary) + 1}
@@ -333,135 +328,101 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
         </div>
       )}
 
-      {/* Image Gallery Previews Grid with Controls */}
+      {/* Image Gallery Previews Grid with Clearly Visible Controls BELOW Each Thumbnail */}
       {currentImages.length > 0 && (
-        <div className="space-y-2.5 pt-1">
+        <div className="space-y-3 pt-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs font-bold text-slate-700">
-              Product Photos ({currentImages.length})
+              Product Gallery Photos ({currentImages.length})
             </p>
             {currentImages.length > 1 && (
               <button
                 type="button"
                 onClick={handleRemoveAllExtraImages}
-                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1 rounded-full flex items-center gap-1.5 transition cursor-pointer"
+                className="text-xs font-bold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-full flex items-center gap-1.5 transition cursor-pointer"
                 title="Remove all extra pictures and keep only the primary photo"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Remove All Extra Pictures ({currentImages.length - 1})</span>
+                <span>Remove Extra Pictures ({currentImages.length - 1})</span>
               </button>
             )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {currentImages.map((imgUrl, index) => {
               const isPrimary = imgUrl === effectivePrimary;
 
               return (
                 <div
                   key={`${imgUrl}-${index}`}
-                  className={`group relative rounded-2xl overflow-hidden border-2 bg-white shadow-xs transition ${
+                  className={`rounded-2xl overflow-hidden border-2 bg-white shadow-xs transition ${
                     isPrimary ? 'border-[#C85A32] ring-2 ring-[#C85A32]/20' : 'border-slate-200'
                   }`}
                 >
-                  {/* Photo Preview */}
-                  <div className="aspect-square w-full bg-slate-100 overflow-hidden relative">
+                  {/* Photo Thumbnail Preview */}
+                  <div
+                    onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                    className="aspect-square w-full bg-slate-100 overflow-hidden relative cursor-pointer group"
+                    title="Click to Crop & Resize"
+                  >
                     <img
                       src={imgUrl}
                       alt={`Product Photo ${index + 1}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                      className="w-full h-full object-cover group-hover:scale-102 transition duration-300"
                     />
 
-                    {/* Primary Badge */}
                     {isPrimary && (
-                      <span className="absolute top-2 left-2 z-10 px-2 py-0.5 rounded-full bg-[#C85A32] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-sm">
+                      <span className="absolute top-2 left-2 z-10 px-2.5 py-1 rounded-full bg-[#C85A32] text-white text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-md">
                         <Star className="w-3 h-3 fill-white" /> Primary
                       </span>
                     )}
 
-                    {/* Crop / Edit Button (Top-Right) */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCropperForExisting(imgUrl, index)}
-                      title="Crop & Edit Image"
-                      className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-[#C85A32] text-white flex items-center justify-center shadow-md cursor-pointer transition"
-                    >
-                      <Crop className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <span className="px-3 py-1.5 bg-[#C85A32] text-white rounded-xl text-xs font-bold shadow-lg flex items-center gap-1">
+                        <Crop className="w-3.5 h-3.5" /> Crop Image
+                      </span>
+                    </div>
+                  </div>
 
-                    {/* Quick Action Overlay */}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 p-2">
+                  {/* 3 Clearly Visible Controls Directly BELOW Thumbnail */}
+                  <div className="p-3 bg-white border-t border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500">Photo #{index + 1}</span>
+                      {isPrimary && (
+                        <span className="text-[10px] bg-[#C85A32] text-white px-2 py-0.5 rounded-full font-extrabold uppercase">
+                          Storefront Main
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 text-xs">
                       <button
                         type="button"
                         onClick={() => handleOpenCropperForExisting(imgUrl, index)}
-                        title="Crop & Edit"
-                        className="p-1.5 rounded-full bg-[#C85A32] text-white hover:bg-[#b04a25] shadow-md cursor-pointer transition"
+                        className="w-full py-2 px-3 bg-[#C85A32] hover:bg-[#b04a25] text-white rounded-xl font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                       >
                         <Crop className="w-3.5 h-3.5" />
+                        <span>Crop Image</span>
                       </button>
 
                       {!isPrimary && (
                         <button
                           type="button"
                           onClick={() => handleSetPrimary(imgUrl)}
-                          title="Make Primary Storefront Photo"
-                          className="p-1.5 rounded-full bg-white text-amber-500 hover:bg-amber-50 shadow-md cursor-pointer transition"
+                          className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                         >
-                          <Star className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {index > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => handleMove(index, 'left')}
-                          title="Move Left"
-                          className="p-1.5 rounded-full bg-white text-slate-700 hover:bg-slate-100 shadow-md cursor-pointer transition"
-                        >
-                          <ArrowLeft className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {index < currentImages.length - 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleMove(index, 'right')}
-                          title="Move Right"
-                          className="p-1.5 rounded-full bg-white text-slate-700 hover:bg-slate-100 shadow-md cursor-pointer transition"
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" />
+                          <Star className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
+                          <span>Set as Primary</span>
                         </button>
                       )}
 
                       <button
                         type="button"
                         onClick={() => handleRemoveImage(imgUrl)}
-                        title="Remove Photo"
-                        className="p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 shadow-md cursor-pointer transition"
+                        className="w-full py-1.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Photo Bottom Bar */}
-                  <div className="p-2.5 flex items-center justify-between text-[11px] bg-slate-50 border-t border-slate-100">
-                    <span className="font-bold text-slate-500">#{index + 1}</span>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenCropperForExisting(imgUrl, index)}
-                        className="px-2.5 py-1 rounded-lg bg-[#C85A32] text-white font-bold hover:bg-[#b04a25] transition cursor-pointer flex items-center gap-1 shadow-2xs text-[10px]"
-                      >
-                        <Crop className="w-3 h-3" /> Crop Image
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(imgUrl)}
-                        className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 font-bold transition cursor-pointer text-[10px]"
-                        title="Delete picture"
-                      >
-                        Remove
+                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                        <span>Remove Image</span>
                       </button>
                     </div>
                   </div>
