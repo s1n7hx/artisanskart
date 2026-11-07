@@ -27,6 +27,7 @@
     "razorpay": "^2.9.4",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "react-easy-crop": "^6.2.4",
     "react-router-dom": "^7.18.3",
     "vite": "^6.2.3"
   },

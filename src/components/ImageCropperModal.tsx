@@ -1,5 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Sliders, Maximize2 } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import Cropper from 'react-easy-crop';
+import 'react-easy-crop/react-easy-crop.css';
+import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Sliders } from 'lucide-react';
 
 interface ImageCropperModalProps {
   isOpen: boolean;
@@ -16,38 +18,30 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   onClose,
   onCropComplete,
 }) => {
-  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
+  const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState<number>(1);
   const [rotation, setRotation] = useState<number>(0);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Load image when modal opens or imageSrc changes
-  useEffect(() => {
-    if (!isOpen || !imageSrc) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      setImageObj(img);
-      setZoom(1);
-      setRotation(0);
-      setPan({ x: 0, y: 0 });
-    };
-    img.src = imageSrc;
-  }, [isOpen, imageSrc]);
-
-  // Reset transforms when aspect ratio changes
-  const handleAspectChange = (ratio: AspectRatioOption) => {
-    setAspectRatio(ratio);
-    setPan({ x: 0, y: 0 });
-    setZoom(1);
+  const getAspectValue = (option: AspectRatioOption): number | undefined => {
+    switch (option) {
+      case '1:1':
+        return 1;
+      case '4:5':
+        return 4 / 5;
+      case '3:4':
+        return 3 / 4;
+      case 'original':
+      default:
+        return undefined;
+    }
   };
+
+  const onCropCompleteInternal = useCallback((_croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
 
   const handleRotate = () => {
     setRotation((prev) => (prev + 90) % 360);
@@ -56,110 +50,89 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const handleReset = () => {
     setZoom(1);
     setRotation(0);
-    setPan({ x: 0, y: 0 });
+    setCrop({ x: 0, y: 0 });
   };
 
-  // Mouse / Touch drag handlers for panning
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
+  const createImage = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+      const image = new Image();
+      image.addEventListener('load', () => resolve(image));
+      image.addEventListener('error', (error) => reject(error));
+      image.setAttribute('crossOrigin', 'anonymous');
+      image.src = url;
     });
-  }, [isDragging, dragStart]);
 
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
+  const getCroppedImg = async (
+    imageSrc: string,
+    pixelCrop: { x: number; y: number; width: number; height: number },
+    rotation = 0
+  ): Promise<string> => {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
 
-  // Touch handlers for mobile
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setIsDragging(true);
-      setDragStart({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y });
+    if (!ctx) {
+      throw new Error('No 2d context available');
     }
-  };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    setPan({
-      x: e.touches[0].clientX - dragStart.x,
-      y: e.touches[0].clientY - dragStart.y,
+    const rotRad = (rotation * Math.PI) / 180;
+
+    const bBoxWidth =
+      Math.abs(Math.cos(rotRad) * image.width) + Math.abs(Math.sin(rotRad) * image.height);
+    const bBoxHeight =
+      Math.abs(Math.sin(rotRad) * image.height) + Math.abs(Math.cos(rotRad) * image.width);
+
+    canvas.width = bBoxWidth;
+    canvas.height = bBoxHeight;
+
+    ctx.translate(bBoxWidth / 2, bBoxHeight / 2);
+    ctx.rotate(rotRad);
+    ctx.translate(-image.width / 2, -image.height / 2);
+
+    ctx.drawImage(image, 0, 0);
+
+    const data = ctx.getImageData(0, 0, bBoxWidth, bBoxHeight);
+
+    canvas.width = Math.max(1, pixelCrop.width);
+    canvas.height = Math.max(1, pixelCrop.height);
+
+    ctx.putImageData(
+      data,
+      Math.round(0 - pixelCrop.x),
+      Math.round(0 - pixelCrop.y)
+    );
+
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Canvas is empty'));
+            return;
+          }
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+          reader.onerror = (error) => reject(error);
+        },
+        'image/jpeg',
+        0.95
+      );
     });
   };
 
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-  };
-
-  // Generate cropped image using HTML5 Canvas
-  const handleApplyCrop = () => {
-    if (!imageObj) return;
+  const handleApplyCrop = async () => {
+    if (!croppedAreaPixels || !imageSrc) return;
     setIsProcessing(true);
 
     try {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        setIsProcessing(false);
-        return;
-      }
-
-      // Determine target output aspect ratio
-      let targetAspect = 1;
-      if (aspectRatio === '4:5') targetAspect = 4 / 5;
-      else if (aspectRatio === '3:4') targetAspect = 3 / 4;
-      else if (aspectRatio === 'original') targetAspect = imageObj.width / imageObj.height;
-
-      // Output dimensions (high resolution max 1200px width/height)
-      const maxDim = 1200;
-      let outputWidth = maxDim;
-      let outputHeight = Math.round(maxDim / targetAspect);
-
-      if (targetAspect < 1) {
-        // Portrait
-        outputHeight = maxDim;
-        outputWidth = Math.round(maxDim * targetAspect);
-      }
-
-      canvas.width = outputWidth;
-      canvas.height = outputHeight;
-
-      ctx.save();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, outputWidth, outputHeight);
-
-      // Translate to center for rotation & zoom
-      ctx.translate(outputWidth / 2, outputHeight / 2);
-      ctx.rotate((rotation * Math.PI) / 180);
-      ctx.scale(zoom, zoom);
-      ctx.translate(pan.x * (outputWidth / 400), pan.y * (outputHeight / 400));
-
-      // Draw image centered
-      const imgAspect = imageObj.width / imageObj.height;
-      let drawW = outputWidth;
-      let drawH = outputWidth / imgAspect;
-
-      if (drawH < outputHeight) {
-        drawH = outputHeight;
-        drawW = outputHeight * imgAspect;
-      }
-
-      ctx.drawImage(imageObj, -drawW / 2, -drawH / 2, drawW, drawH);
-      ctx.restore();
-
-      const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      const croppedDataUrl = await getCroppedImg(imageSrc, croppedAreaPixels, rotation);
       setIsProcessing(false);
       onCropComplete(croppedDataUrl);
       onClose();
     } catch (err) {
-      console.error('Cropping error:', err);
+      console.error('Error generating cropped image:', err);
       setIsProcessing(false);
     }
   };
@@ -168,7 +141,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
@@ -177,7 +150,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900">Professional Image Studio</h2>
+              <h2 className="text-base font-black text-slate-900">Professional Image Cropper</h2>
               <p className="text-xs text-slate-500">Crop, zoom, rotate &amp; preview before saving</p>
             </div>
           </div>
@@ -201,12 +174,12 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                 { id: '1:1', label: '1:1 Square (Storefront)' },
                 { id: '4:5', label: '4:5 Portrait' },
                 { id: '3:4', label: '3:4 Craft Card' },
-                { id: 'original', label: 'Original Ratio' },
+                { id: 'original', label: 'Original (Free)' },
               ].map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => handleAspectChange(item.id as AspectRatioOption)}
+                  onClick={() => setAspectRatio(item.id as AspectRatioOption)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                     aspectRatio === item.id
                       ? 'bg-[#C85A32] text-white shadow-sm'
@@ -219,53 +192,19 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             </div>
           </div>
 
-          {/* Interactive Preview Canvas Area */}
-          <div
-            ref={containerRef}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            className="relative w-full h-72 sm:h-80 bg-slate-900 rounded-2xl overflow-hidden flex items-center justify-center cursor-grab active:cursor-grabbing select-none border border-slate-800"
-          >
-            {imageObj ? (
-              <div
-                className="relative transition-transform duration-75 ease-out"
-                style={{
-                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom}) rotate(${rotation}deg)`,
-                }}
-              >
-                <img
-                  src={imageSrc}
-                  alt="Crop Target"
-                  className="max-h-64 sm:max-h-72 object-contain pointer-events-none"
-                />
-              </div>
-            ) : (
-              <div className="text-slate-400 text-xs flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin" /> Loading image...
-              </div>
-            )}
-
-            {/* Crop Grid Overlay */}
-            <div className="absolute inset-0 border-2 border-white/40 pointer-events-none grid grid-cols-3 grid-rows-3">
-              <div className="border-r border-b border-white/20"></div>
-              <div className="border-r border-b border-white/20"></div>
-              <div className="border-b border-white/20"></div>
-              <div className="border-r border-b border-white/20"></div>
-              <div className="border-r border-b border-white/20"></div>
-              <div className="border-b border-white/20"></div>
-              <div className="border-r border-white/20"></div>
-              <div className="border-r border-white/20"></div>
-              <div></div>
-            </div>
-
-            <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none">
-              Drag to reposition • Scroll or slider to zoom
-            </div>
+          {/* Interactive react-easy-crop Container */}
+          <div className="relative w-full h-72 sm:h-80 bg-slate-900 rounded-2xl overflow-hidden">
+            <Cropper
+              image={imageSrc}
+              crop={crop}
+              zoom={zoom}
+              rotation={rotation}
+              aspect={getAspectValue(aspectRatio)}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onRotationChange={setRotation}
+              onCropComplete={onCropCompleteInternal}
+            />
           </div>
 
           {/* Controls: Zoom & Rotate */}
@@ -278,11 +217,11 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               </div>
               <input
                 type="range"
-                min="0.5"
+                min="1"
                 max="3"
                 step="0.05"
                 value={zoom}
-                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                onChange={(e) => setZoom(Number(e.target.value))}
                 className="w-full accent-[#C85A32] cursor-pointer"
               />
             </div>
@@ -328,7 +267,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             {isProcessing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Processing Crop...</span>
+                <span>Generating Crop...</span>
               </>
             ) : (
               <>
