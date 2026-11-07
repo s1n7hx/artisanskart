@@ -1007,65 +1007,26 @@ export const CheckoutPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Payment Method Selection */}
+          {/* Payment Method Selection - Now Pre-paid Only */}
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#e7e0d8] shadow-xs space-y-4">
             <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-[#C85A32]" />
-              Select Payment Method
+              Secure Online Payment
             </h2>
 
-            <div className="grid sm:grid-cols-2 gap-3 text-xs">
-              <div
-                onClick={() => setPaymentMethod('razorpay')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2 ${
-                  paymentMethod === 'razorpay'
-                    ? 'border-[#C85A32] bg-[#FAF9F6] shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-blue-600" />
-                    Online Payment (Razorpay)
-                  </span>
-                  <input
-                    type="radio"
-                    name="paymethod"
-                    checked={paymentMethod === 'razorpay'}
-                    onChange={() => setPaymentMethod('razorpay')}
-                    className="text-[#C85A32]"
-                  />
-                </div>
-                <p className="text-slate-500 leading-relaxed text-[11px]">
-                  Pay securely via UPI (Google Pay, PhonePe, Paytm), Debit/Credit Cards, or NetBanking.
-                </p>
+            <div className="p-4 rounded-2xl border-2 border-[#C85A32] bg-[#FAF9F6] shadow-xs flex flex-col justify-between space-y-2">
+              <div className="flex items-center justify-between font-bold text-slate-900">
+                <span className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-blue-600" />
+                  Online Payment (Razorpay)
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+                  Enabled
+                </span>
               </div>
-
-              <div
-                onClick={() => setPaymentMethod('cod')}
-                className={`p-4 rounded-2xl border-2 transition cursor-pointer flex flex-col justify-between space-y-2 ${
-                  paymentMethod === 'cod'
-                    ? 'border-[#C85A32] bg-[#FAF9F6] shadow-xs'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="flex items-center justify-between font-bold text-slate-900">
-                  <span className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-[#C85A32]" />
-                    Cash on Delivery (COD)
-                  </span>
-                  <input
-                    type="radio"
-                    name="paymethod"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
-                    className="text-[#C85A32]"
-                  />
-                </div>
-                <p className="text-slate-500 leading-relaxed text-[11px]">
-                  Pay in cash when the handcrafted piece is delivered to your doorstep.
-                </p>
-              </div>
+              <p className="text-slate-500 leading-relaxed text-[11px]">
+                Pay securely via UPI (Google Pay, PhonePe, Paytm), Debit/Credit Cards, or NetBanking.
+              </p>
             </div>
           </div>
         </div>

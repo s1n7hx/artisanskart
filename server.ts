@@ -3468,22 +3468,23 @@ app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/
 app.post('/api/admin/update-role', async (req: Request, res: Response) => {
   try {
     const { user, profile } = await getAuthenticatedUser(req);
-    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+    const isMasterAdminCaller = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
 
     // Security Enforcement: ONLY Master Admin can promote or demote roles.
-    if (!isMaster) {
+    if (!isMasterAdminCaller) {
       return res.status(403).json({
         success: false,
         error: 'Unauthorized: Only the Master Administrator can promote or demote user roles.',
       });
     }
 
+    const { targetUserId, userId, email, role, school, full_name, name } = req.body || {};
     const cleanUserId = String(targetUserId || userId || '').trim();
     const cleanEmail = String(email || '').trim().toLowerCase();
-    const isMaster = cleanEmail === 'ssumollah@gmail.com';
+    const isTargetMaster = cleanEmail === 'ssumollah@gmail.com';
 
-    let targetRole = isMaster ? 'master_admin' : String(role || 'customer').trim().toLowerCase();
-    const targetSchool = school || (isMaster ? 'ArtisansKart Platform Headquarters' : '');
+    let targetRole = isTargetMaster ? 'master_admin' : String(role || 'customer').trim().toLowerCase();
+    const targetSchool = school || (isTargetMaster ? 'ArtisansKart Platform Headquarters' : '');
     const fullName = full_name || name || (cleanEmail ? cleanEmail.split('@')[0] : '');
 
     const validRoles = ['customer', 'maker', 'admin', 'master_admin'];
