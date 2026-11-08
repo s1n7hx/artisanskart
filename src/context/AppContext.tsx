@@ -977,7 +977,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     // Background sync to Supabase with service role endpoint
-    upsertProductInSupabase(updated, currentUser?.id)
+    const targetMakerId = updated.makerId || currentUser?.id;
+    upsertProductInSupabase(updated, targetMakerId)
       .then((saved) => {
         if (saved && saved[0]) {
           const fresh = saved[0];
@@ -1002,7 +1003,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Admin authority required to add new products.', 'shield-alert');
       return false;
     }
-    const savedProducts = await upsertProductInSupabase(newProd, currentUser?.id);
+    const targetMakerId = newProd.makerId || currentUser?.id;
+    const savedProducts = await upsertProductInSupabase(newProd, targetMakerId);
     if (savedProducts && savedProducts.length > 0) {
       const savedProd = savedProducts[0];
       setProducts((prev) => [savedProd, ...prev.filter((p) => p.id !== newProd.id && p.title !== newProd.title)]);

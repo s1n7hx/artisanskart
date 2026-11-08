@@ -3817,10 +3817,11 @@ app.get('/api/admin/users', async (req: Request, res: Response) => {
 });
 
 // GET /api/admin/makers
-// Fetches strictly approved student makers/creators.
+// Fetches strictly approved student makers/creators from profiles AND pre-authorized emails.
 // Excludes admin accounts, master_admin, and ssumollah@gmail.com
 app.get('/api/admin/makers', async (req: Request, res: Response) => {
   try {
+    // 1. Fetch real approved makers from Supabase profiles
     const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
       .select('*')
@@ -3851,11 +3852,47 @@ app.get('/api/admin/makers', async (req: Request, res: Response) => {
       full_name: p.full_name,
       role: 'maker',
       status: p.status || 'approved',
-      school: p.school || 'Independent Studio',
-      avatar_url: p.avatar_url,
+      school: p.school || 'Independent Studio Guild',
+      avatar_url: p.avatar_url || '',
+      isAuthorizedPreLogin: false,
       created_at: p.created_at,
       updated_at: p.updated_at,
     }));
+
+    // 2. Fetch pre-authorized emails from public.authorized_emails / site_settings
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const existingEmails = new Set(makerList.map((m) => (m.email || '').toLowerCase()));
+
+    for (const authItem of authList) {
+      const emailLower = (authItem.email || '').trim().toLowerCase();
+      const roleLower = (authItem.role || '').trim().toLowerCase();
+
+      // Only include if role is 'maker', not an admin, not ssumollah, and not already in makerList
+      if (
+        emailLower &&
+        roleLower === 'maker' &&
+        emailLower !== 'ssumollah@gmail.com' &&
+        !existingEmails.has(emailLower)
+      ) {
+        makerList.push({
+          id: authItem.id || `auth_${authItem.email}`,
+          email: authItem.email,
+          name: authItem.name || authItem.email.split('@')[0],
+          full_name: authItem.name || authItem.email.split('@')[0],
+          role: 'maker',
+          status: 'approved',
+          school: authItem.studio_name || authItem.school || 'Independent Studio Guild',
+          avatar_url: '',
+          isAuthorizedPreLogin: true,
+          created_at: authItem.created_at || new Date().toISOString(),
+          updated_at: authItem.updated_at || new Date().toISOString(),
+        });
+        existingEmails.add(emailLower);
+      }
+    }
+
+    // Sort alphabetically by display name
+    makerList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     return res.json({ success: true, count: makerList.length, makers: makerList });
   } catch (err: any) {
@@ -4075,10 +4112,33 @@ app.post(['/api/products/save', '/api/products/create', '/api/admin/save-product
     const cleanSlug = product.slug || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `craft-${Date.now()}`;
 
     let validMakerId: string | null = null;
-    if (product.makerId && typeof product.makerId === 'string' && product.makerId.length === 36) {
-      validMakerId = product.makerId;
-    } else if (product.maker_id && typeof product.maker_id === 'string' && product.maker_id.length === 36) {
-      validMakerId = product.maker_id;
+    const rawMakerId = String(product.makerId || product.maker_id || '').trim();
+
+    if (rawMakerId && rawMakerId.length === 36 && /^[0-9a-f-]{36}$/i.test(rawMakerId)) {
+      validMakerId = rawMakerId;
+    } else if (rawMakerId && rawMakerId.includes('@')) {
+      try {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .ilike('email', rawMakerId)
+          .maybeSingle();
+        if (prof?.id) {
+          validMakerId = prof.id;
+        }
+      } catch (e) {}
+
+      if (!validMakerId) {
+        try {
+          const { data: usersData } = await supabaseAdmin.auth.admin.listUsers();
+          const found = usersData?.users?.find(
+            (u) => (u.email || '').toLowerCase() === rawMakerId.toLowerCase()
+          );
+          if (found?.id) {
+            validMakerId = found.id;
+          }
+        } catch (e) {}
+      }
     }
 
     const payload: any = {

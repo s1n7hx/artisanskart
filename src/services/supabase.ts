@@ -23,6 +23,7 @@ export interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  name?: string;
   avatar_url?: string;
   role: UserRole;
   status: UserStatus;
@@ -30,6 +31,7 @@ export interface UserProfile {
   grade_class?: string;
   bio?: string;
   payout_upi?: string;
+  isAuthorizedPreLogin?: boolean;
   created_at?: string;
 }
 
@@ -297,7 +299,16 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
 // -------------------------------------------------------------
 export async function fetchApprovedMakers(): Promise<UserProfile[]> {
   try {
-    const res = await fetch('/api/admin/makers');
+    const { data: { session } } = await supabase.auth.getSession();
+    const callerEmail = session?.user?.email || 'ssumollah@gmail.com';
+    const headers: Record<string, string> = {
+      'x-admin-email': callerEmail,
+    };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch('/api/admin/makers', { headers });
     if (res.ok) {
       const json = await res.json();
       if (json.makers && Array.isArray(json.makers)) {
@@ -319,7 +330,8 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
             avatar_url: u.avatar_url || '',
             role: 'maker' as const,
             status: u.status || 'approved',
-            school: u.school || '',
+            school: u.school || 'Independent Studio Guild',
+            isAuthorizedPreLogin: Boolean(u.isAuthorizedPreLogin),
             created_at: u.created_at || new Date().toISOString(),
           })) as UserProfile[];
       }
@@ -328,9 +340,9 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
     console.warn('API /api/admin/makers notice:', e);
   }
 
-  // Direct Supabase query with explicit condition excluding admin & master_admin
+  // Direct Supabase query fallback combining profiles and authorized_emails
   try {
-    const { data, error } = await supabase
+    const { data: profData } = await supabase
       .from('profiles')
       .select('*')
       .eq('role', 'maker')
@@ -338,20 +350,65 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
       .neq('role', 'master_admin')
       .order('full_name', { ascending: true });
 
-    if (!error && data) {
-      return (data as UserProfile[]).filter((p) => {
+    const { data: authData } = await supabase
+      .from('authorized_emails')
+      .select('*')
+      .eq('role', 'maker');
+
+    const combined: UserProfile[] = [];
+    const seenEmails = new Set<string>();
+
+    if (profData && Array.isArray(profData)) {
+      for (const p of profData) {
         const email = String(p.email || '').trim().toLowerCase();
         const roleStr = String(p.role || '').trim().toLowerCase();
-        const isMaker = roleStr === 'maker';
-        const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
-        return isMaker && !isAdmin && email !== 'ssumollah@gmail.com';
-      });
+        if (roleStr === 'maker' && email !== 'ssumollah@gmail.com' && !seenEmails.has(email)) {
+          combined.push({
+            id: p.id,
+            email: p.email,
+            full_name: p.full_name || p.name || (p.email ? p.email.split('@')[0] : 'Maker'),
+            avatar_url: p.avatar_url || '',
+            role: 'maker',
+            status: p.status || 'approved',
+            school: p.school || 'Independent Studio Guild',
+            isAuthorizedPreLogin: false,
+            created_at: p.created_at || new Date().toISOString(),
+          });
+          seenEmails.add(email);
+        }
+      }
+    }
+
+    if (authData && Array.isArray(authData)) {
+      for (const a of authData) {
+        const email = String(a.email || '').trim().toLowerCase();
+        const roleStr = String(a.role || '').trim().toLowerCase();
+        if (roleStr === 'maker' && email !== 'ssumollah@gmail.com' && !seenEmails.has(email)) {
+          combined.push({
+            id: a.id || `auth_${a.email}`,
+            email: a.email,
+            full_name: a.name || (a.email ? a.email.split('@')[0] : 'Maker'),
+            avatar_url: '',
+            role: 'maker',
+            status: 'approved',
+            school: a.studio_name || a.school || 'Independent Studio Guild',
+            isAuthorizedPreLogin: true,
+            created_at: a.created_at || new Date().toISOString(),
+          });
+          seenEmails.add(email);
+        }
+      }
+    }
+
+    if (combined.length > 0) {
+      combined.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+      return combined;
     }
   } catch (err) {
     console.warn('Direct maker profiles fetch error:', err);
   }
 
-  // Fallback to fetchAllProfiles with strict maker filtering
+  // Final fallback to fetchAllProfiles with strict maker filtering
   try {
     const all = await fetchAllProfiles();
     return all.filter((p) => {

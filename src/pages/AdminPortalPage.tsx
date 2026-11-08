@@ -152,7 +152,7 @@ export const AdminPortalPage: React.FC = () => {
 
   React.useEffect(() => {
     loadApprovedMakers();
-  }, []);
+  }, [activeTab, usersList.length]);
 
   React.useEffect(() => {
     setCustomPercentInput(makerEarningPercent);
@@ -435,6 +435,7 @@ export const AdminPortalPage: React.FC = () => {
       rating: 0,
       reviews: 0,
       maker: newProductForm.maker || 'Independent Maker',
+      makerId: (newProductForm as any).makerId || undefined,
       cls: newProductForm.cls || 'Artisan Series',
       school: newProductForm.school || 'Independent Studio Guild',
       image: primaryImage,
@@ -455,6 +456,7 @@ export const AdminPortalPage: React.FC = () => {
         category: 'Clay Crafts',
         price: 349,
         maker: '',
+        makerId: '',
         cls: 'Class 10',
         school: '',
         image: '',
@@ -2073,13 +2075,13 @@ export const AdminPortalPage: React.FC = () => {
                       value={(newProductForm as any).makerId || ''}
                       onChange={(e) => {
                         const selId = e.target.value;
-                        const match = approvedMakers.find((m) => m.id === selId);
+                        const match = approvedMakers.find((m) => m.id === selId || m.email === selId);
                         if (match) {
                           setNewProductForm({
                             ...newProductForm,
-                            makerId: match.id,
+                            makerId: match.id || match.email,
                             maker: match.full_name || match.email.split('@')[0],
-                            school: match.school || newProductForm.school || 'Independent Studio',
+                            school: match.school || newProductForm.school || 'Independent Studio Guild',
                           });
                         }
                       }}
@@ -2099,11 +2101,16 @@ export const AdminPortalPage: React.FC = () => {
                             email !== MASTER_ADMIN_EMAIL.toLowerCase()
                           );
                         })
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.full_name || m.email.split('@')[0]} ({m.email}) {m.school ? `• ${m.school}` : ''}
-                          </option>
-                        ))}
+                        .map((m) => {
+                          const makerValue = m.id || m.email;
+                          const displayName = m.full_name || m.email.split('@')[0];
+                          const isPreAuth = (m as any).isAuthorizedPreLogin;
+                          return (
+                            <option key={makerValue} value={makerValue}>
+                              {displayName} ({m.email}) {m.school ? `• ${m.school}` : ''} {isPreAuth ? '• (Pre-Authorized)' : ''}
+                            </option>
+                          );
+                        })}
                     </select>
                   )}
                 </div>
@@ -2244,13 +2251,13 @@ export const AdminPortalPage: React.FC = () => {
                       value={editingProduct.makerId || ''}
                       onChange={(e) => {
                         const selId = e.target.value;
-                        const match = approvedMakers.find((m) => m.id === selId);
+                        const match = approvedMakers.find((m) => m.id === selId || m.email === selId);
                         if (match) {
                           setEditingProduct({
                             ...editingProduct,
-                            makerId: match.id,
+                            makerId: match.id || match.email,
                             maker: match.full_name || match.email.split('@')[0],
-                            school: match.school || editingProduct.school || 'Independent Studio',
+                            school: match.school || editingProduct.school || 'Independent Studio Guild',
                           });
                         }
                       }}
@@ -2270,11 +2277,16 @@ export const AdminPortalPage: React.FC = () => {
                             email !== MASTER_ADMIN_EMAIL.toLowerCase()
                           );
                         })
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.full_name || m.email.split('@')[0]} ({m.email}) {m.school ? `• ${m.school}` : ''}
-                          </option>
-                        ))}
+                        .map((m) => {
+                          const makerValue = m.id || m.email;
+                          const displayName = m.full_name || m.email.split('@')[0];
+                          const isPreAuth = (m as any).isAuthorizedPreLogin;
+                          return (
+                            <option key={makerValue} value={makerValue}>
+                              {displayName} ({m.email}) {m.school ? `• ${m.school}` : ''} {isPreAuth ? '• (Pre-Authorized)' : ''}
+                            </option>
+                          );
+                        })}
                     </select>
                   )}
                 </div>
