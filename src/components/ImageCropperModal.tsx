@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import Cropper from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
-import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Sliders } from 'lucide-react';
+import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Sliders, FlipHorizontal, FlipVertical } from 'lucide-react';
 
 interface ImageCropperModalProps {
   isOpen: boolean;
@@ -10,7 +10,7 @@ interface ImageCropperModalProps {
   onCropComplete: (croppedDataUrl: string) => void;
 }
 
-export type AspectRatioOption = '1:1' | '4:5' | '3:4' | 'original';
+export type AspectRatioOption = 'free' | '1:1' | '4:5' | '3:4' | '16:9' | 'original';
 
 export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   isOpen,
@@ -21,6 +21,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState<number>(1);
   const [rotation, setRotation] = useState<number>(0);
+  const [flip, setFlip] = useState<{ horizontal: boolean; vertical: boolean }>({ horizontal: false, vertical: false });
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -33,9 +34,12 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         return 4 / 5;
       case '3:4':
         return 3 / 4;
+      case '16:9':
+        return 16 / 9;
+      case 'free':
       case 'original':
       default:
-        return undefined;
+        return undefined; // Free aspect ratio
     }
   };
 
@@ -43,13 +47,26 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
 
-  const handleRotate = () => {
+  const handleRotateLeft = () => {
+    setRotation((prev) => (prev - 90 + 360) % 360);
+  };
+
+  const handleRotateRight = () => {
     setRotation((prev) => (prev + 90) % 360);
+  };
+
+  const handleFlipHorizontal = () => {
+    setFlip((prev) => ({ ...prev, horizontal: !prev.horizontal }));
+  };
+
+  const handleFlipVertical = () => {
+    setFlip((prev) => ({ ...prev, vertical: !prev.vertical }));
   };
 
   const handleReset = () => {
     setZoom(1);
     setRotation(0);
+    setFlip({ horizontal: false, vertical: false });
     setCrop({ x: 0, y: 0 });
   };
 
@@ -65,7 +82,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const getCroppedImg = async (
     imageSrc: string,
     pixelCrop: { x: number; y: number; width: number; height: number },
-    rotation = 0
+    rotation = 0,
+    flip = { horizontal: false, vertical: false }
   ): Promise<string> => {
     const image = await createImage(imageSrc);
     const canvas = document.createElement('canvas');
@@ -87,6 +105,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
 
     ctx.translate(bBoxWidth / 2, bBoxHeight / 2);
     ctx.rotate(rotRad);
+    ctx.scale(flip.horizontal ? -1 : 1, flip.vertical ? -1 : 1);
     ctx.translate(-image.width / 2, -image.height / 2);
 
     ctx.drawImage(image, 0, 0);
@@ -127,7 +146,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     setIsProcessing(true);
 
     try {
-      const croppedDataUrl = await getCroppedImg(imageSrc, croppedAreaPixels, rotation);
+      const croppedDataUrl = await getCroppedImg(imageSrc, croppedAreaPixels, rotation, flip);
       setIsProcessing(false);
       onCropComplete(croppedDataUrl);
       onClose();
@@ -140,47 +159,49 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in">
+      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#C85A32]/15 text-[#C85A32] flex items-center justify-center">
               <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900">Professional Image Cropper</h2>
-              <p className="text-xs text-slate-500">Crop, zoom, rotate &amp; preview before saving</p>
+              <h2 className="text-base font-black text-slate-900">Professional Photo Editor</h2>
+              <p className="text-xs text-slate-500">Adjust crop, zoom, rotate, flip &amp; aspect ratios</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition cursor-pointer shadow-xs"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Cropper Workspace */}
+        {/* Workspace */}
         <div className="p-6 flex-1 overflow-y-auto space-y-6">
           
-          {/* Aspect Ratio Selector */}
+          {/* Aspect Ratio Presets */}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 block">Select Aspect Ratio</label>
+            <label className="text-xs font-bold text-slate-700 block">Aspect Ratio Presets</label>
             <div className="flex flex-wrap gap-2">
               {[
+                { id: 'free', label: 'Free' },
                 { id: '1:1', label: '1:1 Square (Storefront)' },
                 { id: '4:5', label: '4:5 Portrait' },
                 { id: '3:4', label: '3:4 Craft Card' },
-                { id: 'original', label: 'Original (Free)' },
+                { id: '16:9', label: '16:9 Banner' },
+                { id: 'original', label: 'Original' },
               ].map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   onClick={() => setAspectRatio(item.id as AspectRatioOption)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                     aspectRatio === item.id
                       ? 'bg-[#C85A32] text-white shadow-sm'
                       : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -192,8 +213,8 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             </div>
           </div>
 
-          {/* Interactive react-easy-crop Container */}
-          <div className="relative w-full h-72 sm:h-80 bg-slate-900 rounded-2xl overflow-hidden">
+          {/* Interactive Cropper Area */}
+          <div className="relative w-full h-80 sm:h-96 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
             <Cropper
               image={imageSrc}
               crop={crop}
@@ -204,16 +225,17 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               onZoomChange={setZoom}
               onRotationChange={setRotation}
               onCropComplete={onCropCompleteInternal}
+              transform={`translate(${crop.x}px, ${crop.y}px) scale(${zoom}) rotate(${rotation}deg) scaleX(${flip.horizontal ? -1 : 1}) scaleY(${flip.vertical ? -1 : 1})`}
             />
           </div>
 
-          {/* Controls: Zoom & Rotate */}
-          <div className="grid sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+          {/* Toolbar: Zoom, Rotate Left/Right, Flip H/V, Reset */}
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
             {/* Zoom Slider */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                <span className="flex items-center gap-1.5"><ZoomIn className="w-3.5 h-3.5 text-[#C85A32]" /> Zoom</span>
-                <span>{zoom.toFixed(1)}x</span>
+                <span className="flex items-center gap-1.5"><ZoomIn className="w-3.5 h-3.5 text-[#C85A32]" /> Zoom Level</span>
+                <span>{zoom.toFixed(2)}x</span>
               </div>
               <input
                 type="range"
@@ -226,24 +248,60 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               />
             </div>
 
-            {/* Rotate & Reset */}
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleRotate}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
-              >
-                <RotateCw className="w-3.5 h-3.5" />
-                <span>Rotate 90°</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleReset}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reset</span>
-              </button>
+            {/* Transform Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleRotateLeft}
+                  className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1"
+                  title="Rotate Left 90°"
+                >
+                  <RotateCw className="w-3.5 h-3.5 -scale-x-100" />
+                  <span>Rotate -90°</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRotateRight}
+                  className="px-3 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1"
+                  title="Rotate Right 90°"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Rotate +90°</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleFlipHorizontal}
+                  className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1 ${
+                    flip.horizontal ? 'bg-[#C85A32] text-white border-[#C85A32]' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  title="Flip Horizontally"
+                >
+                  <FlipHorizontal className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleFlipVertical}
+                  className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1 ${
+                    flip.vertical ? 'bg-[#C85A32] text-white border-[#C85A32]' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                  }`}
+                  title="Flip Vertically"
+                >
+                  <FlipVertical className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1.5"
+                  title="Reset all adjustments"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Reset</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -267,7 +325,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             {isProcessing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Generating Crop...</span>
+                <span>Generating Final Image...</span>
               </>
             ) : (
               <>
