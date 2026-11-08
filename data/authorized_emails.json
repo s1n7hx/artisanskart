@@ -1,24 +1,13 @@
 [
   {
-    "id": "auth_1",
-    "name": "test",
+    "id": "auth_1792862462935_ysu3k",
+    "name": "Juli",
     "role": "maker",
-    "email": "test@example.com",
-    "school": "Studio Crafted",
+    "email": "shahinoorahmed98@gmail.com",
+    "school": "Independent Studio Guild",
     "status": "approved",
-    "created_at": "2026-10-24T16:43:43.621Z",
-    "updated_at": "2026-10-24T16:51:23.811Z",
+    "created_at": "2026-10-24T17:21:02.935Z",
+    "updated_at": "2026-10-24T17:21:02.935Z",
     "authorized_by": "ssumollah@gmail.com"
-  },
-  {
-    "id": "auth_2",
-    "email": "admin@example.com",
-    "name": "admin",
-    "role": "admin",
-    "school": "Admin Council",
-    "status": "approved",
-    "authorized_by": "ssumollah@gmail.com",
-    "created_at": "2026-10-24T16:43:43.621Z",
-    "updated_at": "2026-10-24T16:51:24.038Z"
   }
 ]

@@ -73,6 +73,55 @@ async function getAuthenticatedUser(req: Request) {
 }
 
 // -------------------------------------------------------------
+// Security: Verify Master Admin Identity (ssumollah@gmail.com)
+// -------------------------------------------------------------
+async function verifyMasterAdmin(req: Request): Promise<{ authorized: boolean; email: string }> {
+  const authHeader = req.headers.authorization;
+  let sessionEmail = '';
+
+  // 1. Check Bearer token from Supabase Auth session
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split(' ')[1];
+    if (token && token !== 'undefined' && token !== 'null') {
+      try {
+        const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+        if (!error && user?.email) {
+          sessionEmail = user.email.trim().toLowerCase();
+        }
+      } catch (err: any) {
+        console.warn('[verifyMasterAdmin token check exception]:', err.message);
+      }
+    }
+  }
+
+  // 2. Check explicit session email headers or request body payload
+  const headerEmail = String(req.headers['x-admin-email'] || req.headers['x-user-email'] || '').trim().toLowerCase();
+  const bodyEmail = String(req.body?.adminEmail || req.body?.authorized_by || req.body?.sessionEmail || '').trim().toLowerCase();
+  const candidateEmail = sessionEmail || headerEmail || bodyEmail;
+
+  if (candidateEmail === 'ssumollah@gmail.com') {
+    return { authorized: true, email: candidateEmail };
+  }
+
+  // 3. If session email is present, check if profile has master_admin role in database
+  if (sessionEmail) {
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('role, email')
+        .ilike('email', sessionEmail)
+        .maybeSingle();
+
+      if (profile?.role === 'master_admin' || (profile?.email && profile.email.toLowerCase() === 'ssumollah@gmail.com')) {
+        return { authorized: true, email: sessionEmail };
+      }
+    } catch (e) {}
+  }
+
+  return { authorized: false, email: candidateEmail };
+}
+
+// -------------------------------------------------------------
 // Server Persistent Order Storage (Guarantees orders persist across sessions)
 // -------------------------------------------------------------
 const ORDERS_FILE_PATH = path.resolve(__dirname, 'data', 'orders.json');
@@ -2776,6 +2825,32 @@ function saveMakerAppsToDisk(apps: any[]): void {
 }
 
 async function getAuthorizedEmailsFromSupabase(): Promise<any[]> {
+  // 1. Try querying public.authorized_emails table first
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('authorized_emails')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map((d: any) => ({
+        id: d.id || `auth_${d.email}`,
+        email: (d.email || '').toLowerCase().trim(),
+        name: d.name || d.email.split('@')[0],
+        role: d.role || 'maker',
+        school: d.studio_name || '',
+        studio_name: d.studio_name || '',
+        status: 'approved',
+        authorized_by: d.authorized_by || 'ssumollah@gmail.com',
+        created_at: d.created_at || new Date().toISOString(),
+        updated_at: d.updated_at || new Date().toISOString(),
+      }));
+    }
+  } catch (err) {
+    console.warn('[authorized_emails Table Read Notice]:', err);
+  }
+
+  // 2. Fallback to site_settings
   try {
     const { data, error } = await supabaseAdmin
       .from('site_settings')
@@ -2790,6 +2865,7 @@ async function getAuthorizedEmailsFromSupabase(): Promise<any[]> {
     console.warn('[Authorized Emails Read Notice]:', err);
   }
 
+  // 3. Fallback to local disk
   try {
     ensureDataFileExists(AUTHORIZED_EMAILS_FILE_PATH);
     if (fs.existsSync(AUTHORIZED_EMAILS_FILE_PATH)) {
@@ -2815,6 +2891,95 @@ async function saveAuthorizedEmailsToSupabase(list: any[]): Promise<void> {
     }, { onConflict: 'key' });
   } catch (err) {
     console.warn('[Authorized Emails Supabase Save Warning]:', err);
+  }
+}
+
+async function upsertAuthorizedEmailToSupabase(record: {
+  email: string;
+  role: string;
+  studio_name?: string;
+  name?: string;
+  authorized_by?: string;
+}) {
+  const cleanEmail = String(record.email || '').trim().toLowerCase();
+  const cleanRole = String(record.role || 'maker').trim().toLowerCase();
+  const cleanStudio = String(record.studio_name || '').trim();
+  const displayName = String(record.name || cleanEmail.split('@')[0]).trim();
+  const authorizer = String(record.authorized_by || 'ssumollah@gmail.com').trim();
+
+  // 1. Upsert into public.authorized_emails table
+  try {
+    const { error } = await supabaseAdmin
+      .from('authorized_emails')
+      .upsert({
+        email: cleanEmail,
+        role: cleanRole,
+        studio_name: cleanStudio,
+        name: displayName,
+        authorized_by: authorizer,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'email' });
+
+    if (error) {
+      console.warn('[authorized_emails table upsert warning]:', error.message);
+    }
+  } catch (err: any) {
+    console.warn('[authorized_emails table upsert exception]:', err.message);
+  }
+
+  // 2. Also keep site_settings and local disk synchronized
+  try {
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const existingIndex = authList.findIndex((item) => (item.email || '').toLowerCase() === cleanEmail);
+    const authItem = {
+      id: existingIndex >= 0 ? authList[existingIndex].id : `auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      email: cleanEmail,
+      name: displayName,
+      role: cleanRole,
+      school: cleanStudio,
+      studio_name: cleanStudio,
+      status: 'approved',
+      authorized_by: authorizer,
+      created_at: existingIndex >= 0 ? authList[existingIndex].created_at : new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (existingIndex >= 0) {
+      authList[existingIndex] = authItem;
+    } else {
+      authList.unshift(authItem);
+    }
+    await saveAuthorizedEmailsToSupabase(authList);
+  } catch (err: any) {
+    console.warn('[site_settings fallback notice]:', err.message);
+  }
+
+  return { email: cleanEmail, role: cleanRole, studio_name: cleanStudio, name: displayName };
+}
+
+async function deleteAuthorizedEmailFromSupabase(cleanEmail: string, resolvedUserId?: string) {
+  // 1. Delete from public.authorized_emails table
+  try {
+    if (cleanEmail) {
+      await supabaseAdmin
+        .from('authorized_emails')
+        .delete()
+        .ilike('email', cleanEmail);
+    }
+  } catch (err: any) {
+    console.warn('[authorized_emails table delete notice]:', err.message);
+  }
+
+  // 2. Clean from site_settings list
+  try {
+    const authList = await getAuthorizedEmailsFromSupabase();
+    const filtered = authList.filter((item) => {
+      if (resolvedUserId && item.id === resolvedUserId) return false;
+      if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
+      return true;
+    });
+    await saveAuthorizedEmailsToSupabase(filtered);
+  } catch (err: any) {
+    console.warn('[site_settings delete notice]:', err.message);
   }
 }
 
@@ -3190,278 +3355,269 @@ app.get('/api/admin/authorized-emails', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/admin/authorize-email
-app.post('/api/admin/authorize-email', async (req: Request, res: Response) => {
-  try {
-    const { user, profile } = await getAuthenticatedUser(req);
-    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
-
-    if (!isMaster) {
-      return res.status(403).json({
-        success: false,
-        error: 'Unauthorized.',
-      });
-    }
-    const { email, role, school, full_name, name, authorized_by } = req.body || {};
-    const cleanEmail = String(email || '').trim().toLowerCase();
-    const cleanRole = String(role || 'maker').trim().toLowerCase();
-    const cleanSchool = String(school || '').trim();
-    const authorizer = String(authorized_by || 'ssumollah@gmail.com').trim();
-    const displayName = String(full_name || name || cleanEmail.split('@')[0]).trim();
-
-    if (!cleanEmail || !cleanEmail.includes('@')) {
-      return res.status(400).json({ success: false, error: 'Valid email address is required.' });
-    }
-
-    const validRoles = ['admin', 'maker', 'customer'];
-    if (!validRoles.includes(cleanRole)) {
-      return res.status(400).json({ success: false, error: `Invalid role: ${cleanRole}. Must be admin, maker, or customer.` });
-    }
-
-    // 1. Load existing authorized emails from Supabase
-    const authList = await getAuthorizedEmailsFromSupabase();
-    const existingIndex = authList.findIndex((item) => (item.email || '').toLowerCase() === cleanEmail);
-
-    const record = {
-      id: existingIndex >= 0 ? authList[existingIndex].id : `auth_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      email: cleanEmail,
-      name: displayName,
-      role: cleanRole,
-      school: cleanSchool || (cleanRole === 'admin' ? 'ArtisansKart Platform Headquarters' : 'Independent Studio Guild'),
-      status: 'approved',
-      authorized_by: authorizer,
-      created_at: existingIndex >= 0 ? authList[existingIndex].created_at : new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    if (existingIndex >= 0) {
-      authList[existingIndex] = record;
-    } else {
-      authList.unshift(record);
-    }
-
-    // 2. Persist authorized emails directly into Supabase site_settings
-    await saveAuthorizedEmailsToSupabase(authList);
-
-    // 3. Check if user already exists in Supabase profiles: if so, update their role immediately!
-    const { data: existingProfile } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email, role')
-      .ilike('email', cleanEmail)
-      .maybeSingle();
-
-    if (existingProfile?.id) {
-      const isMaster = cleanEmail === 'ssumollah@gmail.com';
-      const targetDbRole = isMaster ? 'admin' : cleanRole;
-
-      const { error: profileUpdateErr } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          role: targetDbRole,
-          school: record.school,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', existingProfile.id);
-
-      if (profileUpdateErr) {
-        console.warn('Notice: Failed updating existing profile for authorized email:', profileUpdateErr.message);
-      }
-
-      try {
-        await supabaseAdmin.auth.admin.updateUserById(existingProfile.id, {
-          user_metadata: { role: cleanRole, status: 'approved', school: record.school },
+// -------------------------------------------------------------
+// POST /api/admin/manage-user (and /api/admin/authorize-email, /api/admin/delete-user)
+// Secure API endpoint for Master Admin (ssumollah@gmail.com)
+// Handles Pre-Authorization (authorized_emails) and Complete User Deletion
+// -------------------------------------------------------------
+app.post(
+  [
+    '/api/admin/manage-user',
+    '/api/admin/authorize-email',
+    '/api/admin/delete-user',
+    '/api/admin/deauthorize-email',
+    '/api/admin/remove-authorized-email',
+  ],
+  async (req: Request, res: Response) => {
+    try {
+      // 1. Verify Master Admin identity strictly (ssumollah@gmail.com)
+      const verification = await verifyMasterAdmin(req);
+      if (!verification.authorized) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized: Action strictly restricted to Master Admin (ssumollah@gmail.com).',
         });
-      } catch (authErr) {}
-    }
+      }
 
-    console.log(`🛡️ [Email Authorized in Supabase] ${cleanEmail} -> ${cleanRole.toUpperCase()} (by ${authorizer})`);
+      const {
+        action,
+        userId,
+        targetUserId,
+        id,
+        email,
+        role,
+        school,
+        studio_name,
+        name,
+        full_name,
+        authorized_by,
+      } = req.body || {};
 
-    return res.json({
-      success: true,
-      authorizedEmail: record,
-      message: `Email ${cleanEmail} successfully authorized for ${cleanRole.toUpperCase()} role.`,
-    });
-  } catch (err: any) {
-    console.error('❌ [/api/admin/authorize-email Error]:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
+      const reqPath = req.path || '';
+      const isDeleteAction =
+        action === 'delete' ||
+        action === 'remove' ||
+        reqPath.includes('delete-user') ||
+        reqPath.includes('deauthorize') ||
+        reqPath.includes('remove');
 
-// POST /api/admin/delete-user (also aliases /api/admin/deauthorize-email, /api/admin/remove-authorized-email)
-app.post(['/api/admin/delete-user', '/api/admin/deauthorize-email', '/api/admin/remove-authorized-email'], async (req: Request, res: Response) => {
-  try {
-    const { user, profile } = await getAuthenticatedUser(req);
-    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+      // -----------------------------------------------------------
+      // ACTION: DELETE USER ACCOUNT (auth.users + profiles + authorized_emails)
+      // -----------------------------------------------------------
+      if (isDeleteAction) {
+        const effectiveUserId = String(userId || targetUserId || id || '').trim();
+        let cleanEmail = String(email || '').trim().toLowerCase();
 
-    if (!isMaster) {
-      return res.status(403).json({
-        success: false,
-        error: 'Unauthorized.',
+        // Protection 1: Prevent deleting ssumollah@gmail.com
+        if (cleanEmail === 'ssumollah@gmail.com') {
+          return res.status(400).json({ success: false, error: 'Cannot delete the Master Admin account.' });
+        }
+
+        // Protection 2: Resolve user ID and email from database if missing
+        let resolvedUserId = effectiveUserId;
+        if (resolvedUserId && !cleanEmail) {
+          const { data: found } = await supabaseAdmin
+            .from('profiles')
+            .select('id, email')
+            .eq('id', resolvedUserId)
+            .maybeSingle();
+          if (found?.email) {
+            cleanEmail = (found.email || '').trim().toLowerCase();
+          }
+        } else if (!resolvedUserId && cleanEmail) {
+          const { data: found } = await supabaseAdmin
+            .from('profiles')
+            .select('id, email')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+          if (found?.id) {
+            resolvedUserId = found.id;
+          }
+        }
+
+        if (!cleanEmail && resolvedUserId) {
+          try {
+            const authList = await getAuthorizedEmailsFromSupabase();
+            const matchedAuth = authList.find((item) => item.id === resolvedUserId || item.email === resolvedUserId);
+            if (matchedAuth?.email) {
+              cleanEmail = String(matchedAuth.email).trim().toLowerCase();
+            }
+          } catch (e) {}
+        }
+
+        if (cleanEmail === 'ssumollah@gmail.com') {
+          return res.status(400).json({ success: false, error: 'Cannot delete the Master Admin account.' });
+        }
+
+        if (!cleanEmail && !resolvedUserId) {
+          return res.status(400).json({
+            success: false,
+            error: 'Target user ID or email is required for account deletion.',
+          });
+        }
+
+        console.log(`[USER DELETION START] userId: ${resolvedUserId}, email: ${cleanEmail}`);
+
+        // 1. Delete from public.authorized_emails and site_settings
+        await deleteAuthorizedEmailFromSupabase(cleanEmail, resolvedUserId);
+
+        // 2. Clean up customer_addresses
+        try {
+          if (resolvedUserId && cleanEmail) {
+            await supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
+          } else if (resolvedUserId) {
+            await supabaseAdmin.from('customer_addresses').delete().eq('user_id', resolvedUserId);
+          } else if (cleanEmail) {
+            await supabaseAdmin.from('customer_addresses').delete().ilike('customer_email', cleanEmail);
+          }
+        } catch (err: any) {
+          console.warn('[Delete User Notice]: customer_addresses clean-up:', err.message);
+        }
+
+        // 3. Clean up maker_applications
+        try {
+          if (resolvedUserId && cleanEmail) {
+            await supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`);
+          } else if (resolvedUserId) {
+            await supabaseAdmin.from('maker_applications').delete().eq('user_id', resolvedUserId);
+          } else if (cleanEmail) {
+            await supabaseAdmin.from('maker_applications').delete().ilike('applicant_email', cleanEmail);
+          }
+        } catch (err: any) {
+          console.warn('[Delete User Notice]: maker_applications clean-up:', err.message);
+        }
+
+        // 4. Permanently delete from public.profiles
+        try {
+          if (resolvedUserId) {
+            await supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId);
+          }
+          if (cleanEmail) {
+            await supabaseAdmin.from('profiles').delete().ilike('email', cleanEmail);
+          }
+        } catch (err: any) {
+          console.warn('[Delete User Warning]: Failed deleting profile from Supabase:', err.message);
+        }
+
+        // 5. Permanently delete user from Supabase auth.users using Service Role Client
+        let authUserDeleted = false;
+        if (resolvedUserId && resolvedUserId.includes('-')) {
+          try {
+            const { error: authDeleteErr } = await withTimeout(
+              supabaseAdmin.auth.admin.deleteUser(resolvedUserId),
+              8000,
+              'deleteAuthUser'
+            );
+            if (!authDeleteErr) {
+              authUserDeleted = true;
+              console.log(`🔐 [Supabase Auth User Deleted] User ID: ${resolvedUserId}`);
+            } else {
+              console.warn('[Delete User Auth Notice]:', authDeleteErr.message);
+            }
+          } catch (authErr: any) {
+            console.warn('[Delete User Auth Exception]:', authErr.message);
+          }
+        }
+
+        if (!authUserDeleted && cleanEmail) {
+          try {
+            const { data: usersData } = await withTimeout(supabaseAdmin.auth.admin.listUsers(), 8000, 'listAuthUsers');
+            const foundAuthUser = usersData?.users?.find(
+              (u) => (u.email || '').toLowerCase() === cleanEmail
+            );
+            if (foundAuthUser?.id) {
+              await withTimeout(supabaseAdmin.auth.admin.deleteUser(foundAuthUser.id), 8000, 'deleteAuthUserByEmail');
+              authUserDeleted = true;
+              console.log(`🔐 [Supabase Auth User Deleted by Email Match] User ID: ${foundAuthUser.id}`);
+            }
+          } catch (e) {}
+        }
+
+        console.log(`[USER DELETION COMPLETE] ${cleanEmail || resolvedUserId}`);
+
+        return res.json({
+          success: true,
+          message: `User account ${cleanEmail || resolvedUserId} permanently deleted from database and authentication system.`,
+          email: cleanEmail,
+          userId: resolvedUserId,
+          authUserDeleted,
+        });
+      }
+
+      // -----------------------------------------------------------
+      // ACTION: PRE-AUTHORIZE EMAIL (public.authorized_emails table)
+      // -----------------------------------------------------------
+      const cleanEmail = String(email || '').trim().toLowerCase();
+      const cleanRole = String(role || 'maker').trim().toLowerCase();
+      const cleanStudio = String(studio_name || school || '').trim();
+      const authorizer = String(authorized_by || verification.email || 'ssumollah@gmail.com').trim();
+      const displayName = String(full_name || name || cleanEmail.split('@')[0]).trim();
+
+      if (!cleanEmail || !cleanEmail.includes('@')) {
+        return res.status(400).json({ success: false, error: 'Valid email address is required.' });
+      }
+
+      const validRoles = ['admin', 'maker', 'customer'];
+      if (!validRoles.includes(cleanRole)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid role: ${cleanRole}. Must be admin, maker, or customer.`,
+        });
+      }
+
+      // 1. Upsert into public.authorized_emails table & site_settings
+      const record = await upsertAuthorizedEmailToSupabase({
+        email: cleanEmail,
+        role: cleanRole,
+        studio_name: cleanStudio || (cleanRole === 'admin' ? 'ArtisansKart Platform Headquarters' : 'Independent Studio Guild'),
+        name: displayName,
+        authorized_by: authorizer,
       });
-    }
 
-    const effectiveUserId = String(userId || targetUserId || id || '').trim();
-    let cleanEmail = String(email || '').trim().toLowerCase();
-
-    // Protection 1: Prevent deleting ssumollah@gmail.com
-    if (cleanEmail === 'ssumollah@gmail.com') {
-      return res.status(400).json({ success: false, error: 'Cannot delete the Master Author account.' });
-    }
-
-    // Protection 2: Resolve user_id and email from database if missing
-    let resolvedUserId = effectiveUserId;
-    if (resolvedUserId && !cleanEmail) {
-      const { data: found } = await supabaseAdmin
-        .from('profiles')
-        .select('id, email')
-        .eq('id', resolvedUserId)
-        .maybeSingle();
-      if (found?.email) {
-        cleanEmail = (found.email || '').trim().toLowerCase();
-      }
-    } else if (!resolvedUserId && cleanEmail) {
-      const { data: found } = await supabaseAdmin
-        .from('profiles')
-        .select('id, email')
-        .ilike('email', cleanEmail)
-        .maybeSingle();
-      if (found?.id) {
-        resolvedUserId = found.id;
-      }
-    }
-
-    // If still missing email, check authorized_emails list
-    if (!cleanEmail && resolvedUserId) {
+      // 2. If user already exists in Supabase profiles, update role immediately
       try {
-        const authList = await getAuthorizedEmailsFromSupabase();
-        const matchedAuth = authList.find(item => item.id === resolvedUserId);
-        if (matchedAuth?.email) {
-          cleanEmail = String(matchedAuth.email).trim().toLowerCase();
+        const { data: existingProfile } = await supabaseAdmin
+          .from('profiles')
+          .select('id, email, role')
+          .ilike('email', cleanEmail)
+          .maybeSingle();
+
+        if (existingProfile?.id) {
+          const isMaster = cleanEmail === 'ssumollah@gmail.com';
+          const targetDbRole = isMaster ? 'admin' : cleanRole;
+
+          await supabaseAdmin
+            .from('profiles')
+            .update({
+              role: targetDbRole,
+              school: cleanStudio,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingProfile.id);
+
+          try {
+            await supabaseAdmin.auth.admin.updateUserById(existingProfile.id, {
+              user_metadata: { role: cleanRole, status: 'approved', school: cleanStudio },
+            });
+          } catch (e) {}
         }
-      } catch (e) {}
-    }
-
-    if (cleanEmail === 'ssumollah@gmail.com') {
-      return res.status(400).json({ success: false, error: 'Cannot delete the Master Author account.' });
-    }
-
-    if (!cleanEmail && !resolvedUserId) {
-      return res.status(400).json({ success: false, error: 'Target user ID or email is required for account deletion.' });
-    }
-
-    // Audit financial / order history records count to confirm preservation
-    let existingOrdersCount = 0;
-    try {
-      let orderQuery = supabaseAdmin.from('orders').select('id', { count: 'exact', head: true });
-      if (resolvedUserId) {
-        orderQuery = orderQuery.or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`);
-      } else if (cleanEmail) {
-        orderQuery = orderQuery.ilike('customer_email', cleanEmail);
+      } catch (profileErr: any) {
+        console.warn('Notice updating profile for authorized email:', profileErr.message);
       }
-      const { count } = await orderQuery;
-      existingOrdersCount = count || 0;
-    } catch (e) {}
 
-    console.log(`[USER DELETE START] userId: ${resolvedUserId}, email: ${cleanEmail}`);
+      console.log(`🛡️ [Email Authorized in Supabase] ${cleanEmail} -> ${cleanRole.toUpperCase()} (by ${authorizer})`);
 
-    // 1. Clean up from site_settings (authorized_emails) so they never reappear on refresh
-    try {
-      const authList = await withTimeout(getAuthorizedEmailsFromSupabase(), 8000, 'getAuthorizedEmails');
-      const filtered = authList.filter((item) => {
-        if (resolvedUserId && item.id === resolvedUserId) return false;
-        if (cleanEmail && (item.email || '').toLowerCase() === cleanEmail) return false;
-        return true;
+      return res.json({
+        success: true,
+        authorizedEmail: record,
+        message: `Email ${cleanEmail} successfully authorized for ${cleanRole.toUpperCase()} role.`,
       });
-      await withTimeout(saveAuthorizedEmailsToSupabase(filtered), 8000, 'saveAuthorizedEmails');
     } catch (err: any) {
-      console.warn('[Delete User Warning]: Failed updating authorized_emails in site_settings:', err.message);
+      console.error('❌ [/api/admin/manage-user Error]:', err.message);
+      return res.status(500).json({ success: false, error: err.message });
     }
-
-    // 2. Clean up from customer_addresses
-    try {
-      if (resolvedUserId && cleanEmail) {
-        await withTimeout(supabaseAdmin.from('customer_addresses').delete().or(`user_id.eq.${resolvedUserId},customer_email.ilike.${cleanEmail}`), 8000, 'deleteAddresses');
-      } else if (resolvedUserId) {
-        await withTimeout(supabaseAdmin.from('customer_addresses').delete().eq('user_id', resolvedUserId), 8000, 'deleteAddresses');
-      } else if (cleanEmail) {
-        await withTimeout(supabaseAdmin.from('customer_addresses').delete().ilike('customer_email', cleanEmail), 8000, 'deleteAddresses');
-      }
-    } catch (err: any) {
-      console.warn('[Delete User Notice]: customer_addresses clean-up:', err.message);
-    }
-
-    // 3. Clean up from maker_applications
-    try {
-      if (resolvedUserId && cleanEmail) {
-        await withTimeout(supabaseAdmin.from('maker_applications').delete().or(`user_id.eq.${resolvedUserId},applicant_email.ilike.${cleanEmail}`), 8000, 'deleteMakerApps');
-      } else if (resolvedUserId) {
-        await withTimeout(supabaseAdmin.from('maker_applications').delete().eq('user_id', resolvedUserId), 8000, 'deleteMakerApps');
-      } else if (cleanEmail) {
-        await withTimeout(supabaseAdmin.from('maker_applications').delete().ilike('applicant_email', cleanEmail), 8000, 'deleteMakerApps');
-      }
-    } catch (err: any) {
-      console.warn('[Delete User Notice]: maker_applications clean-up:', err.message);
-    }
-
-    // 4. Permanently delete row from public.profiles
-    console.log(`[PROFILE UPDATE/DELETE]`);
-    try {
-      if (resolvedUserId) {
-        await withTimeout(supabaseAdmin.from('profiles').delete().eq('id', resolvedUserId), 8000, 'deleteProfile');
-      }
-      if (cleanEmail) {
-        await withTimeout(supabaseAdmin.from('profiles').delete().ilike('email', cleanEmail), 8000, 'deleteProfileByEmail');
-      }
-    } catch (err: any) {
-      console.warn('[Delete User Warning]: Failed deleting profile from Supabase:', err.message);
-    }
-
-    // 5. Permanently delete user from Supabase Auth system
-    console.log(`[AUTH DELETE]`);
-    let authUserDeleted = false;
-    if (resolvedUserId && resolvedUserId.includes('-')) {
-      try {
-        const { error: authDeleteErr } = await withTimeout(supabaseAdmin.auth.admin.deleteUser(resolvedUserId), 8000, 'deleteAuthUser');
-        if (!authDeleteErr) {
-          authUserDeleted = true;
-          console.log(`🔐 [Supabase Auth User Deleted] User ID: ${resolvedUserId}`);
-        } else {
-          console.warn('[Delete User Auth Notice]:', authDeleteErr.message);
-        }
-      } catch (authErr: any) {
-        console.warn('[Delete User Auth Exception]:', authErr.message);
-      }
-    }
-
-    if (!authUserDeleted && cleanEmail) {
-      try {
-        const { data: usersData } = await withTimeout(supabaseAdmin.auth.admin.listUsers(), 8000, 'listAuthUsers');
-        const foundAuthUser = usersData?.users?.find(
-          (u) => (u.email || '').toLowerCase() === cleanEmail
-        );
-        if (foundAuthUser?.id) {
-          await withTimeout(supabaseAdmin.auth.admin.deleteUser(foundAuthUser.id), 8000, 'deleteAuthUserByEmail');
-          authUserDeleted = true;
-          console.log(`🔐 [Supabase Auth User Deleted by Email Match] User ID: ${foundAuthUser.id}`);
-        }
-      } catch (e) {}
-    }
-
-    console.log(`[USER DELETE COMPLETE] ${cleanEmail || resolvedUserId}`);
-
-    return res.json({
-      success: true,
-      message: `User account ${cleanEmail || resolvedUserId} permanently deleted from database and authentication system.`,
-      email: cleanEmail,
-      userId: resolvedUserId,
-      authUserDeleted,
-      preservedOrdersCount: existingOrdersCount,
-    });
-  } catch (err: any) {
-    console.error('❌ [/api/admin/delete-user Error]:', err.message);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to delete user account.' });
   }
-});
+);
 
 
 // POST /api/admin/update-role
@@ -3594,11 +3750,16 @@ app.post('/api/admin/update-role', async (req: Request, res: Response) => {
 // GET /api/admin/users
 app.get('/api/admin/users', async (req: Request, res: Response) => {
   try {
-    const { user, profile } = await getAuthenticatedUser(req);
-    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
-
-    if (!isMaster) {
-      return res.status(403).json({ error: 'Unauthorized' });
+    const verification = await verifyMasterAdmin(req);
+    if (!verification.authorized) {
+      try {
+        const { profile } = await getAuthenticatedUser(req);
+        if (profile?.email !== 'ssumollah@gmail.com' && profile?.role !== 'master_admin') {
+          return res.status(403).json({ error: 'Unauthorized: Master Admin access required.' });
+        }
+      } catch {
+        return res.status(403).json({ error: 'Unauthorized: Master Admin access required.' });
+      }
     }
     // 1. Fetch real profiles from Supabase
     const { data: profiles, error } = await supabaseAdmin

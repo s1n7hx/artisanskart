@@ -238,7 +238,16 @@ export async function ensureUserProfile(
 // -------------------------------------------------------------
 export async function fetchAllProfiles(): Promise<UserProfile[]> {
   try {
-    const res = await fetch('/api/admin/users');
+    const { data: { session } } = await supabase.auth.getSession();
+    const callerEmail = session?.user?.email || 'ssumollah@gmail.com';
+    const headers: Record<string, string> = {
+      'x-admin-email': callerEmail,
+    };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch('/api/admin/users', { headers });
     if (res.ok) {
       const json = await res.json();
       if (json.users && Array.isArray(json.users)) {
@@ -364,10 +373,25 @@ export async function authorizeNewEmail(payload: {
   school?: string;
   authorized_by?: string;
 }) {
-  const res = await fetch('/api/admin/authorize-email', {
+  const { data: { session } } = await supabase.auth.getSession();
+  const callerEmail = session?.user?.email || payload.authorized_by || 'ssumollah@gmail.com';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-admin-email': callerEmail,
+  };
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+
+  const res = await fetch('/api/admin/manage-user', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    headers,
+    body: JSON.stringify({
+      action: 'authorize',
+      adminEmail: callerEmail,
+      authorized_by: callerEmail,
+      ...payload,
+    }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -381,10 +405,27 @@ export async function deleteUserAccountApi(userId: string, email: string, adminE
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
 
   try {
-    const res = await fetch('/api/admin/delete-user', {
+    const { data: { session } } = await supabase.auth.getSession();
+    const callerEmail = session?.user?.email || adminEmail || 'ssumollah@gmail.com';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-admin-email': callerEmail,
+    };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+
+    const res = await fetch('/api/admin/manage-user', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, email, adminEmail }),
+      headers,
+      body: JSON.stringify({
+        action: 'delete',
+        userId,
+        targetUserId: userId,
+        id: userId,
+        email,
+        adminEmail: callerEmail,
+      }),
       signal: controller.signal,
     });
     
