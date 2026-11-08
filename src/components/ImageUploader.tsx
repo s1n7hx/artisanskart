@@ -237,7 +237,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
       {value ? (
         <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 group shadow-xs">
           <div
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               setRawImageForCrop(value);
               setIsCropperOpen(true);
             }}
@@ -272,7 +274,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setRawImageForCrop(value);
                   setIsCropperOpen(true);
                 }}

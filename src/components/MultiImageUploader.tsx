@@ -361,7 +361,11 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                 >
                   {/* Photo Thumbnail Preview */}
                   <div
-                    onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOpenCropperForExisting(imgUrl, index);
+                    }}
                     className="aspect-square w-full bg-slate-100 overflow-hidden relative cursor-pointer group"
                     title="Click to Crop & Resize"
                   >
@@ -398,7 +402,11 @@ export const MultiImageUploader: React.FC<MultiImageUploaderProps> = ({
                     <div className="grid grid-cols-1 gap-1.5 text-xs">
                       <button
                         type="button"
-                        onClick={() => handleOpenCropperForExisting(imgUrl, index)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleOpenCropperForExisting(imgUrl, index);
+                        }}
                         className="w-full py-2 px-3 bg-[#C85A32] hover:bg-[#b04a25] text-white rounded-xl font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                       >
                         <Crop className="w-3.5 h-3.5" />

@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import Cropper from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
 import { X, Check, RotateCw, ZoomIn, ZoomOut, RefreshCw, Sliders, FlipHorizontal, FlipVertical } from 'lucide-react';
@@ -23,8 +24,43 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   const [rotation, setRotation] = useState<number>(0);
   const [flip, setFlip] = useState<{ horizontal: boolean; vertical: boolean }>({ horizontal: false, vertical: false });
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>('1:1');
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [mediaSize, setMediaSize] = useState<{ width: number; height: number; naturalWidth: number; naturalHeight: number } | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Lock body scroll and handle Escape key while modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, onClose]);
+
+  // Reset transforms whenever a new image is loaded
+  useEffect(() => {
+    if (isOpen) {
+      setCrop({ x: 0, y: 0 });
+      setZoom(1);
+      setRotation(0);
+      setFlip({ horizontal: false, vertical: false });
+      setCroppedAreaPixels(null);
+      setErrorMsg(null);
+    }
+  }, [isOpen, imageSrc]);
 
   const getAspectValue = (option: AspectRatioOption): number | undefined => {
     switch (option) {
@@ -36,15 +72,20 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
         return 3 / 4;
       case '16:9':
         return 16 / 9;
-      case 'free':
       case 'original':
+        return mediaSize?.naturalWidth && mediaSize?.naturalHeight
+          ? mediaSize.naturalWidth / mediaSize.naturalHeight
+          : undefined;
+      case 'free':
       default:
-        return undefined; // Free aspect ratio
+        return undefined;
     }
   };
 
-  const onCropCompleteInternal = useCallback((_croppedArea: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels);
+  const onCropCompleteInternal = useCallback((_croppedArea: any, pixels: any) => {
+    if (pixels && pixels.width > 0 && pixels.height > 0) {
+      setCroppedAreaPixels(pixels);
+    }
   }, []);
 
   const handleRotateLeft = () => {
@@ -68,64 +109,110 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
     setRotation(0);
     setFlip({ horizontal: false, vertical: false });
     setCrop({ x: 0, y: 0 });
+    setAspectRatio('1:1');
+    setErrorMsg(null);
   };
 
-  const createImage = (url: string): Promise<HTMLImageElement> =>
-    new Promise((resolve, reject) => {
+  const createImage = async (url: string): Promise<HTMLImageElement> => {
+    if (url.startsWith('data:') || url.startsWith('blob:')) {
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = (error) => reject(error);
+        image.src = url;
+      });
+    }
+
+    try {
+      const resp = await fetch(url, { mode: 'cors' });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        return new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = (error) => reject(error);
+          image.src = objectUrl;
+        });
+      }
+    } catch {
+      // Fallback
+    }
+
+    return new Promise((resolve, reject) => {
       const image = new Image();
-      image.addEventListener('load', () => resolve(image));
-      image.addEventListener('error', (error) => reject(error));
-      image.setAttribute('crossOrigin', 'anonymous');
-      image.src = url;
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve(image);
+      image.onerror = () => {
+        const fallback = new Image();
+        fallback.onload = () => resolve(fallback);
+        fallback.onerror = (err) => reject(err);
+        fallback.src = url;
+      };
+      const separator = url.includes('?') ? '&' : '?';
+      image.src = `${url}${separator}_t=${Date.now()}`;
     });
+  };
 
   const getCroppedImg = async (
-    imageSrc: string,
+    sourceUrl: string,
     pixelCrop: { x: number; y: number; width: number; height: number },
-    rotation = 0,
-    flip = { horizontal: false, vertical: false }
+    rotationDeg = 0,
+    flipConfig = { horizontal: false, vertical: false }
   ): Promise<string> => {
-    const image = await createImage(imageSrc);
+    const image = await createImage(sourceUrl);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      throw new Error('No 2d context available');
+      throw new Error('Canvas 2D context is not available');
     }
 
-    const rotRad = (rotation * Math.PI) / 180;
-
+    const rotRad = (rotationDeg * Math.PI) / 180;
     const bBoxWidth =
-      Math.abs(Math.cos(rotRad) * image.width) + Math.abs(Math.sin(rotRad) * image.height);
+      Math.abs(Math.cos(rotRad) * image.naturalWidth) + Math.abs(Math.sin(rotRad) * image.naturalHeight);
     const bBoxHeight =
-      Math.abs(Math.sin(rotRad) * image.height) + Math.abs(Math.cos(rotRad) * image.width);
+      Math.abs(Math.sin(rotRad) * image.naturalHeight) + Math.abs(Math.cos(rotRad) * image.naturalWidth);
 
-    canvas.width = bBoxWidth;
-    canvas.height = bBoxHeight;
+    canvas.width = Math.round(bBoxWidth);
+    canvas.height = Math.round(bBoxHeight);
 
     ctx.translate(bBoxWidth / 2, bBoxHeight / 2);
     ctx.rotate(rotRad);
-    ctx.scale(flip.horizontal ? -1 : 1, flip.vertical ? -1 : 1);
-    ctx.translate(-image.width / 2, -image.height / 2);
+    ctx.scale(flipConfig.horizontal ? -1 : 1, flipConfig.vertical ? -1 : 1);
+    ctx.translate(-image.naturalWidth / 2, -image.naturalHeight / 2);
 
     ctx.drawImage(image, 0, 0);
 
-    const data = ctx.getImageData(0, 0, bBoxWidth, bBoxHeight);
+    const croppedCanvas = document.createElement('canvas');
+    const targetWidth = Math.max(1, Math.round(pixelCrop.width));
+    const targetHeight = Math.max(1, Math.round(pixelCrop.height));
 
-    canvas.width = Math.max(1, pixelCrop.width);
-    canvas.height = Math.max(1, pixelCrop.height);
+    croppedCanvas.width = targetWidth;
+    croppedCanvas.height = targetHeight;
+    const croppedCtx = croppedCanvas.getContext('2d');
 
-    ctx.putImageData(
-      data,
-      Math.round(0 - pixelCrop.x),
-      Math.round(0 - pixelCrop.y)
+    if (!croppedCtx) {
+      throw new Error('Failed to create destination canvas');
+    }
+
+    croppedCtx.drawImage(
+      canvas,
+      Math.round(pixelCrop.x),
+      Math.round(pixelCrop.y),
+      targetWidth,
+      targetHeight,
+      0,
+      0,
+      targetWidth,
+      targetHeight
     );
 
     return new Promise((resolve, reject) => {
-      canvas.toBlob(
+      croppedCanvas.toBlob(
         (blob) => {
           if (!blob) {
-            reject(new Error('Canvas is empty'));
+            reject(new Error('Cropped canvas generation returned empty blob'));
             return;
           }
           const reader = new FileReader();
@@ -142,26 +229,47 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
   };
 
   const handleApplyCrop = async () => {
-    if (!croppedAreaPixels || !imageSrc) return;
+    if (!imageSrc) return;
     setIsProcessing(true);
+    setErrorMsg(null);
 
     try {
-      const croppedDataUrl = await getCroppedImg(imageSrc, croppedAreaPixels, rotation, flip);
+      const activeCrop = croppedAreaPixels || {
+        x: 0,
+        y: 0,
+        width: mediaSize?.naturalWidth || 800,
+        height: mediaSize?.naturalHeight || 800,
+      };
+
+      const croppedDataUrl = await getCroppedImg(imageSrc, activeCrop, rotation, flip);
       setIsProcessing(false);
       onCropComplete(croppedDataUrl);
       onClose();
-    } catch (err) {
-      console.error('Error generating cropped image:', err);
+    } catch (err: any) {
+      console.error('[ImageCropperModal] Error generating cropped image:', err);
+      setErrorMsg(err?.message || 'Failed to generate cropped image. Please try again.');
       setIsProcessing(false);
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !imageSrc) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in">
-      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
-        
+  const modalContent = (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Image Cropping Workspace"
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-4 select-none"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[94vh] relative z-10 border border-slate-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
@@ -177,24 +285,37 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             type="button"
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 flex items-center justify-center transition cursor-pointer shadow-xs"
+            title="Close editor (Esc)"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Workspace */}
-        <div className="p-6 flex-1 overflow-y-auto space-y-6">
-          
+        <div className="p-5 sm:p-6 flex-1 overflow-y-auto space-y-5">
+          {errorMsg && (
+            <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center justify-between">
+              <span>{errorMsg}</span>
+              <button
+                type="button"
+                onClick={() => setErrorMsg(null)}
+                className="text-red-500 hover:text-red-800 font-bold ml-2"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Aspect Ratio Presets */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-700 block">Aspect Ratio Presets</label>
             <div className="flex flex-wrap gap-2">
               {[
-                { id: 'free', label: 'Free' },
                 { id: '1:1', label: '1:1 Square (Storefront)' },
                 { id: '4:5', label: '4:5 Portrait' },
                 { id: '3:4', label: '3:4 Craft Card' },
                 { id: '16:9', label: '16:9 Banner' },
+                { id: 'free', label: 'Free' },
                 { id: 'original', label: 'Original' },
               ].map((item) => (
                 <button
@@ -214,7 +335,7 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
           </div>
 
           {/* Interactive Cropper Area */}
-          <div className="relative w-full h-80 sm:h-96 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
+          <div className="relative w-full h-72 sm:h-96 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
             <Cropper
               image={imageSrc}
               crop={crop}
@@ -225,7 +346,12 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               onZoomChange={setZoom}
               onRotationChange={setRotation}
               onCropComplete={onCropCompleteInternal}
-              transform={`translate(${crop.x}px, ${crop.y}px) scale(${zoom}) rotate(${rotation}deg) scaleX(${flip.horizontal ? -1 : 1}) scaleY(${flip.vertical ? -1 : 1})`}
+              onMediaLoaded={(loaded) => setMediaSize(loaded)}
+              transform={
+                flip.horizontal || flip.vertical
+                  ? `translate(${crop.x}px, ${crop.y}px) rotate(${rotation}deg) scale(${zoom}) scale(${flip.horizontal ? -1 : 1}, ${flip.vertical ? -1 : 1})`
+                  : undefined
+              }
             />
           </div>
 
@@ -234,18 +360,38 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             {/* Zoom Slider */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                <span className="flex items-center gap-1.5"><ZoomIn className="w-3.5 h-3.5 text-[#C85A32]" /> Zoom Level</span>
+                <span className="flex items-center gap-1.5">
+                  <ZoomIn className="w-3.5 h-3.5 text-[#C85A32]" /> Zoom Level
+                </span>
                 <span>{zoom.toFixed(2)}x</span>
               </div>
-              <input
-                type="range"
-                min="1"
-                max="3"
-                step="0.05"
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-full accent-[#C85A32] cursor-pointer"
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.max(1, +(prev - 0.2).toFixed(2)))}
+                  className="p-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="range"
+                  min="1"
+                  max="3"
+                  step="0.05"
+                  value={zoom}
+                  onChange={(e) => setZoom(Number(e.target.value))}
+                  className="w-full accent-[#C85A32] cursor-pointer"
+                />
+                <button
+                  type="button"
+                  onClick={() => setZoom((prev) => Math.min(3, +(prev + 0.2).toFixed(2)))}
+                  className="p-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 cursor-pointer"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {/* Transform Actions */}
@@ -276,7 +422,9 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                   type="button"
                   onClick={handleFlipHorizontal}
                   className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1 ${
-                    flip.horizontal ? 'bg-[#C85A32] text-white border-[#C85A32]' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    flip.horizontal
+                      ? 'bg-[#C85A32] text-white border-[#C85A32]'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                   }`}
                   title="Flip Horizontally"
                 >
@@ -286,7 +434,9 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
                   type="button"
                   onClick={handleFlipVertical}
                   className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer shadow-xs flex items-center gap-1 ${
-                    flip.vertical ? 'bg-[#C85A32] text-white border-[#C85A32]' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                    flip.vertical
+                      ? 'bg-[#C85A32] text-white border-[#C85A32]'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
                   }`}
                   title="Flip Vertically"
                 >
@@ -304,7 +454,6 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Footer Actions */}
@@ -335,8 +484,14 @@ export const ImageCropperModal: React.FC<ImageCropperModalProps> = ({
             )}
           </button>
         </div>
-
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined' && document.body) {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 };
+
