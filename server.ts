@@ -3655,6 +3655,53 @@ app.get('/api/admin/users', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/admin/makers
+// Fetches strictly approved student makers/creators.
+// Excludes admin accounts, master_admin, and ssumollah@gmail.com
+app.get('/api/admin/makers', async (req: Request, res: Response) => {
+  try {
+    const { data: profiles, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('role', 'maker')
+      .neq('role', 'admin')
+      .neq('role', 'master_admin')
+      .order('full_name', { ascending: true });
+
+    if (error) {
+      console.warn('Notice: Failed fetching makers from Supabase:', error.message);
+    }
+
+    const list = (profiles || []).filter((p: any) => {
+      const email = (p.email || '').trim().toLowerCase();
+      const role = (p.role || '').trim().toLowerCase();
+      return (
+        role === 'maker' &&
+        role !== 'admin' &&
+        role !== 'master_admin' &&
+        email !== 'ssumollah@gmail.com'
+      );
+    });
+
+    const makerList = list.map((p: any) => ({
+      id: p.id,
+      email: p.email,
+      name: p.full_name || (p.email ? p.email.split('@')[0] : 'Maker'),
+      full_name: p.full_name,
+      role: 'maker',
+      status: p.status || 'approved',
+      school: p.school || 'Independent Studio',
+      avatar_url: p.avatar_url,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+    }));
+
+    return res.json({ success: true, count: makerList.length, makers: makerList });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/auth/sync-profile
 // Critical: Called when any user signs in with Google OAuth to resolve persistent role from Supabase database
 app.post('/api/auth/sync-profile', async (req: Request, res: Response) => {

@@ -282,6 +282,81 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
   }
 }
 
+// -------------------------------------------------------------
+// Approved Makers Directory for Product Assignment
+// Excludes admin roles and master admin (ssumollah@gmail.com)
+// -------------------------------------------------------------
+export async function fetchApprovedMakers(): Promise<UserProfile[]> {
+  try {
+    const res = await fetch('/api/admin/makers');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.makers && Array.isArray(json.makers)) {
+        return json.makers
+          .filter((p: any) => {
+            const email = (p.email || '').trim().toLowerCase();
+            const role = (p.role || '').trim().toLowerCase();
+            return (
+              role === 'maker' &&
+              role !== 'admin' &&
+              role !== 'master_admin' &&
+              email !== 'ssumollah@gmail.com'
+            );
+          })
+          .map((u: any) => ({
+            id: u.id,
+            email: u.email,
+            full_name: u.full_name || u.name || (u.email ? u.email.split('@')[0] : 'Maker'),
+            avatar_url: u.avatar_url || '',
+            role: 'maker' as const,
+            status: u.status || 'approved',
+            school: u.school || '',
+            created_at: u.created_at || new Date().toISOString(),
+          })) as UserProfile[];
+      }
+    }
+  } catch (e) {
+    console.warn('API /api/admin/makers notice:', e);
+  }
+
+  // Direct Supabase query with explicit condition excluding admin & master_admin
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'maker')
+      .neq('role', 'admin')
+      .neq('role', 'master_admin')
+      .order('full_name', { ascending: true });
+
+    if (!error && data) {
+      return (data as UserProfile[]).filter((p) => {
+        const email = String(p.email || '').trim().toLowerCase();
+        const roleStr = String(p.role || '').trim().toLowerCase();
+        const isMaker = roleStr === 'maker';
+        const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
+        return isMaker && !isAdmin && email !== 'ssumollah@gmail.com';
+      });
+    }
+  } catch (err) {
+    console.warn('Direct maker profiles fetch error:', err);
+  }
+
+  // Fallback to fetchAllProfiles with strict maker filtering
+  try {
+    const all = await fetchAllProfiles();
+    return all.filter((p) => {
+      const email = String(p.email || '').trim().toLowerCase();
+      const roleStr = String(p.role || '').trim().toLowerCase();
+      const isMaker = roleStr === 'maker';
+      const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
+      return isMaker && !isAdmin && email !== 'ssumollah@gmail.com';
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function authorizeNewEmail(payload: {
   email: string;
   name?: string;
