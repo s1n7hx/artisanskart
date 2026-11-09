@@ -59,14 +59,14 @@ export const Marquee: React.FC = () => {
         key={`${product.id}-${keySuffix}`}
         onClick={() => navigate(`/product/${product.id}`)}
         title={product.title}
-        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl sm:rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 mr-3.5 sm:mr-4 border border-[#e7e0d8]/60 bg-white"
+        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl sm:rounded-3xl shadow-sm hover:shadow-xl transition-all duration-300 mr-4 sm:mr-5 border border-[#e7e0d8]/60 bg-white flex items-center justify-center p-2.5"
         style={{ width: '270px', height: '185px' }}
       >
         <img
           src={product.image}
           alt={product.title}
           loading="lazy"
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-108"
+          className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
         />
       </div>
     );

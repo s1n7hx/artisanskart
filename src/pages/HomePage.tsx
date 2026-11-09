@@ -123,11 +123,11 @@ export const HomePage: React.FC = () => {
               onClick={() => navigate(`/product/${p.id}`)}
               className="fade-in group bg-white rounded-3xl overflow-hidden border border-[#e7e0d8] shadow-xs hover:shadow-lg transition-all duration-300 flex flex-col cursor-pointer"
             >
-              <div className="relative aspect-square overflow-hidden bg-slate-100">
+              <div className="relative aspect-square overflow-hidden bg-[#FAF9F6] flex items-center justify-center p-3">
                 <img
                   src={p.image}
                   alt={p.title}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
                 <span className="absolute top-3 left-3 badge-sage text-[11px] px-2.5 py-0.5 rounded-full font-medium">
