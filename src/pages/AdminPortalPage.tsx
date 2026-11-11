@@ -128,23 +128,9 @@ export const AdminPortalPage: React.FC = () => {
     setMakersError(null);
     try {
       const makers = await fetchApprovedMakers();
-      // Strict filter: only approved student makers whose role is strictly 'maker'
-      // Exclude admin, master_admin, and ssumollah@gmail.com
-      const strictlyMakers = makers.filter((p) => {
-        const roleStr = String(p.role || '').trim().toLowerCase();
-        const email = (p.email || '').trim().toLowerCase();
-        const isMaker = roleStr === 'maker';
-        const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
-        return (
-          isMaker &&
-          !isAdmin &&
-          email !== 'ssumollah@gmail.com' &&
-          email !== MASTER_ADMIN_EMAIL.toLowerCase()
-        );
-      });
-      setApprovedMakers(strictlyMakers);
+      setApprovedMakers(makers);
     } catch (err: any) {
-      setMakersError(err.message || 'Failed to load approved makers.');
+      setMakersError(err.message || 'Failed to load makers.');
     } finally {
       setLoadingMakers(false);
     }
@@ -2087,30 +2073,17 @@ export const AdminPortalPage: React.FC = () => {
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#C85A32]"
                     >
-                      <option value="">-- Choose Approved Maker --</option>
-                      {approvedMakers
-                        .filter((m) => {
-                          const roleStr = String(m.role || '').trim().toLowerCase();
-                          const email = (m.email || '').trim().toLowerCase();
-                          const isMaker = roleStr === 'maker';
-                          const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
-                          return (
-                            isMaker &&
-                            !isAdmin &&
-                            email !== 'ssumollah@gmail.com' &&
-                            email !== MASTER_ADMIN_EMAIL.toLowerCase()
-                          );
-                        })
-                        .map((m) => {
-                          const makerValue = m.id || m.email;
-                          const displayName = m.full_name || m.email.split('@')[0];
-                          const isPreAuth = (m as any).isAuthorizedPreLogin;
-                          return (
-                            <option key={makerValue} value={makerValue}>
-                              {displayName} ({m.email}) {m.school ? `• ${m.school}` : ''} {isPreAuth ? '• (Pre-Authorized)' : ''}
-                            </option>
-                          );
-                        })}
+                      <option value="">-- Choose Maker / Creator --</option>
+                      {approvedMakers.map((m) => {
+                        const makerValue = m.id || m.email;
+                        const displayName = m.full_name || m.email.split('@')[0];
+                        const roleLabel = m.role ? ` [${m.role}]` : '';
+                        return (
+                          <option key={makerValue} value={makerValue}>
+                            {displayName} ({m.email}){roleLabel} {m.school ? `• ${m.school}` : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
                 </div>
@@ -2263,30 +2236,17 @@ export const AdminPortalPage: React.FC = () => {
                       }}
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs bg-white font-semibold text-slate-800 focus:outline-none focus:border-[#C85A32]"
                     >
-                      <option value="">-- Choose Approved Maker --</option>
-                      {approvedMakers
-                        .filter((m) => {
-                          const roleStr = String(m.role || '').trim().toLowerCase();
-                          const email = (m.email || '').trim().toLowerCase();
-                          const isMaker = roleStr === 'maker';
-                          const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
-                          return (
-                            isMaker &&
-                            !isAdmin &&
-                            email !== 'ssumollah@gmail.com' &&
-                            email !== MASTER_ADMIN_EMAIL.toLowerCase()
-                          );
-                        })
-                        .map((m) => {
-                          const makerValue = m.id || m.email;
-                          const displayName = m.full_name || m.email.split('@')[0];
-                          const isPreAuth = (m as any).isAuthorizedPreLogin;
-                          return (
-                            <option key={makerValue} value={makerValue}>
-                              {displayName} ({m.email}) {m.school ? `• ${m.school}` : ''} {isPreAuth ? '• (Pre-Authorized)' : ''}
-                            </option>
-                          );
-                        })}
+                      <option value="">-- Choose Maker / Creator --</option>
+                      {approvedMakers.map((m) => {
+                        const makerValue = m.id || m.email;
+                        const displayName = m.full_name || m.email.split('@')[0];
+                        const roleLabel = m.role ? ` [${m.role}]` : '';
+                        return (
+                          <option key={makerValue} value={makerValue}>
+                            {displayName} ({m.email}){roleLabel} {m.school ? `• ${m.school}` : ''}
+                          </option>
+                        );
+                      })}
                     </select>
                   )}
                 </div>

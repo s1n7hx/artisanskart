@@ -3989,40 +3989,25 @@ app.get('/api/admin/users', async (req: Request, res: Response) => {
 });
 
 // GET /api/admin/makers
-// Fetches strictly approved student makers/creators from profiles AND pre-authorized emails.
-// Excludes admin accounts, master_admin, and ssumollah@gmail.com
+// Fetches every maker and user profile on the site so the admin can assign products to any creator
 app.get('/api/admin/makers', async (req: Request, res: Response) => {
   try {
-    // 1. Fetch real approved makers from Supabase profiles
+    // 1. Fetch all profiles from Supabase profiles
     const { data: profiles, error } = await supabaseAdmin
       .from('profiles')
       .select('*')
-      .eq('role', 'maker')
-      .neq('role', 'admin')
-      .neq('role', 'master_admin')
       .order('full_name', { ascending: true });
 
     if (error) {
-      console.warn('Notice: Failed fetching makers from Supabase:', error.message);
+      console.warn('Notice: Failed fetching profiles from Supabase:', error.message);
     }
 
-    const list = (profiles || []).filter((p: any) => {
-      const email = (p.email || '').trim().toLowerCase();
-      const role = (p.role || '').trim().toLowerCase();
-      return (
-        role === 'maker' &&
-        role !== 'admin' &&
-        role !== 'master_admin' &&
-        email !== 'ssumollah@gmail.com'
-      );
-    });
-
-    const makerList = list.map((p: any) => ({
+    const makerList = (profiles || []).map((p: any) => ({
       id: p.id,
       email: p.email,
       name: p.full_name || (p.email ? p.email.split('@')[0] : 'Maker'),
-      full_name: p.full_name,
-      role: 'maker',
+      full_name: p.full_name || (p.email ? p.email.split('@')[0] : 'Maker'),
+      role: p.role || 'maker',
       status: p.status || 'approved',
       school: p.school || 'Independent Studio Guild',
       avatar_url: p.avatar_url || '',
@@ -4031,27 +4016,19 @@ app.get('/api/admin/makers', async (req: Request, res: Response) => {
       updated_at: p.updated_at,
     }));
 
-    // 2. Fetch pre-authorized emails from public.authorized_emails / site_settings
+    // 2. Also fetch pre-authorized emails from public.authorized_emails / site_settings
     const authList = await getAuthorizedEmailsFromSupabase();
     const existingEmails = new Set(makerList.map((m) => (m.email || '').toLowerCase()));
 
     for (const authItem of authList) {
       const emailLower = (authItem.email || '').trim().toLowerCase();
-      const roleLower = (authItem.role || '').trim().toLowerCase();
-
-      // Only include if role is 'maker', not an admin, not ssumollah, and not already in makerList
-      if (
-        emailLower &&
-        roleLower === 'maker' &&
-        emailLower !== 'ssumollah@gmail.com' &&
-        !existingEmails.has(emailLower)
-      ) {
+      if (emailLower && !existingEmails.has(emailLower)) {
         makerList.push({
           id: authItem.id || `auth_${authItem.email}`,
           email: authItem.email,
           name: authItem.name || authItem.email.split('@')[0],
           full_name: authItem.name || authItem.email.split('@')[0],
-          role: 'maker',
+          role: authItem.role || 'maker',
           status: 'approved',
           school: authItem.studio_name || authItem.school || 'Independent Studio Guild',
           avatar_url: '',

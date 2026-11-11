@@ -313,28 +313,17 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
     if (res.ok) {
       const json = await res.json();
       if (json.makers && Array.isArray(json.makers)) {
-        return json.makers
-          .filter((p: any) => {
-            const email = (p.email || '').trim().toLowerCase();
-            const role = (p.role || '').trim().toLowerCase();
-            return (
-              role === 'maker' &&
-              role !== 'admin' &&
-              role !== 'master_admin' &&
-              email !== 'ssumollah@gmail.com'
-            );
-          })
-          .map((u: any) => ({
-            id: u.id,
-            email: u.email,
-            full_name: u.full_name || u.name || (u.email ? u.email.split('@')[0] : 'Maker'),
-            avatar_url: u.avatar_url || '',
-            role: 'maker' as const,
-            status: u.status || 'approved',
-            school: u.school || 'Independent Studio Guild',
-            isAuthorizedPreLogin: Boolean(u.isAuthorizedPreLogin),
-            created_at: u.created_at || new Date().toISOString(),
-          })) as UserProfile[];
+        return json.makers.map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          full_name: u.full_name || u.name || (u.email ? u.email.split('@')[0] : 'Maker'),
+          avatar_url: u.avatar_url || '',
+          role: (u.role || 'maker') as any,
+          status: u.status || 'approved',
+          school: u.school || 'Independent Studio Guild',
+          isAuthorizedPreLogin: Boolean(u.isAuthorizedPreLogin),
+          created_at: u.created_at || new Date().toISOString(),
+        })) as UserProfile[];
       }
     }
   } catch (e) {
@@ -346,15 +335,11 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
     const { data: profData } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'maker')
-      .neq('role', 'admin')
-      .neq('role', 'master_admin')
       .order('full_name', { ascending: true });
 
     const { data: authData } = await supabase
       .from('authorized_emails')
-      .select('*')
-      .eq('role', 'maker');
+      .select('*');
 
     const combined: UserProfile[] = [];
     const seenEmails = new Set<string>();
@@ -362,14 +347,13 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
     if (profData && Array.isArray(profData)) {
       for (const p of profData) {
         const email = String(p.email || '').trim().toLowerCase();
-        const roleStr = String(p.role || '').trim().toLowerCase();
-        if (roleStr === 'maker' && email !== 'ssumollah@gmail.com' && !seenEmails.has(email)) {
+        if (email && !seenEmails.has(email)) {
           combined.push({
             id: p.id,
             email: p.email,
             full_name: p.full_name || p.name || (p.email ? p.email.split('@')[0] : 'Maker'),
             avatar_url: p.avatar_url || '',
-            role: 'maker',
+            role: (p.role || 'maker') as any,
             status: p.status || 'approved',
             school: p.school || 'Independent Studio Guild',
             isAuthorizedPreLogin: false,
@@ -383,14 +367,13 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
     if (authData && Array.isArray(authData)) {
       for (const a of authData) {
         const email = String(a.email || '').trim().toLowerCase();
-        const roleStr = String(a.role || '').trim().toLowerCase();
-        if (roleStr === 'maker' && email !== 'ssumollah@gmail.com' && !seenEmails.has(email)) {
+        if (email && !seenEmails.has(email)) {
           combined.push({
             id: a.id || `auth_${a.email}`,
             email: a.email,
             full_name: a.name || (a.email ? a.email.split('@')[0] : 'Maker'),
             avatar_url: '',
-            role: 'maker',
+            role: (a.role || 'maker') as any,
             status: 'approved',
             school: a.studio_name || a.school || 'Independent Studio Guild',
             isAuthorizedPreLogin: true,
@@ -401,25 +384,9 @@ export async function fetchApprovedMakers(): Promise<UserProfile[]> {
       }
     }
 
-    if (combined.length > 0) {
-      combined.sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
-      return combined;
-    }
+    return combined;
   } catch (err) {
-    console.warn('Direct maker profiles fetch error:', err);
-  }
-
-  // Final fallback to fetchAllProfiles with strict maker filtering
-  try {
-    const all = await fetchAllProfiles();
-    return all.filter((p) => {
-      const email = String(p.email || '').trim().toLowerCase();
-      const roleStr = String(p.role || '').trim().toLowerCase();
-      const isMaker = roleStr === 'maker';
-      const isAdmin = roleStr === 'admin' || roleStr === 'master_admin';
-      return isMaker && !isAdmin && email !== 'ssumollah@gmail.com';
-    });
-  } catch {
+    console.warn('Fallback fetchApprovedMakers error:', err);
     return [];
   }
 }
