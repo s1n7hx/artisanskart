@@ -1,18 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight, Sparkles, CheckCircle2, Package, ShieldCheck, Truck, HelpCircle } from 'lucide-react';
+import { ArrowRight, HelpCircle } from 'lucide-react';
 import { HOW_IT_WORKS } from '../data';
 import { useApp } from '../context/AppContext';
 
 export const HowItWorksPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, makerEarningPercent } = useApp();
-  const [examplePrice, setExamplePrice] = useState<number>(850);
-
-  const makerEarnings = Math.round(examplePrice * (makerEarningPercent / 100));
-  const remainingShare = 100 - makerEarningPercent;
-  const platformFee = Math.round(examplePrice * (remainingShare * 0.55 / 100));
-  const packagingDelivery = examplePrice - makerEarnings - platformFee;
 
   const faqs = [
     {
@@ -82,85 +76,10 @@ export const HowItWorksPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Interactive Transparent Price Split Calculator */}
-      <section className="max-w-5xl mx-auto px-4 md:px-8">
-        <div className="bg-linear-to-br from-[#1E293B] to-[#283548] text-white rounded-[2.5rem] p-8 md:p-12 shadow-xl">
-          <div className="text-center max-w-xl mx-auto mb-8">
-            <span className="bg-[#C85A32]/20 text-[#E6A373] border border-[#C85A32]/30 text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">
-              Financial Transparency
-            </span>
-            <h2 className="text-3xl md:text-4xl font-black mt-3">
-              Where Does Every Rupee Go?
-            </h2>
-            <p className="text-white/70 text-sm mt-2">
-              Move the slider to see how order values are split fairly between the creator, packaging, and platform.
-            </p>
-          </div>
-
-          {/* Slider Control */}
-          <div className="max-w-md mx-auto mb-10 text-center">
-            <label htmlFor="priceSlider" className="text-xs font-semibold uppercase tracking-wider text-white/60 block mb-2">
-              Test Order Amount: <span className="text-white font-bold text-lg">₹{examplePrice}</span>
-            </label>
-            <input
-              id="priceSlider"
-              type="range"
-              min="200"
-              max="3000"
-              step="50"
-              value={examplePrice}
-              onChange={(e) => setExamplePrice(Number(e.target.value))}
-              className="w-full accent-[#C85A32] cursor-pointer"
-            />
-            <div className="flex justify-between text-xs text-white/40 mt-1">
-              <span>₹200</span>
-              <span>₹1,500</span>
-              <span>₹3,000</span>
-            </div>
-          </div>
-
-          {/* 3 Split Cards */}
-          <div className="grid md:grid-cols-3 gap-6">
-            <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-[#E6A373]">{makerEarningPercent}% Direct to Creator</span>
-                <Sparkles className="w-4 h-4 text-[#E6A373]" />
-              </div>
-              <p className="text-3xl font-black text-white">₹{makerEarnings.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Direct creator compensation for materials, studio time, and craft talent.
-              </p>
-            </div>
-
-            <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-[#8A9A86]">Packaging Fee</span>
-                <Truck className="w-4 h-4 text-[#8A9A86]" />
-              </div>
-              <p className="text-3xl font-black text-white">₹{packagingDelivery.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Professional protective packaging and doorstep tracked courier.
-              </p>
-            </div>
-
-            <div className="bg-white/10 rounded-2xl p-6 border border-white/10">
-              <div className="flex justify-between items-center mb-3">
-                <span className="text-xs uppercase font-bold text-white/80">20% Platform &amp; Support</span>
-                <ShieldCheck className="w-4 h-4 text-white/80" />
-              </div>
-              <p className="text-3xl font-black text-white">₹{platformFee.toLocaleString('en-IN')}</p>
-              <p className="text-xs text-white/60 mt-2 leading-relaxed">
-                Hosting, payment gateway charges, drop-off locker maintenance, and quality check assurance.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* Frequently Asked Questions */}
       <section className="max-w-4xl mx-auto px-4 md:px-8">
         <div className="text-center mb-10">
-          <span className="badge-sage text-xs px-3 py-1 rounded-full font-semibold uppercase tracking-wider">
+          <span className="badge-sage text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">
             Common Questions
           </span>
           <h2 className="text-3xl font-black text-[#1E293B] mt-2">
@@ -204,6 +123,7 @@ export const HowItWorksPage: React.FC = () => {
               <ArrowRight className="w-4 h-4" />
             </Link>
             <button
+              type="button"
               onClick={() => {
                 if (!currentUser) {
                   navigate('/login?redirectTo=/become-a-maker');

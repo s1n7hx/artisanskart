@@ -612,8 +612,11 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
 
     const FIXED_PACKAGING_FEE = 30;
     const packagingFee = couponResult.waivedPackaging ? 0 : FIXED_PACKAGING_FEE;
-    const rawShipping = typeof body.shippingFee === 'number' ? body.shippingFee : (itemsTotal >= 499 ? 0 : 49);
-    const shippingFee = couponResult.waivedShipping ? 0 : rawShipping;
+    const isFreeDelivery = itemsTotal >= 499;
+    const actualCourierCost = 49;
+    const customerShipping = isFreeDelivery ? 0 : (typeof body.shippingFee === 'number' && !isNaN(body.shippingFee) ? body.shippingFee : actualCourierCost);
+    const shippingFee = couponResult.waivedShipping ? 0 : customerShipping;
+    const freeDeliverySubsidy = isFreeDelivery ? actualCourierCost : 0;
     const tax = 0;
 
     const serverFinalINR = Math.max(0, itemsTotal + packagingFee + shippingFee - tax - discountAmount);
@@ -623,13 +626,13 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     // Safe debugging information in server logs
     console.log(
       `[Server Pricing Audit / create-order] ` +
-      `calculated subtotal: ₹${itemsTotal} | ` +
+      `subtotal: ₹${itemsTotal} | ` +
       `packaging fee: ₹${packagingFee} | ` +
-      `shipping fee: ₹${shippingFee} | ` +
+      `actual courier cost: ₹${actualCourierCost} | ` +
+      `customer shipping charged: ₹${shippingFee} | ` +
+      `free delivery subsidy (absorbed): ₹${freeDeliverySubsidy} | ` +
       `discount: ₹${discountAmount} | ` +
-      `tax: ₹${tax} | ` +
-      `final amount in INR: ₹${serverFinalINR} | ` +
-      `final Razorpay amount in paise: ${amountInPaise} paise`
+      `final customer payment: ₹${serverFinalINR}`
     );
 
     if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {

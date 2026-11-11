@@ -61,7 +61,7 @@ export const ProductDetailPage: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [isCostBreakdownOpen, setIsCostBreakdownOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'desc' | 'craft' | 'maker' | 'shipping' | 'reviews'>('desc');
+  const [activeTab, setActiveTab] = useState<'desc' | 'maker' | 'shipping' | 'reviews'>('desc');
 
   // PIN code / Postal & Courier serviceability state
   const [pincodeInput, setPincodeInput] = useState(() => {

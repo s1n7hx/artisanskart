@@ -55,22 +55,22 @@ export const Marquee: React.FC = () => {
         key={`${product.id}-${keySuffix}`}
         onClick={() => navigate(`/product/${product.id}`)}
         title={product.title}
-        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 mr-3.5 sm:mr-4 relative overflow-hidden aspect-[3/4] rounded-2xl bg-neutral-900/5"
-        style={{ width: '190px', height: '253px' }}
+        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 mr-4 sm:mr-5 relative overflow-hidden bg-neutral-950/10"
+        style={{ width: '280px', height: '210px' }}
       >
-        {/* Blurred Backdrop Layer (Fills Whitespace) */}
+        {/* Blurred Backdrop Layer (Fills side/top gaps for portrait/mixed photos) */}
         <img
           src={product.image}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-40 select-none pointer-events-none"
+          className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-50 select-none pointer-events-none"
         />
-        {/* Foreground Image Layer (Zero Cropping) */}
+        {/* Foreground Product Image Layer (Zero Cropping, Complete Image) */}
         <img
           src={product.image}
           alt={product.title}
           loading="lazy"
-          className="relative z-10 w-full h-full object-contain p-2 drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
+          className="relative z-10 w-full h-full object-contain p-2.5 drop-shadow-md transition-transform duration-300 group-hover:scale-105"
         />
       </div>
     );
@@ -82,7 +82,7 @@ export const Marquee: React.FC = () => {
       aria-label="Artisan Craft Showcase"
       className="relative bg-[#FAF9F6] py-5 sm:py-6 overflow-hidden select-none border-y border-[#e7e0d8]/60"
     >
-      <div className="space-y-3.5 sm:space-y-4">
+      <div className="space-y-4 sm:space-y-5">
         {/* Row 1 */}
         <div className="overflow-hidden flex">
           <div

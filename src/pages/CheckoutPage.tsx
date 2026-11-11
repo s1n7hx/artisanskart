@@ -303,7 +303,9 @@ export const CheckoutPage: React.FC = () => {
   // Fixed packaging fee (Flat ₹30 per order, or ₹0 if RAZORPAYTEST coupon applied)
   const FIXED_PACKAGING_FEE = 30;
   const packagingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : FIXED_PACKAGING_FEE;
-  const effectiveShippingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : shippingFee;
+  const isFreeDelivery = itemsSubtotal >= 499;
+  const calculatedShipping = isFreeDelivery ? 0 : (shippingFee > 0 ? shippingFee : 49);
+  const effectiveShippingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : calculatedShipping;
   const grandTotal = Math.max(0, itemsSubtotal + packagingFee + effectiveShippingFee - couponDiscount);
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
