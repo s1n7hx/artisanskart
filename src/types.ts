@@ -258,14 +258,38 @@ export interface CartItem {
 }
 
 export interface CollectionItem {
-  n: string;
-  cat: string;
+  id?: string;
+  n?: string;
+  cat?: string;
   title: string;
   desc: string;
-  img1: string;
-  img2: string;
-  img3: string;
-  category: string;
+  category?: string;
+  published?: boolean;
+  featuredImage?: string;
+  img1?: string;
+  img2?: string;
+  img3?: string;
+  sortOrder?: number;
+  productIds?: number[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ContactInquiry {
+  id: string;
+  department: 'buyer_support' | 'partnerships';
+  targetEmail: string;
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+  orderNumber?: string;
+  studioName?: string;
+  craftSpecialty?: string;
+  status: 'new' | 'reviewed' | 'resolved';
+  emailStatus: 'sent' | 'pending_smtp_setup' | string;
+  createdAt: string;
 }
 
 export interface HowItWorksItem {

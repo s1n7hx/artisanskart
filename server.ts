@@ -4387,6 +4387,363 @@ app.post('/api/maker/update-status', async (req: Request, res: Response) => {
   }
 });
 
+// -------------------------------------------------------------
+// Real Product Collections API (/api/collections)
+// -------------------------------------------------------------
+const DEFAULT_INITIAL_COLLECTIONS = [
+  {
+    id: 'col_crochet_creations',
+    n: '01',
+    cat: 'Crochet & Yarn',
+    category: 'Crochet',
+    title: 'Crochet Creations & Florals',
+    desc: 'Hand-hooked cotton yarn bouquets, bottle swings, and amigurumi accessories crafted by verified studio artists.',
+    published: true,
+    sortOrder: 1,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'col_clay_crafts',
+    n: '02',
+    cat: 'Clay Crafts',
+    category: 'Clay Crafts',
+    title: 'Clay Crafts & Pottery',
+    desc: 'Hand-sculpted terracotta lapel pins, figurines, and kiln-fired pottery shaped with natural mineral clays.',
+    published: true,
+    sortOrder: 2,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'col_botanical_crafts',
+    n: '03',
+    cat: 'Studio Originals',
+    category: 'Other Crafts',
+    title: 'Studio Originals & Botanical Crafts',
+    desc: 'One-of-a-kind handcrafted sunflower pieces and signature artisan works crafted with natural fibers.',
+    published: true,
+    sortOrder: 3,
+    createdAt: new Date().toISOString(),
+  },
+];
+
+app.get('/api/collections', async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'collections_v1')
+      .maybeSingle();
+
+    if (!error && data?.value && Array.isArray(data.value) && data.value.length > 0) {
+      return res.json({ success: true, collections: data.value });
+    }
+
+    // If none exist, seed default collections into Supabase
+    await supabaseAdmin
+      .from('site_settings')
+      .upsert(
+        {
+          key: 'collections_v1',
+          value: DEFAULT_INITIAL_COLLECTIONS,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      );
+
+    return res.json({ success: true, collections: DEFAULT_INITIAL_COLLECTIONS });
+  } catch (err: any) {
+    console.error('❌ [GET /api/collections Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message, collections: DEFAULT_INITIAL_COLLECTIONS });
+  }
+});
+
+app.post('/api/collections', async (req: Request, res: Response) => {
+  try {
+    const authCheck = await verifyMasterAdmin(req);
+    if (!authCheck.authorized) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { action, collection, id, published } = req.body;
+
+    // Fetch current collections
+    const { data } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'collections_v1')
+      .maybeSingle();
+
+    let currentCols = (data?.value && Array.isArray(data.value)) ? [...data.value] : [...DEFAULT_INITIAL_COLLECTIONS];
+
+    if (action === 'create') {
+      if (!collection?.title) {
+        return res.status(400).json({ success: false, error: 'Collection title is required.' });
+      }
+      const newCol = {
+        id: 'col_' + Date.now(),
+        n: String(currentCols.length + 1).padStart(2, '0'),
+        cat: collection.cat || collection.category || 'Handicrafts',
+        category: collection.category || collection.cat || 'Handicrafts',
+        title: collection.title.trim(),
+        desc: collection.desc || 'Curated collection of authentic artisan handcrafted works.',
+        published: collection.published !== false,
+        featuredImage: collection.featuredImage || '',
+        sortOrder: currentCols.length + 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      currentCols.push(newCol);
+    } else if (action === 'update') {
+      const targetId = id || collection?.id;
+      if (!targetId) {
+        return res.status(400).json({ success: false, error: 'Collection ID is required for update.' });
+      }
+      currentCols = currentCols.map((c) => {
+        if (c.id === targetId) {
+          return {
+            ...c,
+            ...collection,
+            id: targetId,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return c;
+      });
+    } else if (action === 'toggle_publish') {
+      if (!id) return res.status(400).json({ success: false, error: 'Collection ID required.' });
+      currentCols = currentCols.map((c) => {
+        if (c.id === id) {
+          return {
+            ...c,
+            published: typeof published === 'boolean' ? published : !c.published,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return c;
+      });
+    } else if (action === 'delete') {
+      if (!id) return res.status(400).json({ success: false, error: 'Collection ID required.' });
+      currentCols = currentCols.filter((c) => c.id !== id);
+    } else {
+      return res.status(400).json({ success: false, error: 'Invalid collection action.' });
+    }
+
+    // Persist to Supabase site_settings
+    const { error: upsertErr } = await supabaseAdmin
+      .from('site_settings')
+      .upsert(
+        {
+          key: 'collections_v1',
+          value: currentCols,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'key' }
+      );
+
+    if (upsertErr) {
+      return res.status(500).json({ success: false, error: upsertErr.message });
+    }
+
+    return res.json({ success: true, collections: currentCols });
+  } catch (err: any) {
+    console.error('❌ [POST /api/collections Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// Contact Inquiries API (/api/contact/submit & /api/contact/inquiries)
+// -------------------------------------------------------------
+app.post('/api/contact/submit', async (req: Request, res: Response) => {
+  try {
+    const {
+      department,
+      name,
+      email,
+      phone,
+      subject,
+      message,
+      orderNumber,
+      studioName,
+      craftSpecialty,
+      website_trap,
+      bot_field,
+    } = req.body;
+
+    // Spam honeypot trap
+    if (website_trap || bot_field) {
+      console.warn('🛡️ [Spam Bot Trapped in Contact Submission]');
+      return res.status(400).json({ success: false, error: 'Spam submission rejected.' });
+    }
+
+    // Server-side validation
+    const trimmedName = String(name || '').trim();
+    const trimmedEmail = String(email || '').trim().toLowerCase();
+    const trimmedSubject = String(subject || '').trim();
+    const trimmedMessage = String(message || '').trim();
+    const cleanDepartment = department === 'partnerships' ? 'partnerships' : 'buyer_support';
+
+    if (trimmedName.length < 2 || trimmedName.length > 100) {
+      return res.status(400).json({ success: false, error: 'Please provide a valid full name (2-100 characters).' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return res.status(400).json({ success: false, error: 'Please provide a valid email address.' });
+    }
+
+    if (trimmedSubject.length < 3 || trimmedSubject.length > 200) {
+      return res.status(400).json({ success: false, error: 'Please provide a subject line (3-200 characters).' });
+    }
+
+    if (trimmedMessage.length < 10 || trimmedMessage.length > 5000) {
+      return res.status(400).json({ success: false, error: 'Please provide a message with at least 10 characters.' });
+    }
+
+    // Determine target department email
+    const targetEmail = cleanDepartment === 'partnerships' ? 'partners@artisanskart.in' : 'hello@artisanskart.in';
+    const departmentName = cleanDepartment === 'partnerships' ? 'Studio & Guild Partnerships' : 'Support & Buyer Support';
+
+    const inquiryId = `inq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const newRecord = {
+      id: inquiryId,
+      department: cleanDepartment,
+      departmentName,
+      targetEmail,
+      name: trimmedName,
+      email: trimmedEmail,
+      phone: String(phone || '').trim(),
+      subject: trimmedSubject,
+      message: trimmedMessage,
+      orderNumber: String(orderNumber || '').trim(),
+      studioName: String(studioName || '').trim(),
+      craftSpecialty: String(craftSpecialty || '').trim(),
+      status: 'new',
+      emailStatus: 'pending_smtp_setup',
+      createdAt: new Date().toISOString(),
+    };
+
+    // 1. Persist inquiry into Supabase site_settings
+    try {
+      const { data } = await supabaseAdmin
+        .from('site_settings')
+        .select('value')
+        .eq('key', 'contact_inquiries_v1')
+        .maybeSingle();
+
+      const existingInquiries = (data?.value && Array.isArray(data.value)) ? data.value : [];
+      // Keep up to 500 recent inquiries
+      const updatedInquiries = [newRecord, ...existingInquiries].slice(0, 500);
+
+      await supabaseAdmin
+        .from('site_settings')
+        .upsert(
+          {
+            key: 'contact_inquiries_v1',
+            value: updatedInquiries,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+    } catch (dbErr: any) {
+      console.warn('Notice storing contact inquiry in Supabase:', dbErr.message);
+    }
+
+    // 2. Dispatch real email via SMTP if credentials are configured
+    let emailSent = false;
+    let finalEmailStatus = 'pending_smtp_setup';
+
+    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const mailHtml = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #faf9f6; border: 1px solid #e7e0d8; border-radius: 16px; overflow: hidden; padding: 24px; color: #1e293b;">
+            <div style="border-bottom: 2px solid #C85A32; padding-bottom: 12px; margin-bottom: 16px;">
+              <h2 style="margin: 0; color: #1e293b; font-size: 20px;">ArtisansKart — New Contact Inquiry</h2>
+              <p style="margin: 4px 0 0; color: #C85A32; font-weight: bold; font-size: 13px;">${departmentName} (${targetEmail})</p>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 16px;">
+              <tr><td style="padding: 6px 0; color: #64748b; width: 140px;"><strong>Inquiry ID:</strong></td><td>${inquiryId}</td></tr>
+              <tr><td style="padding: 6px 0; color: #64748b;"><strong>Name:</strong></td><td>${trimmedName}</td></tr>
+              <tr><td style="padding: 6px 0; color: #64748b;"><strong>Email:</strong></td><td><a href="mailto:${trimmedEmail}" style="color: #C85A32;">${trimmedEmail}</a></td></tr>
+              ${phone ? `<tr><td style="padding: 6px 0; color: #64748b;"><strong>Phone:</strong></td><td>${phone}</td></tr>` : ''}
+              ${orderNumber ? `<tr><td style="padding: 6px 0; color: #64748b;"><strong>Order Number:</strong></td><td>${orderNumber}</td></tr>` : ''}
+              ${studioName ? `<tr><td style="padding: 6px 0; color: #64748b;"><strong>Studio / Guild:</strong></td><td>${studioName}</td></tr>` : ''}
+              ${craftSpecialty ? `<tr><td style="padding: 6px 0; color: #64748b;"><strong>Craft Specialty:</strong></td><td>${craftSpecialty}</td></tr>` : ''}
+              <tr><td style="padding: 6px 0; color: #64748b;"><strong>Subject:</strong></td><td><strong>${trimmedSubject}</strong></td></tr>
+            </table>
+            <div style="background: #ffffff; border: 1px solid #e7e0d8; border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+              <h4 style="margin: 0 0 8px; color: #64748b; font-size: 12px; text-transform: uppercase;">Message:</h4>
+              <p style="margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: #334155;">${trimmedMessage}</p>
+            </div>
+            <p style="font-size: 12px; color: #94a3b8; margin: 0; text-align: center;">Received at ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
+          </div>
+        `;
+
+        await transporter.sendMail({
+          from: `"ArtisansKart Inquiries" <${process.env.SMTP_USER}>`,
+          to: targetEmail,
+          replyTo: `${trimmedName} <${trimmedEmail}>`,
+          bcc: process.env.MASTER_ADMIN_EMAIL || 'ssumollah@gmail.com',
+          subject: `[${departmentName}] ${trimmedSubject}`,
+          text: `Inquiry ID: ${inquiryId}\nFrom: ${trimmedName} (${trimmedEmail})\nDepartment: ${departmentName} (${targetEmail})\nSubject: ${trimmedSubject}\n\nMessage:\n${trimmedMessage}`,
+          html: mailHtml,
+        });
+
+        emailSent = true;
+        finalEmailStatus = 'sent';
+        console.log(`📧 [Contact Email Dispatched to ${targetEmail} for inquiry ${inquiryId}]`);
+      } catch (mailErr: any) {
+        console.warn(`[Contact Email Notice]: Failed to dispatch via SMTP (${mailErr.message}), inquiry safely stored in database.`);
+        finalEmailStatus = `smtp_error: ${mailErr.message}`;
+      }
+    } else {
+      console.log(`ℹ️ [Contact Inquiry Stored]: ID ${inquiryId} saved in Supabase for ${targetEmail}. (SMTP credentials not configured in environment).`);
+    }
+
+    const responseMsg = emailSent
+      ? `Thank you! Your message has been sent to our team at ${targetEmail}. We will review and reply within 4 hours.`
+      : `Thank you! Your inquiry has been securely registered in our system (ID: ${inquiryId}). Our coordinator team will review your message and reply directly to ${trimmedEmail}.`;
+
+    return res.status(201).json({
+      success: true,
+      inquiryId,
+      department: cleanDepartment,
+      departmentEmail: targetEmail,
+      emailSent,
+      emailStatus: finalEmailStatus,
+      message: responseMsg,
+    });
+  } catch (err: any) {
+    console.error('❌ [/api/contact/submit Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to submit inquiry.' });
+  }
+});
+
+app.get('/api/contact/inquiries', async (req: Request, res: Response) => {
+  try {
+    const authCheck = await verifyMasterAdmin(req);
+    if (!authCheck.authorized) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'contact_inquiries_v1')
+      .maybeSingle();
+
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    const inquiries = (data?.value && Array.isArray(data.value)) ? data.value : [];
+    return res.json({ success: true, count: inquiries.length, inquiries });
+  } catch (err: any) {
+    console.error('❌ [GET /api/contact/inquiries Error]:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
 

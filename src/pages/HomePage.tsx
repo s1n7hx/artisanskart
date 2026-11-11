@@ -190,7 +190,7 @@ export const HomePage: React.FC = () => {
                 to="/collections"
                 className="btn-terracotta text-sm font-semibold px-6 py-3 rounded-full flex items-center gap-2"
               >
-                <span>View Stacking Collections</span>
+                <span>View All Collections</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link

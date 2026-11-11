@@ -167,8 +167,13 @@ export const Footer: React.FC = () => {
               </Link>
             </li>
             <li>
+              <Link to="/collections" className="hover:text-white transition">
+                Curated Collections
+              </Link>
+            </li>
+            <li>
               <Link to="/contact" className="hover:text-white transition">
-                Contact &amp; Support
+                Contact &amp; Departments
               </Link>
             </li>
             {(userRole === 'admin' || userRole === 'master_admin') && (
@@ -182,9 +187,25 @@ export const Footer: React.FC = () => {
                 </Link>
               </li>
             )}
-            <li className="pt-2 text-xs text-white/50">
-              <span className="block text-white/80 font-medium">Artisan &amp; Buyer Support:</span>
-              hello@artisanskart.in
+            <li className="pt-3 text-xs border-t border-slate-800/80 mt-2 space-y-2">
+              <div>
+                <span className="block text-white/90 font-medium">Support &amp; Buyer Inquiries:</span>
+                <a
+                  href="mailto:hello@artisanskart.in"
+                  className="text-[#E6A373] hover:underline break-all transition font-medium"
+                >
+                  hello@artisanskart.in
+                </a>
+              </div>
+              <div>
+                <span className="block text-white/90 font-medium">Studio &amp; Guild Partnerships:</span>
+                <a
+                  href="mailto:partners@artisanskart.in"
+                  className="text-[#E6A373] hover:underline break-all transition font-medium"
+                >
+                  partners@artisanskart.in
+                </a>
+              </div>
             </li>
           </ul>
         </div>

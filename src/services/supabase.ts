@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { HeroContent, Product, Order, UserRole, UserStatus } from '../types';
+import { HeroContent, Product, Order, UserRole, UserStatus, CollectionItem, ContactInquiry } from '../types';
 import { PRODUCTS } from '../data';
 
 const SUPABASE_URL =
@@ -1058,4 +1058,180 @@ export async function clearOrdersApi(mode: 'test' | 'all', email: string, confir
   }
   return data;
 }
+
+// -------------------------------------------------------------
+// Collections Persistence & Management
+// -------------------------------------------------------------
+export async function fetchCollections(): Promise<CollectionItem[]> {
+  try {
+    const res = await fetch('/api/collections');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.collections)) {
+        return json.collections;
+      }
+    }
+  } catch (err: any) {
+    console.warn('Notice fetching collections from /api/collections:', err?.message);
+  }
+
+  // Fallback direct read from Supabase site_settings
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'collections_v1')
+      .single();
+
+    if (!error && data?.value && Array.isArray(data.value)) {
+      return data.value;
+    }
+  } catch (e) {}
+
+  return [];
+}
+
+export async function saveCollection(collection: Partial<CollectionItem>, adminEmail?: string): Promise<{ success: boolean; collections?: CollectionItem[]; error?: string }> {
+  try {
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data?.session?.access_token;
+
+    const res = await fetch('/api/collections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+      },
+      body: JSON.stringify({
+        action: collection.id ? 'update' : 'create',
+        collection,
+        adminEmail,
+      }),
+    });
+
+    const json = await res.json();
+    return json;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to save collection' };
+  }
+}
+
+export async function deleteCollection(id: string, adminEmail?: string): Promise<{ success: boolean; collections?: CollectionItem[]; error?: string }> {
+  try {
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data?.session?.access_token;
+
+    const res = await fetch('/api/collections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+      },
+      body: JSON.stringify({
+        action: 'delete',
+        id,
+        adminEmail,
+      }),
+    });
+
+    const json = await res.json();
+    return json;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to delete collection' };
+  }
+}
+
+export async function togglePublishCollection(id: string, published: boolean, adminEmail?: string): Promise<{ success: boolean; collections?: CollectionItem[]; error?: string }> {
+  try {
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data?.session?.access_token;
+
+    const res = await fetch('/api/collections', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+      },
+      body: JSON.stringify({
+        action: 'toggle_publish',
+        id,
+        published,
+        adminEmail,
+      }),
+    });
+
+    const json = await res.json();
+    return json;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to toggle collection publish status' };
+  }
+}
+
+// -------------------------------------------------------------
+// Contact Inquiries Submission & Fetch
+// -------------------------------------------------------------
+export interface ContactSubmissionPayload {
+  department: 'buyer_support' | 'partnerships';
+  name: string;
+  email: string;
+  phone?: string;
+  subject: string;
+  message: string;
+  orderNumber?: string;
+  studioName?: string;
+  craftSpecialty?: string;
+  website_trap?: string;
+}
+
+export async function submitContactInquiry(payload: ContactSubmissionPayload): Promise<{
+  success: boolean;
+  inquiryId?: string;
+  department?: string;
+  departmentEmail?: string;
+  emailSent?: boolean;
+  emailStatus?: string;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/contact/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const json = await res.json();
+    return json;
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err.message || 'Unable to connect to server. Please check your internet connection.',
+    };
+  }
+}
+
+export async function fetchContactInquiries(adminEmail?: string): Promise<{ success: boolean; inquiries?: ContactInquiry[]; error?: string }> {
+  try {
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data?.session?.access_token;
+
+    const res = await fetch('/api/contact/inquiries', {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(adminEmail ? { 'x-admin-email': adminEmail } : {}),
+      },
+    });
+
+    const json = await res.json();
+    return json;
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to fetch inquiries' };
+  }
+}
+
 
