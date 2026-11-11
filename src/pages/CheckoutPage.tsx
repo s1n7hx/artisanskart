@@ -300,12 +300,13 @@ export const CheckoutPage: React.FC = () => {
   const itemsSubtotal = checkoutItems.reduce((sum, item) => sum + item.subtotal, 0);
 
   const [shippingFee, setShippingFee] = useState(0);
-  // Fixed packaging fee (Flat ₹30 per order, or ₹0 if RAZORPAYTEST coupon applied)
+  // Fixed packaging fee (Flat ₹30 per order, or ₹0 if test coupons applied)
   const FIXED_PACKAGING_FEE = 30;
-  const packagingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : FIXED_PACKAGING_FEE;
+  const isTestCoupon = ['RAZORPAYTEST', 'TEST100', 'FREE100', 'RAZORPAY1', 'TEST1'].includes(appliedCoupon);
+  const packagingFee = isTestCoupon ? 0 : FIXED_PACKAGING_FEE;
   const isFreeDelivery = itemsSubtotal >= 499;
   const calculatedShipping = isFreeDelivery ? 0 : (shippingFee > 0 ? shippingFee : 49);
-  const effectiveShippingFee = appliedCoupon === 'RAZORPAYTEST' ? 0 : calculatedShipping;
+  const effectiveShippingFee = isTestCoupon ? 0 : calculatedShipping;
   const grandTotal = Math.max(0, itemsSubtotal + packagingFee + effectiveShippingFee - couponDiscount);
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
@@ -415,6 +416,39 @@ export const CheckoutPage: React.FC = () => {
 
       const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
       const awb = `NP-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Zero-Payable / 100% Free Promotional Test Flow (₹0 total)
+      if (verifiedTotal === 0) {
+        const freeOrderRecord = await createOrderRecord({
+          orderNumber: orderNum,
+          customerName: fullName.trim(),
+          customerEmail: email.trim(),
+          customerPhone: phone.trim(),
+          shippingAddress: shippingAddressObj,
+          amount: 0,
+          itemsTotal: itemsSubtotal,
+          packagingFee: 0,
+          discountAmount: couponDiscount,
+          status: 'awaiting_maker_acceptance',
+          paymentStatus: 'paid',
+          paymentMethod: 'test_gateway',
+          trackingAwb: awb,
+          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'NimbusPost Express Partner' : 'Standard Hub Dispatch'),
+          items: orderItemSnapshots,
+          makerId: checkoutItems[0]?.product?.makerId,
+          makerName: checkoutItems[0]?.product?.maker,
+          pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
+        });
+
+        setCompletedOrderNumber(orderNum);
+        setCompletedTrackingAwb(awb);
+        setCompletedOrderSnapshot(freeOrderRecord);
+        confirmCheckout();
+        setIsProcessing(false);
+        setOrderComplete(true);
+        showToast('100% Test Discount applied! Order confirmed.', 'check-circle');
+        return;
+      }
 
       // A. COD Payment Flow
       if (paymentMethod === 'cod') {
@@ -1104,21 +1138,58 @@ export const CheckoutPage: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    placeholder="Coupon code (e.g. MAKER10)"
-                    className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer"
-                  >
-                    Apply
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      placeholder="Coupon code (e.g. RAZORPAYTEST)"
+                      className="flex-1 px-3 py-2 text-xs rounded-xl border border-slate-300 focus:outline-none focus:border-[#C85A32]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleApplyCoupon}
+                      className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-900 text-white hover:bg-slate-800 transition cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                    <span className="font-semibold text-slate-400">Testing Coupon:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCouponInput('RAZORPAYTEST');
+                        const res = validateCouponCode('RAZORPAYTEST', itemsSubtotal);
+                        if (res.isValid) {
+                          setAppliedCoupon(res.code);
+                          setCouponDiscount(res.discountAmount);
+                          showToast(res.message, 'sparkles');
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-[#C85A32]/10 text-[#C85A32] font-mono font-bold hover:bg-[#C85A32]/20 transition cursor-pointer"
+                      title="Apply 100% discount for testing"
+                    >
+                      RAZORPAYTEST (100% OFF)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCouponInput('RAZORPAY1');
+                        const res = validateCouponCode('RAZORPAY1', itemsSubtotal);
+                        if (res.isValid) {
+                          setAppliedCoupon(res.code);
+                          setCouponDiscount(res.discountAmount);
+                          showToast(res.message, 'sparkles');
+                        }
+                      }}
+                      className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono font-bold hover:bg-slate-200 transition cursor-pointer"
+                      title="Apply ₹1 token charge for Razorpay gateway testing"
+                    >
+                      RAZORPAY1 (₹1 Gateway Test)
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1180,6 +1251,11 @@ export const CheckoutPage: React.FC = () => {
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Processing Secure Order...</span>
+                </>
+              ) : grandTotal === 0 ? (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Confirm 100% Free Test Order (₹0)</span>
                 </>
               ) : (
                 <>

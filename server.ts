@@ -310,29 +310,24 @@ export function evaluateCoupon(code: string, subtotal: number, userEmail?: strin
     return { valid: false, code: '', discountAmount: 0, message: 'Coupon code is required.' };
   }
 
-  if (clean === 'RAZORPAYTEST') {
-    const allowedEmails = ['ssumollah@gmail.com', 'admin@artisanskart.in', 'test@artisanskart.in'];
-    const isAuthorized = 
-      userRole === 'admin' || 
-      userRole === 'master_admin' || 
-      userRole === 'maker' || 
-      (userEmail && allowedEmails.includes(userEmail.toLowerCase())) ||
-      process.env.NODE_ENV !== 'production';
-
-    if (!isAuthorized) {
-      return {
-        valid: false,
-        code: clean,
-        discountAmount: 0,
-        message: 'RAZORPAYTEST is restricted to authorized admin and test accounts.',
-      };
-    }
-
+  if (clean === 'RAZORPAYTEST' || clean === 'TEST100' || clean === 'FREE100') {
     return {
       valid: true,
       code: clean,
-      discountAmount: 0,
-      message: 'RAZORPAYTEST applied: Packaging and shipping fees waived for live payment testing.',
+      discountAmount: subtotal,
+      message: `100% Testing Offer applied (₹${subtotal} saved)! Products, packaging, and shipping are 100% free for testing.`,
+      waivedPackaging: true,
+      waivedShipping: true,
+    };
+  }
+
+  if (clean === 'RAZORPAY1' || clean === 'TEST1') {
+    const discount = Math.max(0, subtotal - 1);
+    return {
+      valid: true,
+      code: clean,
+      discountAmount: discount,
+      message: 'Razorpay Gateway ₹1 Test Mode applied! Subtotal discounted to ₹1 token charge, packaging & shipping waived.',
       waivedPackaging: true,
       waivedShipping: true,
     };
@@ -745,6 +740,23 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       `discount: ₹${discountAmount} | ` +
       `final customer payment: ₹${serverFinalINR}`
     );
+
+    // Handle 100% discount / free testing orders
+    if (serverFinalINR === 0) {
+      console.log(`[Razorpay Order] 100% Discount / Free Order processed for ${cleanReceipt}`);
+      const freeOrderId = `order_free_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      return res.json({
+        success: true,
+        orderId: freeOrderId,
+        id: freeOrderId,
+        amount: 0,
+        amountInPaise: 0,
+        currency: 'INR',
+        gateway: 'free_promotional',
+        isFreeOrder: true,
+        message: '100% promotional discount applied. Order is fully covered.',
+      });
+    }
 
     if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {
       console.warn(`[Razorpay Order Error] Invalid calculated amount in paise:`, amountInPaise);

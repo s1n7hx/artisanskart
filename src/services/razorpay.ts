@@ -217,6 +217,16 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
   const orderId = orderData.orderId || orderData.id;
   const { amount, currency, keyId: serverKeyId, gateway } = orderData;
 
+  // If order is 100% covered by test discount/free promotional coupon
+  if (orderData.isFreeOrder || amount === 0) {
+    options.onSuccess({
+      razorpayOrderId: orderId || `order_free_${Date.now()}`,
+      razorpayPaymentId: `pay_free_promo_${Date.now()}`,
+      razorpaySignature: `sig_free_promo_${Date.now()}`,
+    });
+    return;
+  }
+
   const rawKey =
     (import.meta as any).env?.VITE_RAZORPAY_KEY_ID ||
     (import.meta as any).env?.NEXT_PUBLIC_RAZORPAY_KEY_ID ||

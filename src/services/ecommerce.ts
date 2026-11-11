@@ -490,12 +490,22 @@ export function validateCouponCode(code: string, subtotal: number): CouponValida
     return { isValid: false, code: '', discountAmount: 0, message: '' };
   }
 
-  if (clean === 'RAZORPAYTEST') {
+  if (clean === 'RAZORPAYTEST' || clean === 'TEST100' || clean === 'FREE100') {
     return {
       isValid: true,
       code: clean,
-      discountAmount: 0,
-      message: 'RAZORPAYTEST applied: Packaging and shipping fees waived for live payment testing.',
+      discountAmount: subtotal,
+      message: `100% Testing Offer applied (₹${subtotal} saved)! Products, packaging, and shipping are 100% free for testing.`,
+    };
+  }
+
+  if (clean === 'RAZORPAY1' || clean === 'TEST1') {
+    const discount = Math.max(0, subtotal - 1);
+    return {
+      isValid: true,
+      code: clean,
+      discountAmount: discount,
+      message: 'Razorpay Gateway ₹1 Test Mode applied! Products discounted to ₹1 token charge, packaging & shipping waived.',
     };
   }
 
