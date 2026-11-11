@@ -50,6 +50,8 @@ export const CheckoutPage: React.FC = () => {
   const directQtyParam = Number(searchParams.get('qty') || 1);
   const directVariantParam = searchParams.get('variant');
 
+  const [isDirectLoading, setIsDirectLoading] = useState(false);
+
   // Handle direct product ordering injection if navigated via "Order Now"
   useEffect(() => {
     if (directProductSlug) {
@@ -64,6 +66,24 @@ export const CheckoutPage: React.FC = () => {
         } else if (directQtyParam > 1 && inCart.qty !== directQtyParam) {
           changeQty(prod.id, directQtyParam);
         }
+      } else {
+        // Fetch product directly from server/Supabase if not loaded in AppContext yet
+        setIsDirectLoading(true);
+        fetch(`/api/products/${encodeURIComponent(directProductSlug)}`)
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              if (data.product) {
+                // If product is not already in global products context, temporarily inject or addToCart
+                addToCart(data.product.id);
+                if (directQtyParam > 1) {
+                  changeQty(data.product.id, directQtyParam);
+                }
+              }
+            }
+          })
+          .catch(() => {})
+          .finally(() => setIsDirectLoading(false));
       }
     }
   }, [directProductSlug, products]);
@@ -647,8 +667,24 @@ export const CheckoutPage: React.FC = () => {
   }
 
   // =========================================================
-  // EMPTY CART GUARD
+  // LOADING / EMPTY CART GUARD
   // =========================================================
+  if ((isDirectLoading || (directProductSlug && checkoutItems.length === 0)) && !orderComplete) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6 animate-in fade-in">
+        <div className="w-16 h-16 rounded-full bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center mx-auto">
+          <RefreshCw className="w-8 h-8 animate-spin" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl font-black text-[#1E293B]">Preparing Your Checkout...</h2>
+          <p className="text-sm text-slate-500">
+            Fetching product details and calculating live shipping rates for your creation.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (checkoutItems.length === 0 && !orderComplete) {
     return (
       <div className="max-w-xl mx-auto px-4 py-16 sm:py-24 text-center space-y-6">

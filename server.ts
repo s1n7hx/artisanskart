@@ -4282,6 +4282,50 @@ app.get('/api/products', async (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/products/:ref
+app.get('/api/products/:ref', async (req: Request, res: Response) => {
+  try {
+    const cleanRef = String(req.params.ref || '').trim();
+    if (!cleanRef) {
+      return res.status(400).json({ success: false, error: 'Product reference is required.' });
+    }
+
+    const numId = Number(cleanRef);
+    let query = supabaseAdmin.from('products').select('*');
+    if (!isNaN(numId) && numId > 0) {
+      query = query.eq('id', numId);
+    } else {
+      query = query.or(`slug.ilike.${cleanRef},title.ilike.%${cleanRef}%`);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (!error && data) {
+      return res.json({ success: true, product: mapDbRowToProduct(data) });
+    }
+
+    // Fallback check memory catalog
+    if (!isNaN(numId) && SERVER_PRODUCT_CATALOG[numId]) {
+      const cat = SERVER_PRODUCT_CATALOG[numId];
+      return res.json({
+        success: true,
+        product: {
+          id: numId,
+          title: cat.title,
+          price: cat.price,
+          stock: cat.stock,
+          maker: cat.maker,
+          image: 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=80',
+          category: 'Handmade Crafts',
+        },
+      });
+    }
+
+    return res.status(404).json({ success: false, error: `Product matching "${req.params.ref}" was not found.` });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/products/save
 app.post(['/api/products/save', '/api/products/create', '/api/admin/save-product'], async (req: Request, res: Response) => {
   try {
