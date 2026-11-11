@@ -17,6 +17,7 @@ import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { OrderTrackingPage } from './pages/OrderTrackingPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 import { MakerRouteGuard, AdminRouteGuard } from './components/RouteGuards';
 
@@ -87,8 +88,8 @@ export default function App() {
             <Route path="auth" element={<LoginPage />} />
             <Route path="auth/callback" element={<AuthCallbackPage />} />
             <Route path="contact" element={<ContactPage />} />
-            {/* Fallback to home */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Dedicated 404 page for unmatched routes (avoids soft 404s for search engines) */}
+            <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

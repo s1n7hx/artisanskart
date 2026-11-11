@@ -25,6 +25,7 @@ import {
   deleteCollection,
   togglePublishCollection,
 } from '../services/supabase';
+import { SEO } from '../components/SEO';
 
 export const CollectionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -250,6 +251,15 @@ export const CollectionsPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 space-y-12">
+      <SEO
+        title="Curated Handmade Collections & Artisan Crafts | ArtisansKart"
+        description="Browse curated craft collections including crochet creations, hand-carved decor, handmade gifts, and bespoke accessories by verified independent Indian artisans."
+        canonicalPath="/collections"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'Collections', path: '/collections' },
+        ]}
+      />
       {/* Editorial Header */}
       <div className="max-w-3xl mx-auto text-center space-y-3">
         <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">

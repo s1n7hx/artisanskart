@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { submitContactInquiry, ContactSubmissionPayload } from '../services/supabase';
+import { SEO } from '../components/SEO';
 
 type DepartmentType = 'buyer_support' | 'partnerships';
 
@@ -181,6 +182,15 @@ export const ContactPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 space-y-12">
+      <SEO
+        title="Contact Us & Artisan Guild Partnerships | ArtisansKart"
+        description="Contact ArtisansKart for customer support, order tracking, and artisan studio partnerships. Dedicated assistance for buyers and independent makers across India."
+        canonicalPath="/contact"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'Contact', path: '/contact' },
+        ]}
+      />
       {/* Editorial Header */}
       <div className="max-w-3xl mx-auto text-center space-y-3">
         <div className="flex items-center justify-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-widest">

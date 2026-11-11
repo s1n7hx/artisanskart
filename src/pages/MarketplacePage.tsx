@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, ShoppingCart, Search, X, Sparkles, Filter } from 'lucide-react';
 import { CATEGORIES } from '../data';
 import { useApp } from '../context/AppContext';
+import { SEO } from '../components/SEO';
 
 export const MarketplacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -51,6 +52,15 @@ export const MarketplacePage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 space-y-10">
+      <SEO
+        title="Buy Handmade Crafts & Unique Gifts Online in India | ArtisansKart"
+        description="Explore authentic handmade crafts, home decor, clay art, crochet items, and handmade accessories created by independent Indian artisans. Fast shipping across India."
+        canonicalPath="/marketplace"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'Marketplace', path: '/marketplace' },
+        ]}
+      />
       {/* Marketplace Header */}
       <div className="text-center max-w-2xl mx-auto">
         <span className="badge-sage text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">
@@ -129,7 +139,7 @@ export const MarketplacePage: React.FC = () => {
               <div className="relative aspect-square overflow-hidden bg-slate-100">
                 <img
                   src={p.image}
-                  alt={p.title}
+                  alt={`${p.title} — Handmade ${p.category} by ${p.maker}`}
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />

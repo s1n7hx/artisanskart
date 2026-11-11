@@ -19,6 +19,7 @@ import { OrderTimeline } from '../components/OrderTimeline';
 import { getStoredOrders } from '../services/ecommerce';
 import { supabase } from '../services/supabase';
 import { useApp } from '../context/AppContext';
+import { SEO } from '../components/SEO';
 
 export const OrderTrackingPage: React.FC = () => {
   const { orderNumber: paramOrderNumber } = useParams<{ orderNumber?: string }>();
@@ -218,6 +219,11 @@ export const OrderTrackingPage: React.FC = () => {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 space-y-8 animate-fade-in">
+      <SEO
+        title="Track Order & Shipment Delivery | ArtisansKart"
+        description="Track the real-time shipping status and craft progress for your ArtisansKart handmade order."
+        canonicalPath="/track"
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#e7e0d8] pb-6">
         <div>

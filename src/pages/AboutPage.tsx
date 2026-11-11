@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, Heart, ShieldCheck, ArrowRight, Flower2, Scissors, Palette, Award, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { SEO } from '../components/SEO';
 
 export const AboutPage: React.FC = () => {
   const { setIsMakerSignupOpen, makerEarningPercent } = useApp();
@@ -25,6 +26,15 @@ export const AboutPage: React.FC = () => {
 
   return (
     <div className="space-y-20 py-8">
+      <SEO
+        title="About Us — Empowering Independent Indian Artisans | ArtisansKart"
+        description="Learn about ArtisansKart, India's marketplace empowering independent makers, artisans, and craft studios with fair earnings, direct patron connections, and sustainable commerce."
+        canonicalPath="/about"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'About Us', path: '/about' },
+        ]}
+      />
       {/* Page Header */}
       <section className="max-w-5xl mx-auto px-4 md:px-8 text-center pt-8">
         <span className="badge-sage text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">

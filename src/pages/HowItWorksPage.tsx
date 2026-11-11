@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, HelpCircle } from 'lucide-react';
 import { HOW_IT_WORKS } from '../data';
 import { useApp } from '../context/AppContext';
+import { SEO } from '../components/SEO';
 
 export const HowItWorksPage: React.FC = () => {
   const navigate = useNavigate();
@@ -29,6 +30,15 @@ export const HowItWorksPage: React.FC = () => {
 
   return (
     <div className="space-y-20 py-8">
+      <SEO
+        title="How It Works — Handcrafted From Studio to Doorstep | ArtisansKart"
+        description="Learn how ArtisansKart works. From individual Indian maker studios to careful packaging and pan-India delivery, explore our fair-trade handmade craft process."
+        canonicalPath="/how-it-works"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'How It Works', path: '/how-it-works' },
+        ]}
+      />
       {/* Page Header */}
       <section className="max-w-4xl mx-auto px-4 md:px-8 text-center pt-8">
         <span className="badge-sage text-xs px-3.5 py-1 rounded-full font-semibold uppercase tracking-wider">

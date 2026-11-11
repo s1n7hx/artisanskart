@@ -37,6 +37,7 @@ import { useApp } from '../context/AppContext';
 import { Product, getProductSlug, ProductVariant, PincodeIntelligence, PostalLookupResult, CourierServiceabilityResult } from '../types';
 import { findProductBySlugOrId, lookupPostalPincode, checkCourierAvailability } from '../services/ecommerce';
 import { MultiImageUploader } from '../components/MultiImageUploader';
+import { SEO } from '../components/SEO';
 
 export const ProductDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -438,8 +439,62 @@ export const ProductDetailPage: React.FC = () => {
     .filter((p) => p.id !== product.id && p.category === product.category)
     .slice(0, 4);
 
+  // Schema.org Product structured data
+  const productSchema = useMemo(() => {
+    if (!product) return null;
+    return {
+      '@type': 'Product',
+      name: product.title,
+      description:
+        product.description ||
+        `Authentic handmade ${product.category || 'craft'} handcrafted by independent Indian maker ${product.maker || 'ArtisansKart artisan'}. Discover unique handmade gifts and home decor online in India at ArtisansKart.`,
+      image: galleryImages,
+      category: product.category,
+      brand: {
+        '@type': 'Brand',
+        name: product.maker || 'ArtisansKart Independent Artisan',
+      },
+      offers: {
+        '@type': 'Offer',
+        price: activePrice,
+        priceCurrency: 'INR',
+        availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        url: `https://artisanskart.in/product/${product.slug || product.id}`,
+        itemCondition: 'https://schema.org/NewCondition',
+        seller: {
+          '@type': 'Organization',
+          name: 'ArtisansKart',
+        },
+      },
+    };
+  }, [product, galleryImages, activePrice, inStock]);
+
+  const breadcrumbItems = useMemo(() => {
+    if (!product) return [];
+    return [
+      { name: 'Home', path: '/' },
+      { name: 'Marketplace', path: '/marketplace' },
+      { name: product.category, path: `/marketplace?category=${encodeURIComponent(product.category)}` },
+      { name: product.title, path: `/product/${product.slug || product.id}` },
+    ];
+  }, [product]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 space-y-12">
+      <SEO
+        title={`${product.title} — Handmade ${product.category || 'Craft'} by ${product.maker || 'Artisan'}`}
+        description={
+          product.description
+            ? `${product.description.slice(0, 140)}... Buy authentic handmade crafts directly from independent Indian artisans on ArtisansKart.`
+            : `Buy ${product.title} handmade by ${product.maker || 'independent artisans'} in India on ArtisansKart. Authentic handcrafted ${product.category || 'gifts and home decor'} with pan-India delivery.`
+        }
+        canonicalPath={`/product/${product.slug || product.id}`}
+        ogImage={galleryImages[0] || product.image}
+        ogType="product"
+        schema={productSchema || undefined}
+        breadcrumbs={breadcrumbItems}
+      />
+
       {/* Breadcrumb Navigation & Back Link */}
       <nav aria-label="Breadcrumb" className="flex items-center justify-between gap-3 text-xs text-slate-500 border-b border-[#e7e0d8] pb-4">
         <div className="flex items-center gap-2 flex-wrap">
@@ -625,7 +680,8 @@ export const ProductDetailPage: React.FC = () => {
               )}
               <img
                 src={galleryImages[activeImageIndex]}
-                alt={product.title}
+                alt={`${product.title} — Handmade ${product.category || 'Craft'} by ${product.maker || 'Indian Artisan'}`}
+                loading="eager"
                 onLoad={() => setIsImageLoading(false)}
                 className={`w-full h-full object-cover transition-transform duration-200 ease-out ${
                   isZoomed ? 'scale-150' : 'scale-100'

@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext';
 import { supabase, submitMakerApplication } from '../services/supabase';
 import { MultiImageUploader } from '../components/MultiImageUploader';
 import { maskEmail } from '../types';
+import { SEO } from '../components/SEO';
 import {
   Hammer,
   Sparkles,
@@ -183,6 +184,15 @@ export const BecomeAMakerPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-slate-800 py-12 px-4 sm:px-6 lg:px-8">
+      <SEO
+        title="Sell Handmade Crafts Online in India — Become an Artisan Maker | ArtisansKart"
+        description="Join ArtisansKart as an independent artisan, craft studio, or creator. Sell handmade home decor, pottery, crochet, and art across India with fair payouts and zero listing fees."
+        canonicalPath="/become-a-maker"
+        breadcrumbs={[
+          { name: 'Home', path: '/' },
+          { name: 'Become a Maker', path: '/become-a-maker' },
+        ]}
+      />
       <div className="max-w-3xl mx-auto space-y-8">
         {/* Header Hero Section */}
         <div className="text-center space-y-3">

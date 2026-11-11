@@ -47,40 +47,115 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
-// -------------------------------------------------------------
-// Production Domain Canonical Redirection Middleware
-// Redirects legacy vercel.app and www traffic to https://artisanskart.in
-// -------------------------------------------------------------
-app.use((req: Request, res: Response, next) => {
-  const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
+// Canonical Domain 301 Redirection Middleware
+// Redirects legacy artisanskart.vercel.app and www.artisanskart.in to https://artisanskart.in
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
   const cleanHost = host.toLowerCase().split(':')[0];
 
-  // If request arrives on legacy Vercel domain or www subdomain, 301 redirect to primary apex domain
   if (cleanHost === 'artisanskart.vercel.app' || cleanHost === 'www.artisanskart.in') {
-    const targetUrl = `https://artisanskart.in${req.originalUrl}`;
-    return res.redirect(301, targetUrl);
+    return res.redirect(301, `https://artisanskart.in${req.originalUrl}`);
   }
-
   next();
 });
 
-// Dedicated SEO routes
-app.get('/robots.txt', (_req: Request, res: Response) => {
-  const robotsPath = path.resolve(__dirname, 'public', 'robots.txt');
-  if (fs.existsSync(robotsPath)) {
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    return res.sendFile(robotsPath);
-  }
-  res.type('text/plain').send("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /maker\nDisallow: /api/\nSitemap: https://artisanskart.in/sitemap.xml\nHost: https://artisanskart.in\n");
+// -------------------------------------------------------------
+// Dedicated SEO & Verification Routes
+// Current Production Domain: https://artisanskart.in
+// -------------------------------------------------------------
+const PRODUCTION_DOMAIN = process.env.VITE_SITE_URL || process.env.SITE_URL || 'https://artisanskart.in';
+
+// Google Search Console Site Verification file
+app.get('/googlef0b9d657b954002a.html', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send('google-site-verification: googlef0b9d657b954002a.html');
 });
 
-app.get('/sitemap.xml', (_req: Request, res: Response) => {
-  const sitemapPath = path.resolve(__dirname, 'public', 'sitemap.xml');
-  if (fs.existsSync(sitemapPath)) {
+app.get('/robots.txt', (_req: Request, res: Response) => {
+  const robotsTxt = `# ArtisansKart Production Robots Configuration
+# Current Production: https://artisanskart.in
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /maker
+Disallow: /api/
+Disallow: /checkout
+Disallow: /auth/callback
+
+Sitemap: https://artisanskart.in/sitemap.xml
+Host: https://artisanskart.in
+`;
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(robotsTxt);
+});
+
+// Dynamic XML Sitemap backed by live Supabase products & public pages
+app.get('/sitemap.xml', async (_req: Request, res: Response) => {
+  try {
+    const base = 'https://artisanskart.in';
+    const today = new Date().toISOString().split('T')[0];
+
+    // Core static public pages
+    const staticPages = [
+      { loc: `${base}/`, priority: '1.0', changefreq: 'daily' },
+      { loc: `${base}/marketplace`, priority: '0.9', changefreq: 'daily' },
+      { loc: `${base}/collections`, priority: '0.9', changefreq: 'daily' },
+      { loc: `${base}/about`, priority: '0.7', changefreq: 'monthly' },
+      { loc: `${base}/how-it-works`, priority: '0.7', changefreq: 'monthly' },
+      { loc: `${base}/contact`, priority: '0.7', changefreq: 'monthly' },
+      { loc: `${base}/become-a-maker`, priority: '0.8', changefreq: 'monthly' },
+      { loc: `${base}/track`, priority: '0.6', changefreq: 'weekly' },
+    ];
+
+    // Fetch dynamic products from Supabase
+    let productPages: Array<{ loc: string; priority: string; changefreq: string; lastmod?: string }> = [];
+    try {
+      const { data: dbProducts } = await supabaseAdmin
+        .from('products')
+        .select('id, title, slug, updated_at, created_at')
+        .order('created_at', { ascending: false });
+
+      if (Array.isArray(dbProducts)) {
+        productPages = dbProducts.map((p) => {
+          const slugOrId = p.slug || p.id;
+          const date = (p.updated_at || p.created_at || today).split('T')[0];
+          return {
+            loc: `${base}/product/${encodeURIComponent(String(slugOrId))}`,
+            priority: '0.8',
+            changefreq: 'weekly',
+            lastmod: date,
+          };
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[Sitemap Generator] Notice fetching products:', dbErr);
+    }
+
+    const allUrls = [...staticPages, ...productPages];
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${allUrls
+  .map(
+    (u) => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${(u as any).lastmod || today}</lastmod>
+    <changefreq>${u.changefreq}</changefreq>
+    <priority>${u.priority}</priority>
+  </url>`
+  )
+  .join('\n')}
+</urlset>`;
+
     res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-    return res.sendFile(sitemapPath);
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600');
+    return res.send(xml);
+  } catch (err: any) {
+    console.error('❌ [/sitemap.xml Error]:', err.message);
+    res.status(500).end();
   }
-  res.status(404).end();
 });
 
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

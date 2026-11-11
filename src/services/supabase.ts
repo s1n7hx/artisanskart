@@ -46,17 +46,12 @@ export const PRODUCTION_SITE_URL =
 export function getEffectiveAppUrl(): string {
   const currentOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : '';
 
-  // If on legacy Vercel domain or empty, strictly return new production domain
-  if (!currentOrigin || currentOrigin.includes('artisanskart.vercel.app')) {
-    return 'https://artisanskart.in';
+  // In production or default fallback, return current production domain
+  if (!currentOrigin) {
+    return PRODUCTION_SITE_URL;
   }
 
-  // If on www subdomain, canonicalize to apex domain
-  if (currentOrigin.includes('www.artisanskart.in')) {
-    return 'https://artisanskart.in';
-  }
-
-  // If running in development sandbox/preview (e.g. ais-dev, run.app, localhost), return current origin
+  // If running in development sandbox/preview (e.g. ais-dev, run.app, localhost), return current origin for local callbacks
   return currentOrigin.replace(/\/$/, '');
 }
 

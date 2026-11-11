@@ -4,6 +4,7 @@ import { Sparkles, ArrowRight, ShieldCheck, Heart, Leaf, User, ShoppingCart } fr
 import { Hero } from '../components/Hero';
 import { Marquee } from '../components/Marquee';
 import { useApp } from '../context/AppContext';
+import { SEO } from '../components/SEO';
 
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +28,11 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="space-y-16 md:space-y-24">
+      <SEO
+        title="ArtisansKart – Discover Unique Handmade Products Online in India"
+        description="Discover unique handmade crafts, gifts, accessories and home decor at ArtisansKart. Explore creative products made by independent makers and artisans."
+        canonicalPath="/"
+      />
       {/* Interactive Magnet Hero */}
       <Hero
         onExploreMarketplace={() => navigate('/marketplace')}
@@ -126,7 +132,7 @@ export const HomePage: React.FC = () => {
               <div className="relative aspect-square overflow-hidden bg-[#FAF9F6] flex items-center justify-center p-3">
                 <img
                   src={p.image}
-                  alt={p.title}
+                  alt={`${p.title} — Handmade ${p.category} by ${p.maker}`}
                   className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
