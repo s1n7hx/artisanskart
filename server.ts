@@ -1565,21 +1565,80 @@ app.get('/api/orders', async (req: Request, res: Response) => {
   }
 });
 
-app.get('/api/orders/:ref', (req: Request, res: Response) => {
+app.get('/api/orders/:ref', async (req: Request, res: Response) => {
   try {
-    const cleanRef = String(req.params.ref || '').trim().toLowerCase();
+    const cleanRef = String(req.params.ref || '').trim();
+    if (!cleanRef) {
+      return res.status(400).json({ success: false, error: 'Order reference is required.' });
+    }
+
+    // 1. Query Supabase orders table
+    try {
+      const { data: dbOrders, error } = await supabaseAdmin
+        .from('orders')
+        .select('*, order_items(*)')
+        .or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+
+      if (!error && dbOrders && dbOrders.length > 0) {
+        const d = dbOrders[0];
+        const mappedItems = Array.isArray(d.order_items)
+          ? d.order_items.map((i: any) => ({
+              productId: i.product_id,
+              title: i.title,
+              imageUrl: i.image_url,
+              unitPrice: Number(i.unit_price),
+              quantity: i.quantity,
+              subtotal: Number(i.subtotal),
+              makerName: i.maker_name,
+              makerId: i.maker_id,
+              productionStatus: i.production_status,
+            }))
+          : [];
+
+        const mappedOrder = {
+          id: d.id,
+          orderNumber: d.order_number,
+          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
+          product: mappedItems.map((i: any) => i.title).join(', ') || 'Handmade Craft',
+          qty: mappedItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
+          deadline: d.estimated_delivery ? new Date(d.estimated_delivery).toLocaleDateString('en-IN') : '3-5 business days',
+          status: d.status,
+          amount: Number(d.total_amount || d.amount || 0),
+          itemsTotal: Number(d.items_total || 0),
+          shippingFee: Number(d.shipping_fee || 0),
+          discountAmount: Number(d.discount_amount || 0),
+          customerName: d.customer_name,
+          customerEmail: d.customer_email,
+          customerPhone: d.customer_phone,
+          shippingAddress: d.shipping_address,
+          paymentStatus: d.payment_status,
+          paymentMethod: d.payment_method,
+          trackingAwb: d.tracking_awb,
+          courierName: d.courier_name || 'NimbusPost Express Partner',
+          estimatedDelivery: d.estimated_delivery,
+          createdAt: d.created_at,
+          items: mappedItems,
+        };
+
+        return res.json({ success: true, order: mappedOrder });
+      }
+    } catch (dbErr) {
+      console.warn('Supabase order lookup notice:', dbErr);
+    }
+
+    // 2. Check SERVER_ORDERS memory store
     const match = SERVER_ORDERS.find(
       (o) =>
-        String(o.orderNumber || '').toLowerCase() === cleanRef ||
-        String(o.trackingAwb || '').toLowerCase() === cleanRef ||
+        String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() ||
+        String(o.trackingAwb || '').toLowerCase() === cleanRef.toLowerCase() ||
         String(o.id) === cleanRef
     );
 
-    if (!match) {
-      return res.status(404).json({ success: false, error: `Order matching "${req.params.ref}" was not found.` });
+    if (match) {
+      return res.json({ success: true, order: match });
     }
 
-    return res.json({ success: true, order: match });
+    return res.status(404).json({ success: false, error: `Order matching "${req.params.ref}" was not found.` });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
