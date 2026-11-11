@@ -41,12 +41,12 @@ export const Marquee: React.FC = () => {
   }, [products]);
 
   const durationMap: Record<string, string> = {
-    slow: '50s',
-    normal: '30s',
-    fast: '16s',
+    slow: '55s',
+    normal: '35s',
+    fast: '18s',
     paused: '0s',
   };
-  const duration = durationMap[animationSettings.marqueeSpeed] || '30s';
+  const duration = durationMap[animationSettings.marqueeSpeed] || '35s';
   const isPaused = animationSettings.marqueeSpeed === 'paused';
 
   const renderProductCard = (product: Product, keySuffix: string | number) => {
@@ -55,17 +55,23 @@ export const Marquee: React.FC = () => {
         key={`${product.id}-${keySuffix}`}
         onClick={() => navigate(`/product/${product.id}`)}
         title={product.title}
-        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 mr-3.5 sm:mr-4 border border-[#e7e0d8]/80 bg-white flex items-center justify-center p-2"
-        style={{ width: '230px', height: '145px' }}
+        className="group relative shrink-0 cursor-pointer overflow-hidden rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 mr-3.5 sm:mr-4 relative overflow-hidden aspect-[3/4] rounded-2xl bg-neutral-900/5"
+        style={{ width: '190px', height: '253px' }}
       >
-        <div className="w-full h-full flex items-center justify-center p-1">
-          <img
-            src={product.image}
-            alt={product.title}
-            loading="lazy"
-            className="max-w-full max-h-full object-contain transition-transform duration-300 group-hover:scale-105"
-          />
-        </div>
+        {/* Blurred Backdrop Layer (Fills Whitespace) */}
+        <img
+          src={product.image}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover scale-125 blur-xl opacity-40 select-none pointer-events-none"
+        />
+        {/* Foreground Image Layer (Zero Cropping) */}
+        <img
+          src={product.image}
+          alt={product.title}
+          loading="lazy"
+          className="relative z-10 w-full h-full object-contain p-2 drop-shadow-sm transition-transform duration-300 group-hover:scale-105"
+        />
       </div>
     );
   };
@@ -76,11 +82,7 @@ export const Marquee: React.FC = () => {
       aria-label="Artisan Craft Showcase"
       className="relative bg-[#FAF9F6] py-5 sm:py-6 overflow-hidden select-none border-y border-[#e7e0d8]/60"
     >
-      {/* Subtle edge fade masks */}
-      <div className="absolute top-0 bottom-0 left-0 w-8 sm:w-16 bg-gradient-to-r from-[#FAF9F6] to-transparent z-20 pointer-events-none" />
-      <div className="absolute top-0 bottom-0 right-0 w-8 sm:w-16 bg-gradient-to-l from-[#FAF9F6] to-transparent z-20 pointer-events-none" />
-
-      <div className="space-y-3 sm:space-y-3.5">
+      <div className="space-y-3.5 sm:space-y-4">
         {/* Row 1 */}
         <div className="overflow-hidden flex">
           <div
