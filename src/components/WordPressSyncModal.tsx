@@ -1305,7 +1305,7 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
                           className="btn-terracotta text-sm font-semibold px-6 py-3 rounded-xl flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md transition"
                         >
                           <Save className="w-4 h-4" />
-                          <span>Save &amp; Apply Craft Details</span>
+                          <span>Save &amp; Apply Changes</span>
                         </button>
                       </div>
                     </form>

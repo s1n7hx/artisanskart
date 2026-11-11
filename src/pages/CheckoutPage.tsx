@@ -545,7 +545,7 @@ export const CheckoutPage: React.FC = () => {
             Thank You for Supporting Independent Artisans!
           </h1>
           <p className="text-slate-500 text-sm max-w-lg mx-auto">
-            Your order has been routed directly to the artisan. Crafting will begin as soon as the studio accepts the specifications.
+            Your order has been routed directly to the artisan. Crafting will begin as soon as the studio accepts the order.
           </p>
         </div>
 

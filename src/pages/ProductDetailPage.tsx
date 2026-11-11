@@ -1017,14 +1017,13 @@ export const ProductDetailPage: React.FC = () => {
       </div>
 
       {/* =========================================================
-          BELOW THE MAIN STAGE: TABS FOR SPECIFICATIONS & DETAILS
+          BELOW THE MAIN STAGE: TABS FOR DETAILS & REVIEWS
       ========================================================= */}
       <section ref={reviewsSectionRef} className="pt-8 border-t border-[#e7e0d8]">
         {/* Tab Headers */}
         <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto border-b border-[#e7e0d8] pb-px">
           {[
             { id: 'desc', label: 'Description & Craft Story' },
-            { id: 'craft', label: 'Craft Specifications' },
             { id: 'maker', label: 'Maker Details & Studio' },
             { id: 'shipping', label: 'Shipping & Delivery' },
             { id: 'reviews', label: `Customer Reviews (${product.reviews})` },
@@ -1049,39 +1048,15 @@ export const ProductDetailPage: React.FC = () => {
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900">The Artisan's Vision</h3>
               <p>{product.description || 'Authentic artisan handcrafted creation created with meticulous care.'}</p>
+              {product.materials && (
+                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] inline-block w-full max-w-md">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Materials Used</span>
+                  <span className="font-semibold text-slate-800 mt-1 block">{product.materials}</span>
+                </div>
+              )}
               <p>
                 Each piece in our collection is produced on-demand. Minor variations in tone, hand-etched pattern, and natural texture reflect the human hand and make your item uniquely yours.
               </p>
-            </div>
-          )}
-
-          {activeTab === 'craft' && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-bold text-slate-900">Craft Details &amp; Materials</h3>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                  <dt className="text-xs font-bold text-slate-400 uppercase">Materials Used</dt>
-                  <dd className="font-semibold text-slate-800 mt-1">{product.materials || 'Pure natural terracotta / stoneware / artisanal supplies'}</dd>
-                </div>
-                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                  <dt className="text-xs font-bold text-slate-400 uppercase">Dimensions</dt>
-                  <dd className="font-semibold text-slate-800 mt-1">{product.dimensions || 'Custom handcrafted proportions'}</dd>
-                </div>
-                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                  <dt className="text-xs font-bold text-slate-400 uppercase">Weight &amp; Parcel Sizing</dt>
-                  <dd className="font-semibold text-slate-800 mt-1">{product.weight || `${product.weightKg || 0.5} kg`}</dd>
-                </div>
-                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8]">
-                  <dt className="text-xs font-bold text-slate-400 uppercase">Crafting Time &amp; Origin</dt>
-                  <dd className="font-semibold text-slate-800 mt-1">
-                    {product.prepTimeDays || 2}-3 Days Studio Crafting • {product.originCity || 'New Delhi'}, India
-                  </dd>
-                </div>
-                <div className="p-4 rounded-2xl bg-[#FAF9F6] border border-[#e7e0d8] sm:col-span-2">
-                  <dt className="text-xs font-bold text-slate-400 uppercase">Care Instructions</dt>
-                  <dd className="font-semibold text-slate-800 mt-1">{product.careInstructions || 'Keep away from excessive dampness. Gently wipe clean with dry microfiber cloth.'}</dd>
-                </div>
-              </dl>
             </div>
           )}
 

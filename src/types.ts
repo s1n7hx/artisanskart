@@ -25,7 +25,7 @@ export interface Product {
   updatedAt?: string;
   uuid?: string;
 
-  // Professional specifications
+  // Professional details
   originalPrice?: number;
   materials?: string;
   dimensions?: string;
