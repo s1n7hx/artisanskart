@@ -47,6 +47,42 @@ app.use(
 );
 app.use(express.urlencoded({ extended: true }));
 
+// -------------------------------------------------------------
+// Production Domain Canonical Redirection Middleware
+// Redirects legacy vercel.app and www traffic to https://artisanskart.in
+// -------------------------------------------------------------
+app.use((req: Request, res: Response, next) => {
+  const host = (req.headers['x-forwarded-host'] as string) || req.headers.host || '';
+  const cleanHost = host.toLowerCase().split(':')[0];
+
+  // If request arrives on legacy Vercel domain or www subdomain, 301 redirect to primary apex domain
+  if (cleanHost === 'artisanskart.vercel.app' || cleanHost === 'www.artisanskart.in') {
+    const targetUrl = `https://artisanskart.in${req.originalUrl}`;
+    return res.redirect(301, targetUrl);
+  }
+
+  next();
+});
+
+// Dedicated SEO routes
+app.get('/robots.txt', (_req: Request, res: Response) => {
+  const robotsPath = path.resolve(__dirname, 'public', 'robots.txt');
+  if (fs.existsSync(robotsPath)) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    return res.sendFile(robotsPath);
+  }
+  res.type('text/plain').send("User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /maker\nDisallow: /api/\nSitemap: https://artisanskart.in/sitemap.xml\nHost: https://artisanskart.in\n");
+});
+
+app.get('/sitemap.xml', (_req: Request, res: Response) => {
+  const sitemapPath = path.resolve(__dirname, 'public', 'sitemap.xml');
+  if (fs.existsSync(sitemapPath)) {
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    return res.sendFile(sitemapPath);
+  }
+  res.status(404).end();
+});
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms)
@@ -3118,8 +3154,11 @@ app.post(['/api/maker-applications/submit', '/api/maker-applications'], async (r
 
     // 4. Send email notification to MASTER_ADMIN_EMAIL
     const masterAdminEmail = process.env.MASTER_ADMIN_EMAIL || 'ssumollah@gmail.com';
-    const hostHeader = req.get('host') || 'artisanskart.in';
-    const adminReviewUrl = `${req.protocol}://${hostHeader}/admin`;
+    const hostHeader = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'artisanskart.in';
+    const cleanHost = hostHeader.toLowerCase().split(':')[0];
+    const canonicalHost = (cleanHost === 'artisanskart.vercel.app' || cleanHost === 'www.artisanskart.in') ? 'artisanskart.in' : cleanHost;
+    const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'https');
+    const adminReviewUrl = `${protocol}://${canonicalHost}/admin`;
 
     const emailSubject = `[ArtisansKart] New Maker Application: ${name} (${craft})`;
     const photoListHtml = photoList.length > 0

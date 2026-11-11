@@ -41,17 +41,23 @@ export interface UserProfile {
 export const PRODUCTION_SITE_URL = 
   (typeof import.meta !== 'undefined' && ((import.meta as any).env?.VITE_SITE_URL || (import.meta as any).env?.VITE_APP_URL || (import.meta as any).env?.VITE_PUBLIC_SITE_URL)) ||
   (typeof process !== 'undefined' && (process.env?.SITE_URL || process.env?.VITE_SITE_URL || process.env?.NEXT_PUBLIC_SITE_URL)) ||
-  'https://artisanskart.vercel.app';
+  'https://artisanskart.in';
 
 export function getEffectiveAppUrl(): string {
   const currentOrigin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : '';
-  const envUrl = PRODUCTION_SITE_URL;
 
-  if (currentOrigin && (currentOrigin.includes('ais-dev') || currentOrigin.includes('ais-pre') || currentOrigin.includes('run.app') || (currentOrigin.includes('vercel.app') && currentOrigin !== PRODUCTION_SITE_URL))) {
-    return envUrl.replace(/\/$/, '');
+  // If on legacy Vercel domain or empty, strictly return new production domain
+  if (!currentOrigin || currentOrigin.includes('artisanskart.vercel.app')) {
+    return 'https://artisanskart.in';
   }
 
-  return (currentOrigin || envUrl).replace(/\/$/, '');
+  // If on www subdomain, canonicalize to apex domain
+  if (currentOrigin.includes('www.artisanskart.in')) {
+    return 'https://artisanskart.in';
+  }
+
+  // If running in development sandbox/preview (e.g. ais-dev, run.app, localhost), return current origin
+  return currentOrigin.replace(/\/$/, '');
 }
 
 export async function signInWithGoogle(redirectTo?: string) {

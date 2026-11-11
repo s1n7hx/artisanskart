@@ -1,0 +1,12 @@
+# ArtisansKart Production Robots Configuration
+# Primary Domain: https://artisanskart.in
+
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /maker
+Disallow: /api/
+Disallow: /auth/callback
+
+Sitemap: https://artisanskart.in/sitemap.xml
+Host: https://artisanskart.in
