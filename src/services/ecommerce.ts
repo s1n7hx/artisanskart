@@ -887,11 +887,14 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
 
     const { data: dbOrder, error: orderErr } = await supabase
       .from('orders')
-      .insert(orderPayload)
+      .upsert(orderPayload, { onConflict: 'order_number' })
       .select()
       .single();
 
     if (!orderErr && dbOrder && fullOrder.items && fullOrder.items.length > 0) {
+      // Clean up previous line items if this is an update to an existing order
+      await supabase.from('order_items').delete().eq('order_id', dbOrder.id);
+
       const itemsPayload = fullOrder.items.map((item) => ({
         order_id: dbOrder.id,
         product_id: item.productId,

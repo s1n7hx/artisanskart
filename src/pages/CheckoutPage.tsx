@@ -58,6 +58,11 @@ export const CheckoutPage: React.FC = () => {
         const inCart = cart.find((c) => c.id === prod.id);
         if (!inCart) {
           addToCart(prod.id);
+          if (directQtyParam > 1) {
+            changeQty(prod.id, directQtyParam);
+          }
+        } else if (directQtyParam > 1 && inCart.qty !== directQtyParam) {
+          changeQty(prod.id, directQtyParam);
         }
       }
     }
@@ -97,8 +102,8 @@ export const CheckoutPage: React.FC = () => {
   const [appliedCoupon, setAppliedCoupon] = useState<string>('');
   const [couponDiscount, setCouponDiscount] = useState<number>(0);
 
-  // Payment method
-  const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'cod'>('razorpay');
+  // Payment method: Razorpay only (Cash on delivery is strictly disabled)
+  const [paymentMethod] = useState<'razorpay'>('razorpay');
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
   const [completedOrderNumber, setCompletedOrderNumber] = useState('');
@@ -169,7 +174,7 @@ export const CheckoutPage: React.FC = () => {
       deliveryPincode: cleanPin,
       pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
       weightKg: totalCartWeightKg,
-      cod: true,
+      cod: false,
     });
 
     if (reqId !== lookupRequestIdRef.current) return;
@@ -331,6 +336,22 @@ export const CheckoutPage: React.FC = () => {
     showToast('Coupon removed.', 'tag');
   };
 
+  // Dynamically re-evaluate applied coupon if itemsSubtotal changes
+  useEffect(() => {
+    if (appliedCoupon && itemsSubtotal > 0) {
+      const result = validateCouponCode(appliedCoupon, itemsSubtotal);
+      if (result.isValid) {
+        setCouponDiscount(result.discountAmount);
+      } else {
+        setAppliedCoupon('');
+        setCouponDiscount(0);
+        showToast(result.message || 'Coupon not applicable for current cart subtotal.', 'info');
+      }
+    } else if (itemsSubtotal === 0) {
+      setCouponDiscount(0);
+    }
+  }, [itemsSubtotal, appliedCoupon]);
+
   // Order Submission with Server Validation & Pre-payment Database Persistence
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,40 +471,7 @@ export const CheckoutPage: React.FC = () => {
         return;
       }
 
-      // A. COD Payment Flow
-      if (paymentMethod === 'cod') {
-        const orderRecord = await createOrderRecord({
-          orderNumber: orderNum,
-          customerName: fullName.trim(),
-          customerEmail: email.trim(),
-          customerPhone: phone.trim(),
-          shippingAddress: shippingAddressObj,
-          amount: verifiedTotal,
-          itemsTotal: itemsSubtotal,
-          packagingFee,
-          discountAmount: couponDiscount,
-          status: 'awaiting_maker_acceptance',
-          paymentStatus: 'cod',
-          paymentMethod: 'cod',
-          trackingAwb: awb,
-          courierName: courierResult?.courierName || (courierResult?.serviceable ? 'NimbusPost Express Partner' : 'Standard Hub Dispatch'),
-          items: orderItemSnapshots,
-          makerId: checkoutItems[0]?.product?.makerId,
-          makerName: checkoutItems[0]?.product?.maker,
-          pickupPincode: checkoutItems[0]?.product?.pickupPincode || '110016',
-        });
-
-        setCompletedOrderNumber(orderNum);
-        setCompletedTrackingAwb(awb);
-        setCompletedOrderSnapshot(orderRecord);
-        confirmCheckout();
-        setIsProcessing(false);
-        setOrderComplete(true);
-        showToast('Order confirmed via Cash on Delivery!', 'check-circle');
-        return;
-      }
-
-      // B. Razorpay Prepaid Payment Flow
+      // Razorpay Prepaid Payment Flow
       // Pre-persist order in database before launching payment gateway to prevent zombie payments
       const initialPrepaidOrder = await createOrderRecord({
         orderNumber: orderNum,
@@ -616,8 +604,8 @@ export const CheckoutPage: React.FC = () => {
                   shippingFee: 0,
                   discountAmount: couponDiscount,
                   customerName: fullName,
-                  paymentStatus: paymentMethod === 'cod' ? 'cod' : 'paid',
-                  paymentMethod: paymentMethod,
+                  paymentStatus: 'paid',
+                  paymentMethod: 'razorpay',
                 }
               }
             />
@@ -653,6 +641,39 @@ export const CheckoutPage: React.FC = () => {
               Home
             </Link>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================
+  // EMPTY CART GUARD
+  // =========================================================
+  if (checkoutItems.length === 0 && !orderComplete) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 sm:py-24 text-center space-y-6">
+        <div className="w-20 h-20 rounded-full bg-amber-50 text-[#C85A32] flex items-center justify-center mx-auto shadow-xs border border-amber-100">
+          <Package className="w-10 h-10" />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-2xl sm:text-3xl font-black text-[#1E293B]">Your Checkout is Empty</h2>
+          <p className="text-sm text-slate-600 max-w-md mx-auto">
+            You don't have any handcrafted items queued for checkout. Browse our collection of independent artisan creations to begin.
+          </p>
+        </div>
+        <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
+          <Link
+            to="/marketplace"
+            className="inline-flex items-center justify-center px-6 py-3.5 rounded-2xl text-xs sm:text-sm font-bold bg-[#C85A32] text-white hover:bg-[#b04a25] transition shadow-md"
+          >
+            Explore Marketplace
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center justify-center px-6 py-3.5 rounded-2xl text-xs sm:text-sm font-bold border border-slate-300 text-slate-700 hover:bg-slate-50 transition"
+          >
+            Return to Home
+          </Link>
         </div>
       </div>
     );

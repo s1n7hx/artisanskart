@@ -147,7 +147,7 @@ export const Layout: React.FC = () => {
         onRemove={removeFromCart}
         onProceedCheckout={() => {
           setIsCartOpen(false);
-          setIsCheckoutOpen(true);
+          navigate('/checkout');
         }}
       />
 

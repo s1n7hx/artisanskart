@@ -456,9 +456,48 @@ export function evaluateCoupon(code: string, subtotal: number, userEmail?: strin
 }
 
 // -------------------------------------------------------------
+// Helper: Server-Authoritative Product Resolution
+// Resolves item pricing and titles from memory catalog or Supabase DB
+// -------------------------------------------------------------
+async function resolveProductDetails(
+  idOrSlug: string | number,
+  fallback?: { title?: string; price?: number; stock?: number; maker?: string }
+): Promise<{ title: string; price: number; stock: number; maker: string }> {
+  const numId = Number(idOrSlug);
+  if (!isNaN(numId) && SERVER_PRODUCT_CATALOG[numId]) {
+    return SERVER_PRODUCT_CATALOG[numId];
+  }
+  try {
+    let query = supabaseAdmin.from('products').select('*');
+    if (!isNaN(numId) && numId > 0) {
+      query = query.eq('id', numId);
+    } else {
+      query = query.eq('slug', String(idOrSlug));
+    }
+    const { data, error } = await query.maybeSingle();
+    if (!error && data) {
+      return {
+        title: data.title || fallback?.title || `Craft #${idOrSlug}`,
+        price: typeof data.price === 'number' ? data.price : Number(data.price || fallback?.price || 299),
+        stock: typeof data.stock === 'number' ? data.stock : 20,
+        maker: data.maker || data.artisan_name || fallback?.maker || 'Independent Artisan',
+      };
+    }
+  } catch (err) {
+    // ignore query failure, fallback to provided values
+  }
+  return {
+    title: fallback?.title || `Craft #${idOrSlug}`,
+    price: fallback?.price !== undefined && !isNaN(Number(fallback.price)) ? Number(fallback.price) : 299,
+    stock: fallback?.stock !== undefined ? Number(fallback.stock) : 20,
+    maker: fallback?.maker || 'Independent Maker',
+  };
+}
+
+// -------------------------------------------------------------
 // API Route 1: Validate Order & Compute Server-Authoritative Totals
 // -------------------------------------------------------------
-app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
+app.post('/api/checkout/validate-order', async (req: Request, res: Response) => {
   try {
     const { items, couponCode, pincode, shippingFee, userEmail, userRole } = req.body;
 
@@ -470,15 +509,14 @@ app.post('/api/checkout/validate-order', (req: Request, res: Response) => {
     const validatedItems = [];
 
     for (const item of items) {
-      const prodId = Number(item.id || item.productId);
+      const prodId = item.id || item.productId;
       const qty = Math.max(1, Math.floor(Number(item.qty || item.quantity || 1)));
 
-      const catalogItem = SERVER_PRODUCT_CATALOG[prodId] || {
-        title: item.title || `Craft #${prodId}`,
-        price: item.price !== undefined && !isNaN(Number(item.price)) ? Number(item.price) : 299,
-        stock: 20,
-        maker: item.maker || 'Independent Maker',
-      };
+      const catalogItem = await resolveProductDetails(prodId, {
+        title: item.title,
+        price: item.price,
+        maker: item.maker,
+      });
 
       const lineSubtotal = catalogItem.price * qty;
       itemsTotal += lineSubtotal;
@@ -696,9 +734,14 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     const bodyItems = Array.isArray(body.items) ? body.items : [];
     if (bodyItems.length > 0) {
       for (const item of bodyItems) {
-        const qty = Math.max(1, Number(item.quantity || item.qty || 1));
-        const price = Math.max(0, Number(item.unitPrice || item.price || item.product?.price || 299));
-        itemsTotal += price * qty;
+        const prodId = item.id || item.productId;
+        const qty = Math.max(1, Math.floor(Number(item.quantity || item.qty || 1)));
+        const catalogItem = await resolveProductDetails(prodId, {
+          title: item.title,
+          price: item.unitPrice || item.price || item.product?.price,
+          maker: item.maker,
+        });
+        itemsTotal += catalogItem.price * qty;
       }
     } else if (targetOrderNumber) {
       const sOrder = SERVER_ORDERS.find(o => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase());
