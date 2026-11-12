@@ -75,7 +75,7 @@ export const OrderConfirmationPage: React.FC = () => {
         const mappedItems = Array.isArray(d.order_items)
           ? d.order_items.map((i: any) => ({
               productId: i.product_id,
-              title: i.title,
+              title: i.product_title || i.title || 'Handcrafted Craft',
               imageUrl: i.image_url,
               unitPrice: Number(i.unit_price),
               quantity: i.quantity,

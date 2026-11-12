@@ -361,8 +361,20 @@ export async function persistOrderRecord(fullOrder: any): Promise<any> {
     console.warn('⚠️ [Database Order Sync Notice]:', dbEx.message);
   }
 
-  // 4. Backup full JSON order record to site_settings under key 'orders_v1'
+  // 4. Anonymized backup summary to site_settings under key 'orders_v1' (strips customer PII for security)
   try {
+    const sanitizedBackup = {
+      id: cleanOrder.id,
+      orderNumber: cleanOrder.orderNumber,
+      amount: cleanOrder.amount,
+      status: cleanOrder.status,
+      trackingAwb: cleanOrder.trackingAwb,
+      courierName: cleanOrder.courierName,
+      createdAt: cleanOrder.createdAt,
+      updatedAt: cleanOrder.updatedAt,
+      itemsSummary: Array.isArray(cleanOrder.items) ? cleanOrder.items.map((i: any) => ({ title: i.title, quantity: i.quantity })) : [],
+    };
+
     const { data: existingSettings } = await supabaseAdmin
       .from('site_settings')
       .select('value')
@@ -370,12 +382,12 @@ export async function persistOrderRecord(fullOrder: any): Promise<any> {
       .maybeSingle();
 
     const siteOrders = Array.isArray(existingSettings?.value) ? existingSettings.value : [];
-    const updatedSiteOrders = [cleanOrder, ...siteOrders.filter((o: any) => o.orderNumber !== cleanOrder.orderNumber)];
+    const updatedSiteOrders = [sanitizedBackup, ...siteOrders.filter((o: any) => o.orderNumber !== cleanOrder.orderNumber)];
 
     await supabaseAdmin.from('site_settings').upsert({
       key: 'orders_v1',
       value: updatedSiteOrders,
-      description: 'Central store of customer orders',
+      description: 'Anonymized order status registry',
       updated_at: new Date().toISOString(),
     }, { onConflict: 'key' });
   } catch (settingsEx) {}
@@ -1380,38 +1392,23 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
         });
       }
 
-      // Synchronize verified payment in both Supabase and SERVER_ORDERS
-      if (orderNumber) {
-        try {
-          await supabaseAdmin
-            .from('orders')
-            .update({
-              payment_status: 'paid',
-              payment_gateway_payment_id: razorpayPaymentId,
-              status: 'awaiting_maker_acceptance',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('order_number', orderNumber);
-        } catch (e) {}
-      } else if (razorpayOrderId) {
-        try {
-          await supabaseAdmin
-            .from('orders')
-            .update({
-              payment_status: 'paid',
-              payment_gateway_payment_id: razorpayPaymentId,
-              status: 'awaiting_maker_acceptance',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('payment_gateway_order_id', razorpayOrderId);
-        } catch (e) {}
-      }
-
-      // Update SERVER_ORDERS
-      const sOrder = SERVER_ORDERS.find((o) =>
+      // Update SERVER_ORDERS & Supabase via persistOrderRecord
+      let sOrder = SERVER_ORDERS.find((o) =>
         (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
         (razorpayOrderId && o.paymentGatewayOrderId === razorpayOrderId)
       );
+
+      if (!sOrder && orderNumber) {
+        sOrder = {
+          orderNumber,
+          paymentGatewayOrderId: razorpayOrderId,
+          paymentGatewayPaymentId: razorpayPaymentId,
+          paymentStatus: 'paid',
+          status: 'awaiting_maker_acceptance',
+          updatedAt: new Date().toISOString(),
+        };
+      }
+
       if (sOrder) {
         sOrder.paymentStatus = 'paid';
         sOrder.paymentGatewayPaymentId = razorpayPaymentId;
@@ -1428,7 +1425,8 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
           note: `Payment verified via Razorpay Live (Payment ID: ${razorpayPaymentId})`,
           createdAt: new Date().toISOString(),
         });
-        saveOrdersToDisk(SERVER_ORDERS);
+
+        await persistOrderRecord(sOrder);
       }
 
       console.log(`✅ [Payment Verified] Order #${orderNumber || razorpayOrderId} verified via Razorpay ID: ${razorpayPaymentId}`);
@@ -2867,26 +2865,9 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
         saveOrdersToDisk(SERVER_ORDERS);
       }
 
-      // Update Supabase
-      const updatePayload: Record<string, any> = {
-        payment_status: 'paid',
-        status: 'awaiting_maker_acceptance',
-        updated_at: new Date().toISOString(),
-      };
-      if (paymentId) updatePayload.payment_gateway_payment_id = paymentId;
-
-      if (orderNumber) {
-        await supabaseAdmin
-          .from('orders')
-          .update(updatePayload)
-          .eq('order_number', orderNumber);
-        console.log(`✅ [Razorpay Webhook] Order #${orderNumber} marked PAID`);
-      } else if (rzpOrderId) {
-        await supabaseAdmin
-          .from('orders')
-          .update(updatePayload)
-          .eq('payment_gateway_order_id', rzpOrderId);
-        console.log(`✅ [Razorpay Webhook] Gateway Order #${rzpOrderId} marked PAID`);
+      if (sOrder) {
+        await persistOrderRecord(sOrder);
+        console.log(`✅ [Razorpay Webhook] Order #${sOrder.orderNumber} marked PAID & persisted.`);
       }
 
       // Auto-book shipment in NimbusPost
@@ -3087,21 +3068,9 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
       saveOrdersToDisk(SERVER_ORDERS);
     }
 
-    // 2. Persist updated status to orders table in Supabase
-    try {
-      await supabaseAdmin
-        .from('orders')
-        .update({
-          status: targetStatus,
-          rejection_reason: rejectionReason,
-          confirmed_prep_days: confirmedPrepDays,
-          parcel_weight_kg: parcelWeightKg,
-          parcel_dimensions: parcelDimensions,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('order_number', targetRef);
-    } catch (dbError: any) {
-      console.warn('[Order Lifecycle Database Warning]:', dbError.message);
+    // 2. Persist updated status to orders table and central store via persistOrderRecord
+    if (updatedOrderRecord) {
+      await persistOrderRecord(updatedOrderRecord);
     }
 
     // 3. Persist audit trail into order_status_history table

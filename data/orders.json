@@ -1,5 +1,79 @@
 [
   {
+    "orderNumber": "AK-CONFIRM-280384",
+    "customerName": "Confirmation Tester",
+    "customerEmail": "confirm@artisanskart.in",
+    "customerPhone": "9876543210",
+    "shippingAddress": {
+      "addressLine": "123 Studio Blvd",
+      "city": "Delhi",
+      "state": "Delhi",
+      "pincode": "110016"
+    },
+    "amount": 1248,
+    "itemsTotal": 1248,
+    "shippingFee": 0,
+    "discountAmount": 0,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "createdAt": "2026-11-12T17:55:06.750Z",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Handcrafted Sunflower Crochet Bouquet",
+        "unitPrice": 599,
+        "quantity": 1,
+        "subtotal": 599
+      },
+      {
+        "productId": 2,
+        "title": "Pastel Granny Square Crochet Tote Bag",
+        "unitPrice": 649,
+        "quantity": 1,
+        "subtotal": 649
+      }
+    ],
+    "id": 1794506106841,
+    "trackingAwb": "NP-794300",
+    "courierName": "NimbusPost Express Partner",
+    "updatedAt": "2026-11-12T17:55:06.841Z"
+  },
+  {
+    "orderNumber": "AK-AUDIT-931418",
+    "customerName": "Audit Verified Customer",
+    "customerEmail": "audit.customer@artisanskart.in",
+    "customerPhone": "9876543210",
+    "shippingAddress": {
+      "addressLine": "777 Heritage Lane",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "pincode": "302001"
+    },
+    "amount": 599,
+    "itemsTotal": 599,
+    "shippingFee": 0,
+    "discountAmount": 0,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "trackingAwb": "NP-777888",
+    "courierName": "NimbusPost Express Partner",
+    "createdAt": "2026-11-12T17:40:31.875Z",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Handcrafted Sunflower Crochet Bouquet",
+        "unitPrice": 599,
+        "quantity": 1,
+        "subtotal": 599,
+        "makerName": "Kavita Sharma"
+      }
+    ],
+    "id": 1794505231967,
+    "updatedAt": "2026-11-12T17:40:31.967Z"
+  },
+  {
     "orderNumber": "AK-FINAL-318424",
     "customerName": "Final Audit Customer",
     "customerEmail": "audit@artisanskart.in",

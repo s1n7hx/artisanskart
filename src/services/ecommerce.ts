@@ -850,14 +850,15 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(fullOrder),
     });
-    if (serverRes.ok) {
-      const serverData = await serverRes.json();
-      if (serverData.order) {
-        Object.assign(fullOrder, serverData.order);
-      }
+    const serverData = await serverRes.json().catch(() => ({}));
+    if (serverRes.ok && serverData.order) {
+      Object.assign(fullOrder, serverData.order);
+    } else if (!serverRes.ok || serverData.error) {
+      throw new Error(serverData.error || 'Failed to save order to database.');
     }
-  } catch (err) {
-    console.warn('Notice sending order to central server:', err);
+  } catch (err: any) {
+    console.error('❌ [Order Persistence Error]:', err.message);
+    throw err;
   }
 
   // 2. Save to local store for instant offline feedback
