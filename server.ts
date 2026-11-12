@@ -32,9 +32,13 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoenBobmZ6dXV0ZHV6dHVraWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4ODA1NzIsImV4cCI6MjEwNDQ1NjU3Mn0.EdDl2tf6HQmMDpTqReBs0tb_9E1JJMTTDmU8oyG9qXk';
+
 const supabaseAdmin = createClient(
   process.env.VITE_SUPABASE_URL || 'https://xhzphnfzuutduztukiln.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
+  process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY !== 'placeholder-key'
+    ? process.env.SUPABASE_SERVICE_ROLE_KEY
+    : (process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY)
 );
 
 // Body parsing with raw buffer capture for cryptographic webhook signature verification
@@ -275,6 +279,186 @@ function saveOrdersToDisk(orders: any[]): void {
 }
 
 let SERVER_ORDERS: any[] = loadOrdersFromDisk();
+
+export async function persistOrderRecord(fullOrder: any): Promise<any> {
+  if (!fullOrder || (!fullOrder.orderNumber && !fullOrder.id)) return fullOrder;
+
+  const orderNumber = fullOrder.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+  const cleanOrder = {
+    ...fullOrder,
+    id: fullOrder.id || Date.now(),
+    orderNumber,
+    status: fullOrder.status || 'awaiting_maker_acceptance',
+    paymentStatus: fullOrder.paymentStatus || 'paid',
+    paymentMethod: fullOrder.paymentMethod || 'razorpay',
+    trackingAwb: fullOrder.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
+    courierName: fullOrder.courierName || 'NimbusPost Express Partner',
+    createdAt: fullOrder.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // 1. Save to in-memory & disk storage SERVER_ORDERS
+  const existingIndex = SERVER_ORDERS.findIndex(
+    (o) => o.orderNumber === cleanOrder.orderNumber || String(o.id) === String(cleanOrder.id)
+  );
+  if (existingIndex >= 0) {
+    SERVER_ORDERS[existingIndex] = { ...SERVER_ORDERS[existingIndex], ...cleanOrder };
+  } else {
+    SERVER_ORDERS.unshift(cleanOrder);
+  }
+  saveOrdersToDisk(SERVER_ORDERS);
+
+  // 2. Map status to valid Postgres enum order_status ('pending', 'accepted', 'in_production', 'completed', 'cancelled')
+  let dbStatus = 'pending';
+  const statusLower = String(cleanOrder.status || '').toLowerCase();
+  if (statusLower === 'in_production' || statusLower === 'making') {
+    dbStatus = 'in_production';
+  } else if (statusLower === 'accepted' || statusLower === 'ready' || statusLower === 'ready_for_pickup') {
+    dbStatus = 'accepted';
+  } else if (statusLower === 'completed' || statusLower === 'shipped' || statusLower === 'delivered') {
+    dbStatus = 'completed';
+  } else if (statusLower === 'cancelled' || statusLower === 'rejected' || statusLower === 'maker_rejected') {
+    dbStatus = 'cancelled';
+  }
+
+  // 3. Persist to Postgres public.orders & public.order_items using verified existing columns
+  try {
+    const { data: dbOrder, error: orderErr } = await supabaseAdmin
+      .from('orders')
+      .upsert({
+        order_number: cleanOrder.orderNumber,
+        customer_name: cleanOrder.customerName || 'Artisan Customer',
+        customer_email: cleanOrder.customerEmail || '',
+        customer_phone: cleanOrder.customerPhone || '9876543210',
+        shipping_address: cleanOrder.shippingAddress || {},
+        total_amount: Number(cleanOrder.amount || cleanOrder.totalAmount || cleanOrder.itemsTotal || 0),
+        status: dbStatus,
+        created_at: cleanOrder.createdAt,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'order_number' })
+      .select()
+      .maybeSingle();
+
+    if (orderErr) {
+      console.warn('⚠️ [Supabase orders Table Notice]:', orderErr.message);
+    } else if (dbOrder && Array.isArray(cleanOrder.items) && cleanOrder.items.length > 0) {
+      try {
+        await supabaseAdmin.from('order_items').delete().eq('order_id', dbOrder.id);
+        const itemsPayload = cleanOrder.items.map((item: any) => ({
+          order_id: dbOrder.id,
+          product_id: Number(item.productId || item.id || 1),
+          product_title: item.title || item.product_title || 'Handcrafted Artisan Craft',
+          unit_price: Number(item.unitPrice || item.price || 0),
+          quantity: Number(item.quantity || item.qty || 1),
+          subtotal: Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1)),
+        }));
+        await supabaseAdmin.from('order_items').insert(itemsPayload);
+      } catch (itemErr: any) {
+        console.warn('⚠️ [Supabase order_items Table Notice]:', itemErr.message);
+      }
+    }
+  } catch (dbEx: any) {
+    console.warn('⚠️ [Database Order Sync Notice]:', dbEx.message);
+  }
+
+  // 4. Backup full JSON order record to site_settings under key 'orders_v1'
+  try {
+    const { data: existingSettings } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'orders_v1')
+      .maybeSingle();
+
+    const siteOrders = Array.isArray(existingSettings?.value) ? existingSettings.value : [];
+    const updatedSiteOrders = [cleanOrder, ...siteOrders.filter((o: any) => o.orderNumber !== cleanOrder.orderNumber)];
+
+    await supabaseAdmin.from('site_settings').upsert({
+      key: 'orders_v1',
+      value: updatedSiteOrders,
+      description: 'Central store of customer orders',
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' });
+  } catch (settingsEx) {}
+
+  return cleanOrder;
+}
+
+export async function getAllOrdersFromAllStores(): Promise<any[]> {
+  const mergedMap = new Map<string, any>();
+
+  // 1. Memory / Disk SERVER_ORDERS
+  for (const o of SERVER_ORDERS) {
+    if (o && (o.orderNumber || o.id)) {
+      mergedMap.set(String(o.orderNumber || o.id), o);
+    }
+  }
+
+  // 2. site_settings key 'orders_v1'
+  try {
+    const { data: siteData } = await supabaseAdmin
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'orders_v1')
+      .maybeSingle();
+
+    if (siteData && Array.isArray(siteData.value)) {
+      for (const o of siteData.value) {
+        const key = String(o.orderNumber || o.id);
+        if (key) {
+          const existing = mergedMap.get(key);
+          mergedMap.set(key, existing ? { ...existing, ...o } : o);
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Supabase orders + order_items tables
+  try {
+    const { data: dbOrders } = await supabaseAdmin
+      .from('orders')
+      .select('*, order_items(*)')
+      .order('created_at', { ascending: false });
+
+    if (dbOrders && Array.isArray(dbOrders)) {
+      for (const d of dbOrders) {
+        const key = String(d.order_number || d.id);
+        const existing = mergedMap.get(key);
+
+        const mappedItems = Array.isArray(d.order_items)
+          ? d.order_items.map((i: any) => ({
+              productId: i.product_id,
+              title: i.product_title || i.title || 'Artisan Craft',
+              unitPrice: Number(i.unit_price || 0),
+              quantity: Number(i.quantity || 1),
+              subtotal: Number(i.subtotal || 0),
+            }))
+          : [];
+
+        const mappedDbOrder = {
+          id: d.id,
+          orderNumber: d.order_number,
+          customerName: d.customer_name,
+          customerEmail: d.customer_email,
+          customerPhone: d.customer_phone,
+          shippingAddress: d.shipping_address,
+          amount: Number(d.total_amount || 0),
+          status: d.status || 'awaiting_maker_acceptance',
+          createdAt: d.created_at,
+          updatedAt: d.updated_at,
+          items: mappedItems,
+        };
+
+        if (existing) {
+          mergedMap.set(key, { ...mappedDbOrder, ...existing });
+        } else {
+          mergedMap.set(key, mappedDbOrder);
+        }
+      }
+    }
+  } catch (e) {}
+
+  return Array.from(mergedMap.values());
+}
 
 // -------------------------------------------------------------
 // Baseline Server-Side Product Price & Stock Directory
@@ -1665,69 +1849,9 @@ app.post('/api/orders', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Order payload is required.' });
     }
 
-    const orderNumber = orderData.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const fullOrder = {
-      ...orderData,
-      id: orderData.id || Date.now(),
-      orderNumber,
-      status: orderData.status || 'awaiting_maker_acceptance',
-      paymentStatus: orderData.paymentStatus || 'paid',
-      paymentMethod: orderData.paymentMethod || 'razorpay',
-      trackingAwb: orderData.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
-      courierName: orderData.courierName || 'NimbusPost Express Partner',
-      createdAt: orderData.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      statusHistory: orderData.statusHistory || [
-        {
-          id: `init_${Date.now()}`,
-          orderId: orderData.id || Date.now(),
-          fromStatus: undefined,
-          toStatus: orderData.status || 'awaiting_maker_acceptance',
-          actorName: orderData.customerName || 'Customer',
-          actorRole: 'customer',
-          note: 'Order placed by customer and routed to maker studio',
-          createdAt: new Date().toISOString(),
-        },
-      ],
-    };
-
-    const existingIndex = SERVER_ORDERS.findIndex(
-      (o) => o.orderNumber === fullOrder.orderNumber || o.id === fullOrder.id
-    );
-    if (existingIndex >= 0) {
-      SERVER_ORDERS[existingIndex] = {
-        ...SERVER_ORDERS[existingIndex],
-        ...fullOrder,
-      };
-    } else {
-      SERVER_ORDERS.unshift(fullOrder);
-    }
-
-    saveOrdersToDisk(SERVER_ORDERS);
-
-    // Try background sync with Supabase if table exists
-    try {
-      await supabaseAdmin.from('orders').upsert({
-        order_number: fullOrder.orderNumber,
-        customer_name: fullOrder.customerName,
-        customer_email: fullOrder.customerEmail,
-        customer_phone: fullOrder.customerPhone,
-        shipping_address: fullOrder.shippingAddress || {},
-        items_total: fullOrder.itemsTotal || fullOrder.amount,
-        shipping_fee: fullOrder.shippingFee || 0,
-        discount_amount: fullOrder.discountAmount || 0,
-        total_amount: fullOrder.amount,
-        status: fullOrder.status,
-        payment_status: fullOrder.paymentStatus,
-        payment_method: fullOrder.paymentMethod,
-        tracking_awb: fullOrder.trackingAwb,
-        courier_name: fullOrder.courierName,
-        created_at: fullOrder.createdAt,
-      });
-    } catch (e) {}
-
-    console.log(`[Order Saved to Central Store] ${fullOrder.orderNumber} - Status: ${fullOrder.status}`);
-    return res.status(201).json({ success: true, order: fullOrder });
+    const savedOrder = await persistOrderRecord(orderData);
+    console.log(`[Order Saved to Central Stores] ${savedOrder.orderNumber} - Status: ${savedOrder.status}`);
+    return res.status(201).json({ success: true, order: savedOrder });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }

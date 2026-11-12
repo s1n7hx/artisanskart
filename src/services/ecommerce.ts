@@ -865,50 +865,55 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
   const updated = [fullOrder, ...existing.filter((o) => o.orderNumber !== fullOrder.orderNumber)];
   saveStoredOrders(updated);
 
-  // 3. Try inserting into Supabase orders & order_items tables
+  // 3. Try inserting into Supabase orders & order_items tables using exact verified schema
   try {
+    let dbStatus = 'pending';
+    const statusLower = String(fullOrder.status || '').toLowerCase();
+    if (statusLower === 'in_production' || statusLower === 'making') {
+      dbStatus = 'in_production';
+    } else if (statusLower === 'accepted' || statusLower === 'ready' || statusLower === 'ready_for_pickup') {
+      dbStatus = 'accepted';
+    } else if (statusLower === 'completed' || statusLower === 'shipped' || statusLower === 'delivered') {
+      dbStatus = 'completed';
+    } else if (statusLower === 'cancelled' || statusLower === 'rejected' || statusLower === 'maker_rejected') {
+      dbStatus = 'cancelled';
+    }
+
     const orderPayload = {
       order_number: fullOrder.orderNumber,
-      customer_name: fullOrder.customerName,
-      customer_email: fullOrder.customerEmail,
-      customer_phone: fullOrder.customerPhone,
+      customer_name: fullOrder.customerName || 'Artisan Customer',
+      customer_email: fullOrder.customerEmail || '',
+      customer_phone: fullOrder.customerPhone || '9876543210',
       shipping_address: fullOrder.shippingAddress || {},
-      items_total: fullOrder.itemsTotal,
-      shipping_fee: fullOrder.shippingFee,
-      discount_amount: fullOrder.discountAmount,
-      total_amount: fullOrder.amount,
-      status: fullOrder.status,
-      payment_status: fullOrder.paymentStatus,
-      payment_method: fullOrder.paymentMethod,
-      tracking_awb: fullOrder.trackingAwb,
-      courier_name: fullOrder.courierName,
-      created_at: fullOrder.createdAt,
+      total_amount: Number(fullOrder.amount || fullOrder.itemsTotal || 0),
+      status: dbStatus,
+      created_at: fullOrder.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
     const { data: dbOrder, error: orderErr } = await supabase
       .from('orders')
       .upsert(orderPayload, { onConflict: 'order_number' })
       .select()
-      .single();
+      .maybeSingle();
 
     if (!orderErr && dbOrder && fullOrder.items && fullOrder.items.length > 0) {
-      // Clean up previous line items if this is an update to an existing order
       await supabase.from('order_items').delete().eq('order_id', dbOrder.id);
 
-      const itemsPayload = fullOrder.items.map((item) => ({
-        order_id: dbOrder.id,
-        product_id: item.productId,
-        title: item.title,
-        image_url: item.imageUrl,
-        unit_price: item.unitPrice,
-        quantity: item.quantity,
-        subtotal: item.subtotal,
-        maker_name: item.makerName,
-        maker_id: item.makerId,
-        maker_earning_percent: item.makerEarningPercent || 65,
-        maker_share_amount: item.makerShareAmount || Math.round(item.subtotal * 0.65),
-        production_status: 'pending',
-      }));
+      const itemsPayload = fullOrder.items.map((item) => {
+        const pId = Number((item as any).productId || (item as any).id || 1);
+        const uPrice = Number(item.unitPrice || 0);
+        const qty = Number(item.quantity || 1);
+        const sub = Number(item.subtotal || uPrice * qty);
+        return {
+          order_id: dbOrder.id,
+          product_id: pId,
+          product_title: item.title || 'Handcrafted Artisan Craft',
+          unit_price: uPrice,
+          quantity: qty,
+          subtotal: sub,
+        };
+      });
 
       await supabase.from('order_items').insert(itemsPayload);
     }

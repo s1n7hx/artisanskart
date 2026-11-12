@@ -73,7 +73,8 @@ export const MakerPortalPage: React.FC = () => {
       if (
         o.status === 'awaiting_maker_acceptance' ||
         o.status === 'new' ||
-        o.status === 'order_placed'
+        o.status === 'order_placed' ||
+        o.status === 'pending'
       ) {
         return true;
       }

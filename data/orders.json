@@ -1,1 +1,81 @@
-[]
+[
+  {
+    "orderNumber": "AK-FINAL-318424",
+    "customerName": "Final Audit Customer",
+    "customerEmail": "audit@artisanskart.in",
+    "customerPhone": "9876543210",
+    "shippingAddress": {
+      "addressLine": "999 Heritage Way",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "pincode": "302001"
+    },
+    "amount": 129,
+    "itemsTotal": 129,
+    "shippingFee": 0,
+    "discountAmount": 0,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "trackingAwb": "NP-998877",
+    "courierName": "NimbusPost Express",
+    "createdAt": "2026-11-12T16:34:55.877Z",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Spiderman Clay Pin",
+        "unitPrice": 129,
+        "quantity": 1,
+        "subtotal": 129,
+        "makerName": "Juli"
+      }
+    ],
+    "id": 1794501295986,
+    "updatedAt": "2026-11-12T16:34:55.986Z"
+  },
+  {
+    "orderNumber": "AK-HTTP-128117",
+    "customerName": "HTTP Test Customer",
+    "customerEmail": "customer.http@artisanskart.in",
+    "customerPhone": "9876543210",
+    "shippingAddress": {
+      "addressLine": "123 Express Highway",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "pincode": "302001"
+    },
+    "amount": 599,
+    "itemsTotal": 599,
+    "shippingFee": 0,
+    "discountAmount": 0,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "trackingAwb": "NP-556677",
+    "courierName": "NimbusPost Express",
+    "createdAt": "2026-11-12T16:34:01.062Z",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Handcrafted Sunflower Crochet Bouquet",
+        "unitPrice": 599,
+        "quantity": 1,
+        "subtotal": 599,
+        "makerName": "Kavita Sharma"
+      }
+    ],
+    "id": 1794501241156,
+    "updatedAt": "2026-11-12T16:34:01.156Z",
+    "statusHistory": [
+      {
+        "id": "init_1794501241156",
+        "orderId": 1794501241156,
+        "toStatus": "awaiting_maker_acceptance",
+        "actorName": "HTTP Test Customer",
+        "actorRole": "customer",
+        "note": "Order placed by customer and routed to maker studio",
+        "createdAt": "2026-11-12T16:34:01.156Z"
+      }
+    ]
+  }
+]
