@@ -16,7 +16,7 @@ import {
   DEFAULT_WP_CONFIG,
   fetchWordPressContent,
 } from '../services/wordpress';
-import { updateOrderStatusWithLifecycle } from '../services/ecommerce';
+import { updateOrderStatusWithLifecycle, mapSupabaseOrderRowToOrder, getStoredOrders } from '../services/ecommerce';
 import {
   supabase,
   signInWithGoogle as supabaseSignInWithGoogle,
@@ -178,7 +178,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const email = (u.email || '').trim().toLowerCase();
           const isMaster = email === MASTER_ADMIN_EMAIL.toLowerCase() || email === 'ssumollah@gmail.com';
           if (isMaster) {
-            u.role = 'admin';
+            u.role = 'master_admin';
             u.status = 'approved';
             u.school = u.school || 'ArtisansKart Platform Headquarters';
           }
@@ -800,6 +800,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshOrders = async () => {
     let remoteOrders: Order[] = [];
+    let serverOrders: Order[] = [];
+    let serverOk = false;
+
+    try {
+      const sessionRes = await supabase.auth.getSession().catch(() => null);
+      const token = sessionRes?.data?.session?.access_token;
+      if (token) {
+        const serverRes = await fetch('/api/orders', {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        if (serverRes.ok) {
+          const serverData = await serverRes.json();
+          if (Array.isArray(serverData.orders)) {
+            serverOrders = serverData.orders;
+            serverOk = true;
+          }
+        }
+      }
+    } catch (e) {}
+
     try {
       const { data, error } = await supabase
         .from('orders')
@@ -807,69 +830,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .order('created_at', { ascending: false });
 
       if (!error && data && Array.isArray(data)) {
-        remoteOrders = data.map((d: any) => {
-          const items = Array.isArray(d.order_items)
-            ? d.order_items.map((i: any) => ({
-                productId: i.product_id,
-                title: i.title,
-                imageUrl: i.image_url,
-                unitPrice: Number(i.unit_price),
-                quantity: i.quantity,
-                subtotal: Number(i.subtotal),
-                makerName: i.maker_name,
-                makerId: i.maker_id,
-                productionStatus: i.production_status,
-              }))
-            : [];
-
-          return {
-            id: d.id,
-            orderNumber: d.order_number,
-            city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-            product: items.map((i: any) => i.title).join(', ') || 'Handmade Creation',
-            qty: items.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
-            deadline: d.estimated_delivery || '3-5 business days',
-            status: d.status,
-            amount: Number(d.total_amount || d.amount || 0),
-            itemsTotal: Number(d.items_total || 0),
-            shippingFee: Number(d.shipping_fee || 0),
-            discountAmount: Number(d.discount_amount || 0),
-            customerName: d.customer_name,
-            customerEmail: d.customer_email,
-            customerPhone: d.customer_phone,
-            shippingAddress: d.shipping_address,
-            paymentStatus: d.payment_status,
-            paymentMethod: d.payment_method,
-            trackingAwb: d.tracking_awb,
-            courierName: d.courier_name || 'NimbusPost Express Partner',
-            createdAt: d.created_at,
-            makerId: d.maker_id,
-            items,
-          };
-        });
-      }
-    } catch (e) {}
-
-    let serverOrders: Order[] = [];
-    try {
-      const serverRes = await fetch('/api/orders');
-      if (serverRes.ok) {
-        const serverData = await serverRes.json();
-        if (Array.isArray(serverData.orders)) {
-          serverOrders = serverData.orders;
-        }
+        remoteOrders = data.map((d: any) => mapSupabaseOrderRowToOrder(d));
       }
     } catch (e) {}
 
     const orderMap = new Map<string, Order>();
-    [...serverOrders, ...remoteOrders].forEach((o) => {
+    const fallbackLocal = !serverOk && remoteOrders.length === 0 ? getStoredOrders() : [];
+    [...serverOrders, ...remoteOrders, ...fallbackLocal].forEach((o) => {
       const key = o.orderNumber || String(o.id);
       if (!orderMap.has(key)) {
         orderMap.set(key, o);
       }
     });
 
-    const merged = Array.from(orderMap.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    const merged = Array.from(orderMap.values()).sort(
+      (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
     setOrders(merged);
     try {
       localStorage.setItem('artisanskart_all_orders_v2', JSON.stringify(merged));

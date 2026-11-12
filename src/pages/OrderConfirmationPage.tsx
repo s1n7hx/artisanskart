@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Order } from '../types';
 import { OrderTimeline } from '../components/OrderTimeline';
-import { getStoredOrders } from '../services/ecommerce';
+import { getStoredOrders, mapSupabaseOrderRowToOrder } from '../services/ecommerce';
 import { supabase } from '../services/supabase';
 import { SEO } from '../components/SEO';
 
@@ -53,65 +53,23 @@ export const OrderConfirmationPage: React.FC = () => {
         }
       }
 
-      // 2. Query Supabase directly
-      const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
-      let query = supabase
-        .from('orders')
-        .select(`
+      // 2. Query Supabase directly using verified columns only
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanRef);
+      let query = supabase.from('orders').select(`
           *,
           order_items (*)
         `);
 
-      if (isNum) {
-        query = query.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      if (isUuid) {
+        query = query.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef}`);
       } else {
-        query = query.or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+        query = query.ilike('order_number', cleanRef);
       }
 
       const { data: dbOrders, error: dbErr } = await query;
 
       if (!dbErr && dbOrders && dbOrders.length > 0) {
-        const d = dbOrders[0];
-        const mappedItems = Array.isArray(d.order_items)
-          ? d.order_items.map((i: any) => ({
-              productId: i.product_id,
-              title: i.product_title || i.title || 'Handcrafted Craft',
-              imageUrl: i.image_url,
-              unitPrice: Number(i.unit_price),
-              quantity: i.quantity,
-              subtotal: Number(i.subtotal),
-              makerName: i.maker_name,
-              makerId: i.maker_id,
-              productionStatus: i.production_status,
-            }))
-          : [];
-
-        const mappedOrder: Order = {
-          id: d.id,
-          orderNumber: d.order_number,
-          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-          product: mappedItems.map((i: any) => i.title).join(', ') || 'Handmade Creation',
-          qty: mappedItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
-          deadline: d.estimated_delivery ? new Date(d.estimated_delivery).toLocaleDateString('en-IN') : '3-5 business days',
-          status: d.status,
-          amount: Number(d.total_amount || d.amount || 0),
-          itemsTotal: Number(d.items_total || 0),
-          shippingFee: Number(d.shipping_fee || 0),
-          discountAmount: Number(d.discount_amount || 0),
-          customerName: d.customer_name,
-          customerEmail: d.customer_email,
-          customerPhone: d.customer_phone,
-          shippingAddress: d.shipping_address,
-          paymentStatus: d.payment_status,
-          paymentMethod: d.payment_method,
-          trackingAwb: d.tracking_awb,
-          courierName: d.courier_name || 'NimbusPost Express Partner',
-          estimatedDelivery: d.estimated_delivery,
-          createdAt: d.created_at,
-          items: mappedItems,
-        };
-
-        setOrder(mappedOrder);
+        setOrder(mapSupabaseOrderRowToOrder(dbOrders[0]));
         setIsLoading(false);
         return;
       }

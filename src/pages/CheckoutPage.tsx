@@ -416,15 +416,20 @@ export const CheckoutPage: React.FC = () => {
         body: JSON.stringify({
           items: checkoutItems.map((ci) => ({
             id: ci.id,
+            uuid: ci.product?.uuid,
+            productUuid: ci.product?.uuid,
+            slug: ci.product?.slug,
             qty: ci.qty,
             title: ci.product?.title,
             price: ci.product?.price,
             maker: ci.product?.maker,
+            makerId: ci.product?.makerId,
+            imageUrl: ci.product?.image,
             weightKg: ci.product?.weightKg || 0.5,
           })),
           couponCode: appliedCoupon,
           pincode,
-          shippingFee,
+          shippingFee: effectiveShippingFee,
           userEmail: currentUser?.email,
           userRole: userRole,
         }),
@@ -432,6 +437,7 @@ export const CheckoutPage: React.FC = () => {
 
       const validatedData = await validateRes.json().catch(() => ({}));
       const verifiedTotal = validatedData.totalAmount !== undefined ? validatedData.totalAmount : grandTotal;
+      const authoritativePercent = Number(validatedData.makerEarningPercent || makerEarningPercent || 65);
 
       // 2. Prepare Customer Address object
       const shippingAddressObj: CustomerAddress = {
@@ -453,20 +459,29 @@ export const CheckoutPage: React.FC = () => {
         saveCustomerAddress(shippingAddressObj).catch(() => {});
       }
 
-      // 3. Snapshot Order Items
+      // 3. Snapshot Order Items with exact 2-decimal maker_share_amount & product UUIDs
+      const round2 = (v: number) => Math.round(v * 100) / 100;
       const orderItemSnapshots: OrderItemSnapshot[] = checkoutItems.map((ci) => ({
         productId: ci.product!.id,
+        productUuid: ci.product!.uuid,
+        uuid: ci.product!.uuid,
+        slug: ci.product!.slug,
         title: ci.product!.title,
         imageUrl: ci.product!.image,
         unitPrice: ci.product!.price,
         quantity: ci.qty,
-        subtotal: ci.subtotal,
+        subtotal: round2(ci.subtotal),
         makerName: ci.product!.maker,
         makerId: ci.product!.makerId,
-        makerEarningPercent: makerEarningPercent,
-        makerShareAmount: Math.round(ci.subtotal * (makerEarningPercent / 100)),
+        makerEarningPercent: authoritativePercent,
+        makerShareAmount: round2(ci.subtotal * (authoritativePercent / 100)),
         productionStatus: 'pending',
       }));
+
+      const calculatedMakerShareAmount =
+        validatedData.makerShareAmount !== undefined
+          ? round2(Number(validatedData.makerShareAmount))
+          : round2(orderItemSnapshots.reduce((s, it) => s + Number(it.makerShareAmount || 0), 0));
 
       const orderNum = `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
       const awb = `NP-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -475,6 +490,7 @@ export const CheckoutPage: React.FC = () => {
       if (verifiedTotal === 0) {
         const freeOrderRecord = await createOrderRecord({
           orderNumber: orderNum,
+          customerId: currentUser?.id,
           customerName: fullName.trim(),
           customerEmail: email.trim(),
           customerPhone: phone.trim(),
@@ -482,7 +498,12 @@ export const CheckoutPage: React.FC = () => {
           amount: 0,
           itemsTotal: itemsSubtotal,
           packagingFee: 0,
+          shippingFee: 0,
           discountAmount: couponDiscount,
+          couponCode: appliedCoupon || undefined,
+          makerEarningPercent: authoritativePercent,
+          makerShareAmount: calculatedMakerShareAmount,
+          makerShares: validatedData.makerShares,
           status: 'awaiting_maker_acceptance',
           paymentStatus: 'paid',
           paymentMethod: 'test_gateway',
@@ -509,6 +530,7 @@ export const CheckoutPage: React.FC = () => {
       // Pre-persist order in database before launching payment gateway to prevent zombie payments
       const initialPrepaidOrder = await createOrderRecord({
         orderNumber: orderNum,
+        customerId: currentUser?.id,
         customerName: fullName.trim(),
         customerEmail: email.trim(),
         customerPhone: phone.trim(),
@@ -516,7 +538,12 @@ export const CheckoutPage: React.FC = () => {
         amount: verifiedTotal,
         itemsTotal: itemsSubtotal,
         packagingFee,
+        shippingFee: effectiveShippingFee,
         discountAmount: couponDiscount,
+        couponCode: appliedCoupon || undefined,
+        makerEarningPercent: authoritativePercent,
+        makerShareAmount: calculatedMakerShareAmount,
+        makerShares: validatedData.makerShares,
         status: 'order_placed',
         paymentStatus: 'pending',
         paymentMethod: 'razorpay',
@@ -536,10 +563,15 @@ export const CheckoutPage: React.FC = () => {
         customerPhone: phone.trim() || '9999999999',
         items: checkoutItems.map((ci) => ({
           id: ci.id,
+          uuid: ci.product?.uuid,
+          productUuid: ci.product?.uuid,
+          slug: ci.product?.slug,
           qty: ci.qty,
           title: ci.product?.title,
           price: ci.product?.price,
           maker: ci.product?.maker,
+          makerId: ci.product?.makerId,
+          imageUrl: ci.product?.image,
           weightKg: ci.product?.weightKg || 0.5,
         })),
         couponCode: appliedCoupon,
@@ -556,7 +588,10 @@ export const CheckoutPage: React.FC = () => {
           const confirmedRecord = await createOrderRecord({
             ...initialPrepaidOrder,
             orderNumber: orderNum,
+            customerId: currentUser?.id,
             paymentStatus: 'paid',
+            paymentGatewayOrderId: payRes.razorpayOrderId,
+            paymentGatewayPaymentId: payRes.razorpayPaymentId,
             status: 'awaiting_maker_acceptance',
             trackingAwb: updatedAwb,
           });

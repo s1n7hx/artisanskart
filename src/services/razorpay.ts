@@ -258,6 +258,13 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
               razorpayPaymentId: simulatedPaymentId,
               razorpaySignature: `sim_sig_${Date.now()}`,
               orderNumber: options.orderNumber,
+              items: options.items,
+              customerName: options.customerName,
+              customerEmail: options.customerEmail,
+              customerPhone: options.customerPhone,
+              amount: options.amount,
+              couponCode: options.couponCode,
+              shippingFee: options.shippingFee,
             }),
           });
 
@@ -339,6 +346,13 @@ export async function initiateRazorpayPayment(options: RazorpayPaymentOptions): 
             razorpayPaymentId: paymentResponse.razorpay_payment_id,
             razorpaySignature: paymentResponse.razorpay_signature,
             orderNumber: options.orderNumber,
+            items: options.items,
+            customerName: options.customerName,
+            customerEmail: options.customerEmail,
+            customerPhone: options.customerPhone,
+            amount: options.amount,
+            couponCode: options.couponCode,
+            shippingFee: options.shippingFee,
           }),
         });
 

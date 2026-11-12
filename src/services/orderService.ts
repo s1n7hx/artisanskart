@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import { OrderStatus } from '../types';
 
 export async function updateOrderStatus(
@@ -10,24 +9,22 @@ export async function updateOrderStatus(
     estimatedDelivery?: string;
   }
 ) {
-  const updateData: any = {
-    status: newStatus,
-    updated_at: new Date().toISOString(),
-  };
+  const res = await fetch('/api/orders/update-status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      orderId,
+      newStatus,
+      actorRole: 'admin',
+      actorName: 'System',
+      trackingAwb: trackingInfo?.trackingAwb,
+      courierName: trackingInfo?.courierName,
+    }),
+  });
 
-  if (trackingInfo) {
-    if (trackingInfo.trackingAwb) updateData.tracking_awb = trackingInfo.trackingAwb;
-    if (trackingInfo.courierName) updateData.courier_name = trackingInfo.courierName;
-    if (trackingInfo.estimatedDelivery) updateData.estimated_delivery = trackingInfo.estimatedDelivery;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.success) {
+    throw new Error(data.error || 'Failed to update order status.');
   }
-
-  const { data, error } = await supabase
-    .from('orders')
-    .update(updateData)
-    .eq('id', orderId)
-    .select()
-    .single();
-
-  if (error) throw error;
-  return data;
+  return data.order;
 }

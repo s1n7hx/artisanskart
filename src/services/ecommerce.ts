@@ -780,14 +780,129 @@ export function saveProductReview(review: ProductReviewItem): void {
   } catch {}
 }
 
+export function mapSupabaseOrderRowToOrder(d: any): Order {
+  const rawAddress =
+    d?.shipping_address && typeof d.shipping_address === 'object' ? { ...d.shipping_address } : {};
+  const meta =
+    rawAddress._orderMeta && typeof rawAddress._orderMeta === 'object' ? rawAddress._orderMeta : {};
+  delete rawAddress._orderMeta;
+
+  const metaItemDetails = Array.isArray(meta.itemDetails) ? meta.itemDetails : [];
+  const rawDbItems = Array.isArray(d?.order_items) ? d.order_items : [];
+
+  const items: OrderItemSnapshot[] =
+    rawDbItems.length > 0
+      ? rawDbItems.map((i: any, idx: number) => {
+          const matchedMeta =
+            metaItemDetails.find(
+              (m: any) =>
+                (m.productUuid && i.product_id && String(m.productUuid) === String(i.product_id)) ||
+                (m.title && (i.product_title || i.title) && String(m.title) === String(i.product_title || i.title))
+            ) || metaItemDetails[idx];
+
+          const uPrice = Number(i.unit_price ?? matchedMeta?.unitPrice ?? 0);
+          const qty = Number(i.quantity ?? matchedMeta?.quantity ?? 1);
+          const sub = Number(i.subtotal ?? uPrice * qty);
+          const pct = Number(i.maker_earning_percent ?? matchedMeta?.makerEarningPercent ?? meta.makerEarningPercent ?? 65);
+
+          return {
+            productId: matchedMeta?.productId ?? i.product_id ?? idx + 1,
+            productUuid: matchedMeta?.productUuid || (typeof i.product_id === 'string' ? i.product_id : undefined),
+            title: i.product_title || i.title || matchedMeta?.title || 'Handcrafted Craft',
+            imageUrl: i.image_url || matchedMeta?.imageUrl || '',
+            unitPrice: uPrice,
+            quantity: qty,
+            subtotal: sub,
+            makerName: i.maker_name || matchedMeta?.makerName || meta.makerName || 'Independent Artisan',
+            makerId: i.maker_id || matchedMeta?.makerId || d?.assigned_maker_id || d?.maker_id || undefined,
+            makerEarningPercent: pct,
+            makerShareAmount: Number(
+              i.maker_share_amount ?? matchedMeta?.makerShareAmount ?? Math.round(sub * (pct / 100) * 100) / 100
+            ),
+            productionStatus: i.production_status || matchedMeta?.productionStatus || 'pending',
+          };
+        })
+      : metaItemDetails;
+
+  const itemsSubtotal = items.reduce((s, item) => s + Number(item.subtotal || 0), 0);
+  const makerEarningPercent = Number(meta.makerEarningPercent || 65);
+  const resolvedMakerShare =
+    d?.maker_share_amount !== undefined && d?.maker_share_amount !== null
+      ? Number(d.maker_share_amount)
+      : meta.makerShareAmount !== undefined && meta.makerShareAmount !== null
+      ? Number(meta.makerShareAmount)
+      : Math.round((Number(meta.itemsTotal ?? itemsSubtotal) * (makerEarningPercent / 100)) * 100) / 100;
+
+  const lifecycleStatus = (meta.lifecycleStatus ||
+    (d?.status === 'pending'
+      ? 'awaiting_maker_acceptance'
+      : d?.status === 'completed'
+      ? 'delivered'
+      : d?.status) ||
+    'awaiting_maker_acceptance') as OrderStatus;
+
+  return {
+    id: d?.id,
+    orderNumber: d?.order_number,
+    customerId: d?.customer_id || undefined,
+    city: rawAddress.city ? `${rawAddress.city}${rawAddress.state ? `, ${rawAddress.state}` : ''}` : 'India',
+    product: items.map((i) => i.title).join(', ') || 'Handmade Creation',
+    qty: items.reduce((s, i) => s + (i.quantity || 1), 0) || 1,
+    deadline:
+      meta.estimatedDelivery ||
+      (d?.estimated_delivery ? new Date(d.estimated_delivery).toLocaleDateString('en-IN') : '3-5 business days'),
+    status: lifecycleStatus,
+    amount: Number(d?.total_amount ?? d?.amount ?? 0),
+    makerShareAmount: resolvedMakerShare,
+    makerEarningPercent,
+    makerShares: Array.isArray(meta.makerShares) ? meta.makerShares : undefined,
+    itemsTotal: Number(d?.items_total ?? meta.itemsTotal ?? itemsSubtotal),
+    packagingFee: Number(meta.packagingFee ?? 0),
+    shippingFee: Number(d?.shipping_fee ?? meta.shippingFee ?? 0),
+    discountAmount: Number(d?.discount_amount ?? meta.discountAmount ?? 0),
+    couponCode: meta.couponCode || undefined,
+    customerName: d?.customer_name || 'Customer',
+    customerEmail: d?.customer_email || undefined,
+    customerPhone: d?.customer_phone || '',
+    shippingAddress: rawAddress,
+    paymentStatus: (d?.payment_status || meta.paymentStatus || (d?.status === 'cancelled' ? 'failed' : 'paid')) as PaymentStatus,
+    paymentMethod: (d?.payment_method || meta.paymentMethod || 'razorpay') as PaymentMethod,
+    paymentGatewayOrderId: d?.payment_gateway_order_id || meta.paymentGatewayOrderId || undefined,
+    paymentGatewayPaymentId: d?.payment_gateway_payment_id || meta.paymentGatewayPaymentId || undefined,
+    trackingAwb: d?.tracking_awb || meta.trackingAwb || undefined,
+    courierName: d?.courier_name || meta.courierName || 'NimbusPost Express Partner',
+    estimatedDelivery: d?.estimated_delivery || meta.estimatedDelivery || undefined,
+    pickupPincode: d?.pickup_pincode || meta.pickupPincode || '110016',
+    confirmedPrepDays: d?.confirmed_prep_days || meta.confirmedPrepDays || undefined,
+    rejectionReason: d?.rejection_reason || meta.rejectionReason || undefined,
+    parcelWeightKg: d?.parcel_weight_kg || meta.parcelWeightKg || undefined,
+    parcelDimensions: d?.parcel_dimensions || meta.parcelDimensions || undefined,
+    statusHistory: Array.isArray(meta.statusHistory) ? meta.statusHistory : [],
+    makerId: d?.assigned_maker_id || d?.maker_id || items[0]?.makerId || undefined,
+    makerName: meta.makerName || items[0]?.makerName || 'Independent Artisan',
+    createdAt: d?.created_at,
+    updatedAt: d?.updated_at,
+    items,
+  };
+}
+
 export async function fetchServerOrders(): Promise<Order[]> {
   try {
-    const res = await fetch('/api/orders');
-    if (res.ok) {
-      const data = await res.json();
-      if (Array.isArray(data.orders)) {
-        saveStoredOrders(data.orders);
-        return data.orders;
+    const sessionRes = await supabase.auth.getSession().catch(() => null);
+    const token = sessionRes?.data?.session?.access_token;
+    if (token) {
+      const res = await fetch('/api/orders', {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.orders)) {
+          saveStoredOrders(data.orders);
+          return data.orders;
+        }
       }
     }
   } catch (err) {
@@ -804,23 +919,31 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
   acceptanceDeadlineDate.setHours(acceptanceDeadlineDate.getHours() + 24);
 
   const fullOrder: Order = {
-    id: Date.now(),
+    id: orderData.id || Date.now(),
     orderNumber,
+    customerId: orderData.customerId,
     city: orderData.shippingAddress ? `${orderData.shippingAddress.city}, ${orderData.shippingAddress.state}` : orderData.city || 'India',
     product: orderData.items && orderData.items.length > 0 ? orderData.items.map((i) => `${i.title} (×${i.quantity})`).join(', ') : orderData.product || 'Handmade Craft',
     qty: orderData.items ? orderData.items.reduce((s, i) => s + i.quantity, 0) : orderData.qty || 1,
     deadline: orderData.deadline || deadlineDate.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
     status: (orderData.status || 'awaiting_maker_acceptance') as OrderStatus,
     amount: orderData.amount || 0,
+    makerShareAmount: orderData.makerShareAmount,
+    makerEarningPercent: orderData.makerEarningPercent,
+    makerShares: orderData.makerShares,
     itemsTotal: orderData.itemsTotal || orderData.amount || 0,
+    packagingFee: orderData.packagingFee || 0,
     shippingFee: orderData.shippingFee || 0,
     discountAmount: orderData.discountAmount || 0,
+    couponCode: orderData.couponCode,
     customerName: orderData.customerName || 'Customer',
     customerEmail: orderData.customerEmail,
     customerPhone: orderData.customerPhone || '',
     shippingAddress: orderData.shippingAddress,
     paymentStatus: (orderData.paymentStatus || 'paid') as PaymentStatus,
     paymentMethod: (orderData.paymentMethod || 'razorpay') as PaymentMethod,
+    paymentGatewayOrderId: orderData.paymentGatewayOrderId,
+    paymentGatewayPaymentId: orderData.paymentGatewayPaymentId,
     trackingAwb: orderData.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
     courierName: orderData.courierName || 'NimbusPost Express Partner',
     createdAt: new Date().toISOString(),
@@ -843,7 +966,7 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     ],
   };
 
-  // 1. Immediately post to central server persistent database
+  // Authoritative persistence via backend service-role endpoint (computes maker_share_amount & inserts orders + order_items)
   try {
     const serverRes = await fetch('/api/orders', {
       method: 'POST',
@@ -861,66 +984,10 @@ export async function createOrderRecord(orderData: Partial<Order>): Promise<Orde
     throw err;
   }
 
-  // 2. Save to local store for instant offline feedback
+  // Save to local cache for instant client navigation after confirmed DB save
   const existing = getStoredOrders();
   const updated = [fullOrder, ...existing.filter((o) => o.orderNumber !== fullOrder.orderNumber)];
   saveStoredOrders(updated);
-
-  // 3. Try inserting into Supabase orders & order_items tables using exact verified schema
-  try {
-    let dbStatus = 'pending';
-    const statusLower = String(fullOrder.status || '').toLowerCase();
-    if (statusLower === 'in_production' || statusLower === 'making') {
-      dbStatus = 'in_production';
-    } else if (statusLower === 'accepted' || statusLower === 'ready' || statusLower === 'ready_for_pickup') {
-      dbStatus = 'accepted';
-    } else if (statusLower === 'completed' || statusLower === 'shipped' || statusLower === 'delivered') {
-      dbStatus = 'completed';
-    } else if (statusLower === 'cancelled' || statusLower === 'rejected' || statusLower === 'maker_rejected') {
-      dbStatus = 'cancelled';
-    }
-
-    const orderPayload = {
-      order_number: fullOrder.orderNumber,
-      customer_name: fullOrder.customerName || 'Artisan Customer',
-      customer_email: fullOrder.customerEmail || '',
-      customer_phone: fullOrder.customerPhone || '9876543210',
-      shipping_address: fullOrder.shippingAddress || {},
-      total_amount: Number(fullOrder.amount || fullOrder.itemsTotal || 0),
-      status: dbStatus,
-      created_at: fullOrder.createdAt || new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data: dbOrder, error: orderErr } = await supabase
-      .from('orders')
-      .upsert(orderPayload, { onConflict: 'order_number' })
-      .select()
-      .maybeSingle();
-
-    if (!orderErr && dbOrder && fullOrder.items && fullOrder.items.length > 0) {
-      await supabase.from('order_items').delete().eq('order_id', dbOrder.id);
-
-      const itemsPayload = fullOrder.items.map((item) => {
-        const pId = Number((item as any).productId || (item as any).id || 1);
-        const uPrice = Number(item.unitPrice || 0);
-        const qty = Number(item.quantity || 1);
-        const sub = Number(item.subtotal || uPrice * qty);
-        return {
-          order_id: dbOrder.id,
-          product_id: pId,
-          product_title: item.title || 'Handcrafted Artisan Craft',
-          unit_price: uPrice,
-          quantity: qty,
-          subtotal: sub,
-        };
-      });
-
-      await supabase.from('order_items').insert(itemsPayload);
-    }
-  } catch (err) {
-    console.warn('Notice saving order to Supabase:', err);
-  }
 
   return fullOrder;
 }
@@ -944,7 +1011,7 @@ export async function updateOrderStatusWithLifecycle(params: {
   courierName?: string;
   trackingAwb?: string;
 }): Promise<{ success: boolean; status: OrderStatus; order?: Order; error?: string }> {
-  const { orderId, orderNumber, currentStatus, newStatus, actorRole, actorName, note, parcelWeightKg, parcelDimensions, rejectionReason, confirmedPrepDays, makerId, courierName, trackingAwb } = params;
+  const { orderId, orderNumber, currentStatus, newStatus, actorRole, actorName, parcelWeightKg, parcelDimensions, rejectionReason, confirmedPrepDays, makerId, courierName, trackingAwb } = params;
 
   try {
     const res = await fetch('/api/orders/update-status', {
@@ -963,10 +1030,13 @@ export async function updateOrderStatusWithLifecycle(params: {
       };
     }
 
-    // Update local storage orders
+    // Update local storage cache from authoritative server response
     const stored = getStoredOrders();
     const updated = stored.map((o) => {
-      if (o.id === Number(orderId) || o.orderNumber === orderNumber) {
+      if (String(o.id) === String(orderId) || (orderNumber && o.orderNumber === orderNumber)) {
+        if (data.order) {
+          return { ...o, ...data.order };
+        }
         const hist = o.statusHistory || [];
         if (data.auditEntry) hist.push(data.auditEntry);
         return {
@@ -987,23 +1057,6 @@ export async function updateOrderStatusWithLifecycle(params: {
       return o;
     });
     saveStoredOrders(updated);
-
-    // Sync to Supabase
-    try {
-      if (orderNumber) {
-        await supabase
-          .from('orders')
-          .update({
-            status: newStatus,
-            rejection_reason: rejectionReason,
-            confirmed_prep_days: confirmedPrepDays,
-            parcel_weight_kg: parcelWeightKg,
-            parcel_dimensions: parcelDimensions,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_number', orderNumber);
-      }
-    } catch {}
 
     return { success: true, status: newStatus, order: data.order };
   } catch (err: any) {

@@ -61,7 +61,10 @@ export interface CustomerAddress {
 }
 
 export interface OrderItemSnapshot {
-  productId: number;
+  productId: number | string;
+  productUuid?: string;
+  uuid?: string;
+  slug?: string;
   title: string;
   imageUrl: string;
   unitPrice: number;
@@ -210,15 +213,27 @@ export interface PincodeIntelligence {
   postOffices?: PostalOfficeRecord[];
 }
 
+export interface MakerShareBreakdownItem {
+  makerId?: string | null;
+  makerName: string;
+  itemsSubtotal: number;
+  makerShareAmount: number;
+  itemCount: number;
+}
+
 export interface Order {
-  id: number;
+  id: number | string;
   orderNumber?: string;
+  customerId?: string;
   city: string;
   product: string; // comma-separated or primary title for backward compat
   qty: number;
   deadline: string;
   status: OrderStatus;
   amount: number;
+  makerShareAmount?: number;
+  makerEarningPercent?: number;
+  makerShares?: MakerShareBreakdownItem[];
   items?: OrderItemSnapshot[];
   customerName?: string;
   customerEmail?: string;
@@ -226,6 +241,8 @@ export interface Order {
   shippingAddress?: CustomerAddress;
   paymentStatus?: PaymentStatus;
   paymentMethod?: PaymentMethod;
+  paymentGatewayOrderId?: string;
+  paymentGatewayPaymentId?: string;
   trackingAwb?: string;
   courierName?: string;
   shipmentId?: string;
@@ -238,6 +255,7 @@ export interface Order {
   shippingFee?: number;
   packagingFee?: number;
   discountAmount?: number;
+  couponCode?: string;
   // Professional maker & shipment fields
   makerId?: string;
   makerName?: string;

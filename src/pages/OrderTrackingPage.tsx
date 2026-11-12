@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Order } from '../types';
 import { OrderTimeline } from '../components/OrderTimeline';
-import { getStoredOrders } from '../services/ecommerce';
+import { getStoredOrders, mapSupabaseOrderRowToOrder } from '../services/ecommerce';
 import { supabase } from '../services/supabase';
 import { useApp } from '../context/AppContext';
 import { SEO } from '../components/SEO';
@@ -65,64 +65,26 @@ export const OrderTrackingPage: React.FC = () => {
           String(o.id) === cleanRef
       );
 
-      // 3. Fetch from Supabase
-      const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
-      let query = supabase
-        .from('orders')
-        .select(`
+      // 3. Fetch from Supabase using verified columns only
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanRef);
+      let query = supabase.from('orders').select(`
           *,
           order_items (*)
         `);
 
-      if (isNum) {
-        query = query.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      if (isUuid) {
+        query = query.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef}`);
       } else {
-        query = query.or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+        query = query.ilike('order_number', cleanRef);
       }
 
-      const { data: dbOrders, error } = await query;
+      const { data: dbOrders } = await query;
 
       if (dbOrders && dbOrders.length > 0) {
-        const d = dbOrders[0];
-        const mappedItems = Array.isArray(d.order_items)
-          ? d.order_items.map((i: any) => ({
-              productId: i.product_id,
-              title: i.title,
-              imageUrl: i.image_url,
-              unitPrice: Number(i.unit_price),
-              quantity: i.quantity,
-              subtotal: Number(i.subtotal),
-              makerName: i.maker_name,
-              makerId: i.maker_id,
-              productionStatus: i.production_status,
-            }))
-          : localMatch?.items || [];
-
-        const mapped: Order = {
-          id: d.id,
-          orderNumber: d.order_number,
-          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-          product: mappedItems.map((i: any) => i.title).join(', ') || 'Handmade Craft',
-          qty: mappedItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
-          deadline: d.estimated_delivery ? new Date(d.estimated_delivery).toLocaleDateString('en-IN') : '3-5 business days',
-          status: d.status,
-          amount: Number(d.total_amount || d.amount || 0),
-          itemsTotal: Number(d.items_total || 0),
-          shippingFee: Number(d.shipping_fee || 0),
-          discountAmount: Number(d.discount_amount || 0),
-          customerName: d.customer_name,
-          customerEmail: d.customer_email,
-          customerPhone: d.customer_phone,
-          shippingAddress: d.shipping_address,
-          paymentStatus: d.payment_status,
-          paymentMethod: d.payment_method,
-          trackingAwb: d.tracking_awb,
-          courierName: d.courier_name || 'NimbusPost Express Partner',
-          estimatedDelivery: d.estimated_delivery,
-          createdAt: d.created_at,
-          items: mappedItems,
-        };
-
+        const mapped = mapSupabaseOrderRowToOrder(dbOrders[0]);
+        if ((!mapped.items || mapped.items.length === 0) && localMatch?.items?.length) {
+          mapped.items = localMatch.items;
+        }
         setSelectedOrder(mapped);
         return;
       }
@@ -132,21 +94,30 @@ export const OrderTrackingPage: React.FC = () => {
         return;
       }
 
-      // 4. Fallback search across all server orders
+      // 4. Fallback search across authenticated server orders
       try {
-        const allRes = await fetch('/api/orders');
-        if (allRes.ok) {
-          const allData = await allRes.json();
-          if (Array.isArray(allData.orders)) {
-            const found = allData.orders.find(
-              (o: Order) =>
-                o.orderNumber?.toLowerCase() === cleanRef.toLowerCase() ||
-                String(o.trackingAwb || '').toLowerCase() === cleanRef.toLowerCase() ||
-                String(o.id) === cleanRef
-            );
-            if (found) {
-              setSelectedOrder(found);
-              return;
+        const sessionRes = await supabase.auth.getSession().catch(() => null);
+        const token = sessionRes?.data?.session?.access_token;
+        if (token) {
+          const allRes = await fetch('/api/orders', {
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          if (allRes.ok) {
+            const allData = await allRes.json();
+            if (Array.isArray(allData.orders)) {
+              const found = allData.orders.find(
+                (o: Order) =>
+                  o.orderNumber?.toLowerCase() === cleanRef.toLowerCase() ||
+                  String(o.trackingAwb || '').toLowerCase() === cleanRef.toLowerCase() ||
+                  String(o.id) === cleanRef
+              );
+              if (found) {
+                setSelectedOrder(found);
+                return;
+              }
             }
           }
         }
@@ -179,43 +150,57 @@ export const OrderTrackingPage: React.FC = () => {
     }
   }, [paramOrderNumber]);
 
-  // Load list of user's past orders
+  // Load list of user's past orders persistently across refreshes
   useEffect(() => {
     const local = getStoredOrders();
     setUserOrders(local);
 
-    if (currentUser?.id) {
-      supabase
-        .from('orders')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            const mappedList: Order[] = data.map((d: any) => ({
-              id: d.id,
-              orderNumber: d.order_number,
-              city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-              product: d.customer_name ? `Craft order for ${d.customer_name}` : 'Handcrafted item',
-              qty: 1,
-              deadline: '3-5 days',
-              status: d.status,
-              amount: Number(d.total_amount),
-              itemsTotal: Number(d.items_total || d.total_amount),
-              shippingFee: Number(d.shipping_fee || 0),
-              discountAmount: Number(d.discount_amount || 0),
-              customerName: d.customer_name,
-              paymentStatus: d.payment_status,
-              paymentMethod: d.payment_method,
-              trackingAwb: d.tracking_awb,
-              courierName: d.courier_name,
-              createdAt: d.created_at,
-            }));
-            setUserOrders(mappedList);
+    if (currentUser?.id || currentUser?.email) {
+      supabase.auth
+        .getSession()
+        .then(async (sessionRes) => {
+          const token = sessionRes?.data?.session?.access_token;
+          if (token) {
+            try {
+              const serverRes = await fetch('/api/orders', {
+                headers: {
+                  Accept: 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+              });
+              if (serverRes.ok) {
+                const serverData = await serverRes.json();
+                if (Array.isArray(serverData.orders) && serverData.orders.length > 0) {
+                  setUserOrders(serverData.orders);
+                  return;
+                }
+              }
+            } catch {}
           }
-        });
+
+          let userQuery = supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .order('created_at', { ascending: false });
+
+          if (currentUser.id && currentUser.email) {
+            userQuery = userQuery.or(
+              `customer_id.eq.${currentUser.id},customer_email.ilike.${currentUser.email}`
+            );
+          } else if (currentUser.id) {
+            userQuery = userQuery.eq('customer_id', currentUser.id);
+          } else if (currentUser.email) {
+            userQuery = userQuery.ilike('customer_email', currentUser.email);
+          }
+
+          const { data } = await userQuery;
+          if (data && data.length > 0) {
+            setUserOrders(data.map((d: any) => mapSupabaseOrderRowToOrder(d)));
+          }
+        })
+        .catch(() => {});
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.email]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

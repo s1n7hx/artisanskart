@@ -58,7 +58,7 @@ export const MakerPortalPage: React.FC = () => {
 
   const [orderFilterTab, setOrderFilterTab] = useState<'all' | 'awaiting' | 'production' | 'completed'>('all');
 
-  // Filter orders assigned to this maker, awaiting studio acceptance, or all studio orders
+  // Filter orders assigned to this maker, containing this maker's crafted items, or unassigned awaiting acceptance
   const makerOrders = useMemo(() => {
     const currentName = (currentUser?.name || '').trim().toLowerCase();
     const currentId = currentUser?.id;
@@ -69,18 +69,14 @@ export const MakerPortalPage: React.FC = () => {
     }
 
     return orders.filter((o) => {
-      // 1. Any order awaiting acceptance is open for any artisan in the collective to claim
-      if (
-        o.status === 'awaiting_maker_acceptance' ||
-        o.status === 'new' ||
-        o.status === 'order_placed' ||
-        o.status === 'pending'
-      ) {
-        return true;
-      }
-      // 2. Orders accepted by or crafted by this maker
+      // 1. Orders explicitly assigned to this maker
       if (currentId && o.makerId === currentId) return true;
       if (currentName && o.makerName?.toLowerCase().includes(currentName)) return true;
+
+      // 2. Multi-maker or product-matched orders containing this maker's items
+      if (currentId && Array.isArray(o.makerShares) && o.makerShares.some((m) => m.makerId === currentId)) {
+        return true;
+      }
       if (o.items && Array.isArray(o.items)) {
         if (
           o.items.some(
@@ -92,8 +88,18 @@ export const MakerPortalPage: React.FC = () => {
           return true;
         }
       }
-      // 3. Collective Studio: Allow verified makers to view studio workflow
-      return true;
+
+      // 3. Unassigned orders awaiting studio acceptance can be claimed by verified makers
+      const isAwaiting =
+        o.status === 'awaiting_maker_acceptance' ||
+        o.status === 'new' ||
+        o.status === 'order_placed' ||
+        o.status === 'pending';
+      if (isAwaiting && !o.makerId) {
+        return true;
+      }
+
+      return false;
     });
   }, [orders, currentUser, userRole]);
 
@@ -119,11 +125,27 @@ export const MakerPortalPage: React.FC = () => {
 
   const formatINR = (n: number) => '₹' + Math.round(n).toLocaleString('en-IN');
 
+  const getOrderMakerShare = (o: Order): number => {
+    const currentId = currentUser?.id;
+    if (currentId && Array.isArray(o.makerShares)) {
+      const myShare = o.makerShares.find((m) => m.makerId === currentId);
+      if (myShare && Number.isFinite(myShare.makerShareAmount)) {
+        return myShare.makerShareAmount;
+      }
+    }
+    if (typeof o.makerShareAmount === 'number' && Number.isFinite(o.makerShareAmount)) {
+      return o.makerShareAmount;
+    }
+    const baseCraftValue = o.itemsTotal && o.itemsTotal > 0 ? o.itemsTotal : o.amount;
+    const pct = o.makerEarningPercent || makerEarningPercent;
+    return Math.round(baseCraftValue * (pct / 100) * 100) / 100;
+  };
+
   const completed = makerOrders.filter((o) => o.status === 'completed' || o.status === 'delivered');
   const activeOrders = makerOrders.filter((o) => o.status !== 'completed' && o.status !== 'delivered' && o.status !== 'cancelled' && o.status !== 'maker_rejected');
   const awaitingAcceptance = makerOrders.filter((o) => o.status === 'awaiting_maker_acceptance' || o.status === 'new' || o.status === 'order_placed');
-  const totalEarnings = completed.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
-  const pendingEarnings = activeOrders.reduce((s, o) => s + o.amount * (makerEarningPercent / 100), 0);
+  const totalEarnings = completed.reduce((s, o) => s + getOrderMakerShare(o), 0);
+  const pendingEarnings = activeOrders.reduce((s, o) => s + getOrderMakerShare(o), 0);
 
   const displayedOrders = useMemo(() => {
     if (orderFilterTab === 'awaiting') {
@@ -425,7 +447,7 @@ export const MakerPortalPage: React.FC = () => {
                           Qty: {order.qty} items • Total: {formatINR(order.amount)}
                         </p>
                         <p className="text-[#C85A32] font-semibold">
-                          Your Studio Share: {formatINR(order.amount * (makerEarningPercent / 100))}
+                          Your Studio Share: {formatINR(getOrderMakerShare(order))}
                         </p>
                       </div>
 

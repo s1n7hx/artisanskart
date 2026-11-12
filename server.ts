@@ -1,10 +1,10 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   getNimbusPostToken,
   checkCourierServiceability,
@@ -32,14 +32,47 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://xhzphnfzuutduztukiln.supabase.co';
 const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoenBobmZ6dXV0ZHV6dHVraWxuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4ODA1NzIsImV4cCI6MjEwNDQ1NjU3Mn0.EdDl2tf6HQmMDpTqReBs0tb_9E1JJMTTDmU8oyG9qXk';
+const PUBLIC_ANON_KEY = (process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY).trim();
+const RAW_SERVICE_ROLE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
-const supabaseAdmin = createClient(
-  process.env.VITE_SUPABASE_URL || 'https://xhzphnfzuutduztukiln.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY && process.env.SUPABASE_SERVICE_ROLE_KEY !== 'placeholder-key'
-    ? process.env.SUPABASE_SERVICE_ROLE_KEY
-    : (process.env.VITE_SUPABASE_ANON_KEY || DEFAULT_ANON_KEY)
+export const hasServiceRoleKey = Boolean(
+  RAW_SERVICE_ROLE_KEY &&
+  RAW_SERVICE_ROLE_KEY !== 'placeholder-key' &&
+  RAW_SERVICE_ROLE_KEY !== 'your-supabase-service-role-key' &&
+  RAW_SERVICE_ROLE_KEY !== PUBLIC_ANON_KEY
 );
+
+const supabasePublic: SupabaseClient = createClient(SUPABASE_URL, PUBLIC_ANON_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+const supabaseServiceClient: SupabaseClient | null = hasServiceRoleKey
+  ? createClient(SUPABASE_URL, RAW_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : null;
+
+export function requireSupabaseAdmin(): SupabaseClient {
+  if (!supabaseServiceClient) {
+    throw new Error(
+      'Server configuration error: SUPABASE_SERVICE_ROLE_KEY is missing. Privileged server database operations require a valid Supabase service role key.'
+    );
+  }
+  return supabaseServiceClient;
+}
+
+const supabaseReadClient: SupabaseClient = supabaseServiceClient || supabasePublic;
+
+// Keep supabaseAdmin strictly backed by SUPABASE_SERVICE_ROLE_KEY (never silently falls back to anon key)
+const supabaseAdmin: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = requireSupabaseAdmin() as any;
+    const val = client[prop];
+    return typeof val === 'function' ? val.bind(client) : val;
+  },
+});
 
 // Body parsing with raw buffer capture for cryptographic webhook signature verification
 app.use(
@@ -116,7 +149,7 @@ app.get('/sitemap.xml', async (_req: Request, res: Response) => {
     // Fetch dynamic products from Supabase
     let productPages: Array<{ loc: string; priority: string; changefreq: string; lastmod?: string }> = [];
     try {
-      const { data: dbProducts } = await supabaseAdmin
+      const { data: dbProducts } = await supabaseReadClient
         .from('products')
         .select('id, title, slug, updated_at, created_at')
         .order('created_at', { ascending: false });
@@ -175,14 +208,14 @@ async function getAuthenticatedUser(req: Request) {
     throw new Error('Unauthorized');
   }
   const token = authHeader.split(' ')[1];
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+  const { data: { user }, error } = await supabaseReadClient.auth.getUser(token);
   if (error || !user) throw new Error('Unauthorized');
-  
-  const { data: profile } = await supabaseAdmin
+
+  const { data: profile } = await supabaseReadClient
     .from('profiles')
     .select('role, email')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   return { user, profile };
 }
@@ -280,235 +313,675 @@ function saveOrdersToDisk(orders: any[]): void {
 
 let SERVER_ORDERS: any[] = loadOrdersFromDisk();
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUuid(val: any): val is string {
+  return typeof val === 'string' && UUID_REGEX.test(val.trim());
+}
+
+function computeStableProductHash(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function roundCurrency(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+export function mapLifecycleStatusToDbEnum(status: string): 'pending' | 'accepted' | 'in_production' | 'completed' | 'cancelled' {
+  const statusLower = String(status || '').trim().toLowerCase();
+  if (statusLower === 'accepted') {
+    return 'accepted';
+  }
+  if (
+    statusLower === 'in_production' ||
+    statusLower === 'making' ||
+    statusLower === 'quality_check' ||
+    statusLower === 'ready_to_pack' ||
+    statusLower === 'ready' ||
+    statusLower === 'ready_for_pickup' ||
+    statusLower === 'packed' ||
+    statusLower === 'ready_to_ship' ||
+    statusLower === 'shipment_booked' ||
+    statusLower === 'picked_up' ||
+    statusLower === 'in_transit' ||
+    statusLower === 'out_for_delivery'
+  ) {
+    return 'in_production';
+  }
+  if (statusLower === 'completed' || statusLower === 'shipped' || statusLower === 'delivered') {
+    return 'completed';
+  }
+  if (
+    statusLower === 'cancelled' ||
+    statusLower === 'rejected' ||
+    statusLower === 'maker_rejected' ||
+    statusLower === 'acceptance_timed_out' ||
+    statusLower === 'payment_failed'
+  ) {
+    return 'cancelled';
+  }
+  return 'pending';
+}
+
+let cachedCommissionPercent: { value: number; fetchedAt: number } | null = null;
+
+export async function getAuthoritativeMakerCommissionPercent(): Promise<number> {
+  if (cachedCommissionPercent && Date.now() - cachedCommissionPercent.fetchedAt < 30_000) {
+    return cachedCommissionPercent.value;
+  }
+  try {
+    const client = supabaseServiceClient || supabasePublic;
+    const { data, error } = await client
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'platform_settings')
+      .maybeSingle();
+
+    const pct = Number(data?.value?.makerEarningPercent);
+    if (!error && Number.isFinite(pct) && pct > 0 && pct <= 95) {
+      cachedCommissionPercent = { value: pct, fetchedAt: Date.now() };
+      return pct;
+    }
+  } catch (err: any) {
+    console.warn('[Commission Settings Warning]: Using baseline platform_settings rate:', err.message);
+  }
+  return cachedCommissionPercent?.value || 65;
+}
+
+interface ResolvedOrderItem {
+  productId: number | string;
+  productUuid: string | null;
+  slug: string | null;
+  title: string;
+  imageUrl: string;
+  unitPrice: number;
+  quantity: number;
+  subtotal: number;
+  makerId: string | null;
+  makerName: string;
+  makerEarningPercent: number;
+  makerShareAmount: number;
+  productionStatus: string;
+}
+
+interface MakerShareSummary {
+  makerId: string | null;
+  makerName: string;
+  itemsSubtotal: number;
+  makerShareAmount: number;
+  itemCount: number;
+}
+
+async function fetchCatalogProductsForOrder(): Promise<any[]> {
+  try {
+    const client = supabaseServiceClient || supabasePublic;
+    const { data, error } = await client
+      .from('products')
+      .select('id, title, slug, price, maker_id, maker_name, maker_school, image_url, stock_status');
+    if (!error && Array.isArray(data)) {
+      return data;
+    }
+  } catch {}
+  return [];
+}
+
+async function resolveMakerIdFromName(makerName: string, dbProducts: any[]): Promise<string | null> {
+  const cleanName = String(makerName || '').trim().toLowerCase();
+  if (!cleanName || cleanName === 'independent artisan' || cleanName === 'independent maker') return null;
+
+  // 1. Check other products with same maker_name that have a maker_id UUID
+  const prodMatch = dbProducts.find(
+    (p) => isValidUuid(p.maker_id) && String(p.maker_name || '').trim().toLowerCase() === cleanName
+  );
+  if (prodMatch?.maker_id) return prodMatch.maker_id;
+
+  // 2. Check profiles by full_name or email prefix
+  try {
+    const client = supabaseServiceClient || supabasePublic;
+    const { data: profiles } = await client
+      .from('profiles')
+      .select('id, full_name, email, role');
+    if (Array.isArray(profiles)) {
+      const matched = profiles.find(
+        (prof: any) =>
+          isValidUuid(prof.id) &&
+          (String(prof.full_name || '').trim().toLowerCase() === cleanName ||
+            String(prof.email || '').split('@')[0].trim().toLowerCase() === cleanName)
+      );
+      if (matched?.id) return matched.id;
+    }
+  } catch {}
+  return null;
+}
+
+export async function resolveOrderItemsAndCommission(
+  rawItems: any[],
+  fallbackItemsTotal?: number
+): Promise<{
+  makerEarningPercent: number;
+  items: ResolvedOrderItem[];
+  itemsTotal: number;
+  makerShareAmount: number;
+  makerShares: MakerShareSummary[];
+  primaryMakerId: string | null;
+  primaryMakerName: string;
+}> {
+  const makerEarningPercent = await getAuthoritativeMakerCommissionPercent();
+  const dbProducts = await fetchCatalogProductsForOrder();
+  const resolvedItems: ResolvedOrderItem[] = [];
+
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    for (const item of rawItems) {
+      const candidateUuid = [item.productUuid, item.uuid, item.product_uuid, item.productId, item.id].find((v) =>
+        isValidUuid(v)
+      );
+      const rawSlug = String(item.slug || '').trim().toLowerCase();
+      const rawTitle = String(item.title || item.product_title || '').trim().toLowerCase();
+      const rawNumId = Number(item.productId || item.id);
+
+      let dbProd: any = null;
+      if (candidateUuid) {
+        dbProd = dbProducts.find((p) => String(p.id).toLowerCase() === candidateUuid.toLowerCase()) || null;
+      }
+      if (!dbProd && rawSlug) {
+        dbProd = dbProducts.find((p) => String(p.slug || '').trim().toLowerCase() === rawSlug) || null;
+      }
+      if (!dbProd && Number.isFinite(rawNumId) && rawNumId > 0) {
+        dbProd = dbProducts.find((p) => computeStableProductHash(String(p.id)) === rawNumId) || null;
+      }
+      if (!dbProd && rawTitle) {
+        dbProd = dbProducts.find((p) => String(p.title || '').trim().toLowerCase() === rawTitle) || null;
+      }
+
+      const staticFallback = Number.isFinite(rawNumId) ? SERVER_PRODUCT_CATALOG[rawNumId] : undefined;
+
+      const qty = Math.max(1, Math.floor(Number(item.quantity || item.qty || 1)));
+      const resolvedPriceRaw = dbProd
+        ? Number(dbProd.price)
+        : item.unitPrice !== undefined
+        ? Number(item.unitPrice)
+        : item.price !== undefined
+        ? Number(item.price)
+        : staticFallback
+        ? Number(staticFallback.price)
+        : 0;
+      const unitPrice = Number.isFinite(resolvedPriceRaw) && resolvedPriceRaw >= 0 ? roundCurrency(resolvedPriceRaw) : 0;
+      const subtotal = roundCurrency(unitPrice * qty);
+      const itemMakerShare = roundCurrency(subtotal * (makerEarningPercent / 100));
+
+      const makerName = String(
+        dbProd?.maker_name || item.makerName || item.maker || staticFallback?.maker || 'Independent Artisan'
+      ).trim();
+
+      let makerId: string | null = isValidUuid(dbProd?.maker_id)
+        ? dbProd.maker_id
+        : isValidUuid(item.makerId)
+        ? item.makerId
+        : null;
+
+      if (!makerId && makerName) {
+        makerId = await resolveMakerIdFromName(makerName, dbProducts);
+      }
+
+      resolvedItems.push({
+        productId: Number.isFinite(rawNumId) && rawNumId > 0 ? rawNumId : dbProd ? computeStableProductHash(dbProd.id) : 0,
+        productUuid: dbProd?.id || candidateUuid || null,
+        slug: dbProd?.slug || item.slug || null,
+        title: String(dbProd?.title || item.title || item.product_title || staticFallback?.title || 'Handcrafted Artisan Craft'),
+        imageUrl: String(dbProd?.image_url || item.imageUrl || item.image || ''),
+        unitPrice,
+        quantity: qty,
+        subtotal,
+        makerId,
+        makerName,
+        makerEarningPercent,
+        makerShareAmount: itemMakerShare,
+        productionStatus: String(item.productionStatus || 'pending'),
+      });
+    }
+  }
+
+  const computedItemsTotal = roundCurrency(resolvedItems.reduce((sum, i) => sum + i.subtotal, 0));
+  const itemsTotal = resolvedItems.length > 0 ? computedItemsTotal : roundCurrency(Number(fallbackItemsTotal || 0));
+  const totalMakerShareAmount =
+    resolvedItems.length > 0
+      ? roundCurrency(resolvedItems.reduce((sum, i) => sum + i.makerShareAmount, 0))
+      : roundCurrency(itemsTotal * (makerEarningPercent / 100));
+
+  // Group per-maker shares accurately for single & multi-maker orders
+  const makerMap = new Map<string, MakerShareSummary>();
+  for (const it of resolvedItems) {
+    const key = it.makerId || `name:${it.makerName.toLowerCase()}`;
+    const existing = makerMap.get(key);
+    if (existing) {
+      existing.itemsSubtotal = roundCurrency(existing.itemsSubtotal + it.subtotal);
+      existing.makerShareAmount = roundCurrency(existing.makerShareAmount + it.makerShareAmount);
+      existing.itemCount += it.quantity;
+    } else {
+      makerMap.set(key, {
+        makerId: it.makerId,
+        makerName: it.makerName,
+        itemsSubtotal: it.subtotal,
+        makerShareAmount: it.makerShareAmount,
+        itemCount: it.quantity,
+      });
+    }
+  }
+  const makerShares = Array.from(makerMap.values()).sort((a, b) => b.makerShareAmount - a.makerShareAmount);
+  const topWithUuid = makerShares.find((m) => isValidUuid(m.makerId));
+  const primaryMakerId = topWithUuid?.makerId || null;
+  const primaryMakerName = topWithUuid?.makerName || makerShares[0]?.makerName || 'Independent Artisan';
+
+  return {
+    makerEarningPercent,
+    items: resolvedItems,
+    itemsTotal,
+    makerShareAmount: totalMakerShareAmount,
+    makerShares,
+    primaryMakerId,
+    primaryMakerName,
+  };
+}
+
+function hydrateOrderFromDbRow(d: any): any {
+  if (!d) return null;
+  const rawAddr = d.shipping_address && typeof d.shipping_address === 'object' ? { ...d.shipping_address } : {};
+  const meta = rawAddr._orderMeta && typeof rawAddr._orderMeta === 'object' ? rawAddr._orderMeta : {};
+  const cleanShippingAddress = { ...rawAddr };
+  delete cleanShippingAddress._orderMeta;
+
+  const metaItemDetails: any[] = Array.isArray(meta.itemDetails) ? meta.itemDetails : [];
+  const dbOrderItems: any[] = Array.isArray(d.order_items) ? d.order_items : [];
+
+  const items =
+    dbOrderItems.length > 0
+      ? dbOrderItems.map((i: any, idx: number) => {
+          const matchedMeta =
+            metaItemDetails.find(
+              (m) =>
+                (m.productUuid && i.product_id && String(m.productUuid).toLowerCase() === String(i.product_id).toLowerCase()) ||
+                String(m.title || '').trim().toLowerCase() === String(i.product_title || i.title || '').trim().toLowerCase()
+            ) || metaItemDetails[idx];
+
+          const uPrice = Number(i.unit_price || matchedMeta?.unitPrice || 0);
+          const qty = Number(i.quantity || matchedMeta?.quantity || 1);
+          const sub = Number(i.subtotal || uPrice * qty);
+
+          return {
+            productId: matchedMeta?.productId || (isValidUuid(i.product_id) ? computeStableProductHash(i.product_id) : i.product_id),
+            productUuid: isValidUuid(i.product_id) ? i.product_id : matchedMeta?.productUuid || undefined,
+            title: i.product_title || i.title || matchedMeta?.title || 'Handcrafted Artisan Craft',
+            imageUrl: i.image_url || matchedMeta?.imageUrl || '',
+            unitPrice: uPrice,
+            quantity: qty,
+            subtotal: sub,
+            makerName: i.maker_name || matchedMeta?.makerName || meta.makerName || 'Independent Artisan',
+            makerId: i.maker_id || matchedMeta?.makerId || d.assigned_maker_id || undefined,
+            makerEarningPercent: Number(i.maker_earning_percent || matchedMeta?.makerEarningPercent || meta.makerEarningPercent || 65),
+            makerShareAmount: Number(
+              i.maker_share_amount ?? matchedMeta?.makerShareAmount ?? roundCurrency(sub * ((meta.makerEarningPercent || 65) / 100))
+            ),
+            productionStatus: i.production_status || matchedMeta?.productionStatus || 'pending',
+          };
+        })
+      : metaItemDetails;
+
+  const lifecycleStatus =
+    meta.lifecycleStatus ||
+    (d.status === 'pending'
+      ? 'awaiting_maker_acceptance'
+      : d.status === 'completed'
+      ? 'delivered'
+      : d.status) ||
+    'awaiting_maker_acceptance';
+
+  return {
+    id: d.id,
+    orderNumber: d.order_number,
+    customerId: d.customer_id || undefined,
+    city: cleanShippingAddress.city ? `${cleanShippingAddress.city}${cleanShippingAddress.state ? `, ${cleanShippingAddress.state}` : ''}` : 'India',
+    product: items.map((i: any) => i.title).join(', ') || 'Handmade Creation',
+    qty: items.reduce((s: number, i: any) => s + (i.quantity || 1), 0) || 1,
+    deadline: meta.estimatedDelivery || '3-5 business days',
+    status: lifecycleStatus,
+    dbStatus: d.status,
+    amount: Number(d.total_amount ?? 0),
+    makerShareAmount: Number(d.maker_share_amount ?? meta.makerShareAmount ?? 0),
+    makerEarningPercent: Number(meta.makerEarningPercent || 65),
+    makerShares: Array.isArray(meta.makerShares) ? meta.makerShares : undefined,
+    itemsTotal: Number(meta.itemsTotal ?? items.reduce((s: number, i: any) => s + Number(i.subtotal || 0), 0)),
+    packagingFee: Number(meta.packagingFee ?? 0),
+    shippingFee: Number(meta.shippingFee ?? 0),
+    discountAmount: Number(meta.discountAmount ?? 0),
+    couponCode: meta.couponCode || undefined,
+    customerName: d.customer_name,
+    customerEmail: d.customer_email,
+    customerPhone: d.customer_phone,
+    shippingAddress: cleanShippingAddress,
+    paymentStatus: meta.paymentStatus || (d.status === 'cancelled' ? 'failed' : 'pending'),
+    paymentMethod: meta.paymentMethod || 'razorpay',
+    paymentGatewayOrderId: meta.paymentGatewayOrderId || undefined,
+    paymentGatewayPaymentId: meta.paymentGatewayPaymentId || undefined,
+    trackingAwb: meta.trackingAwb || undefined,
+    courierName: meta.courierName || 'NimbusPost Express Partner',
+    pickupPincode: meta.pickupPincode || '110016',
+    confirmedPrepDays: meta.confirmedPrepDays || undefined,
+    rejectionReason: meta.rejectionReason || undefined,
+    parcelWeightKg: meta.parcelWeightKg || undefined,
+    parcelDimensions: meta.parcelDimensions || undefined,
+    statusHistory: Array.isArray(meta.statusHistory) ? meta.statusHistory : [],
+    makerId: d.assigned_maker_id || items[0]?.makerId || undefined,
+    makerName: meta.makerName || items[0]?.makerName || 'Independent Artisan',
+    createdAt: d.created_at,
+    updatedAt: d.updated_at,
+    items,
+  };
+}
+
+export async function fetchOrderFromDbByRef(ref: string): Promise<any | null> {
+  const cleanRef = String(ref || '').trim();
+  if (!cleanRef || !supabaseServiceClient) return null;
+
+  try {
+    // 1. Exact order_number match (case-insensitive)
+    const { data: byNum } = await supabaseServiceClient
+      .from('orders')
+      .select('*, order_items(*)')
+      .ilike('order_number', cleanRef)
+      .maybeSingle();
+    if (byNum) return hydrateOrderFromDbRow(byNum);
+
+    // 2. UUID id match
+    if (isValidUuid(cleanRef)) {
+      const { data: byId } = await supabaseServiceClient
+        .from('orders')
+        .select('*, order_items(*)')
+        .eq('id', cleanRef)
+        .maybeSingle();
+      if (byId) return hydrateOrderFromDbRow(byId);
+    }
+
+    // 3. Fallback search by Razorpay gateway order ID or NimbusPost AWB inside shipping_address._orderMeta
+    const { data: recentOrders } = await supabaseServiceClient
+      .from('orders')
+      .select('*, order_items(*)')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (Array.isArray(recentOrders)) {
+      const lowerRef = cleanRef.toLowerCase();
+      const matched = recentOrders.find((row: any) => {
+        const meta = row.shipping_address?._orderMeta || {};
+        return (
+          String(row.order_number || '').toLowerCase() === lowerRef ||
+          String(meta.paymentGatewayOrderId || '').toLowerCase() === lowerRef ||
+          String(meta.paymentGatewayPaymentId || '').toLowerCase() === lowerRef ||
+          String(meta.trackingAwb || '').toLowerCase() === lowerRef
+        );
+      });
+      if (matched) return hydrateOrderFromDbRow(matched);
+    }
+  } catch (err: any) {
+    console.warn('[fetchOrderFromDbByRef Warning]:', err.message);
+  }
+  return null;
+}
+
 export async function persistOrderRecord(fullOrder: any): Promise<any> {
   if (!fullOrder || (!fullOrder.orderNumber && !fullOrder.id)) return fullOrder;
 
-  const orderNumber = fullOrder.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-  const cleanOrder = {
+  const adminDb = requireSupabaseAdmin();
+  const orderNumber = String(fullOrder.orderNumber || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`).trim();
+
+  // Merge existing DB or memory state so partial status/payment updates never clobber customer/items/share fields
+  const existingMem = SERVER_ORDERS.find(
+    (o) => String(o.orderNumber || '').toLowerCase() === orderNumber.toLowerCase() || String(o.id) === String(fullOrder.id)
+  );
+  const existingDb = await fetchOrderFromDbByRef(orderNumber);
+  const baseOrder = { ...(existingDb || {}), ...(existingMem || {}) };
+
+  const mergedInput = {
+    ...baseOrder,
     ...fullOrder,
-    id: fullOrder.id || Date.now(),
     orderNumber,
-    status: fullOrder.status || 'awaiting_maker_acceptance',
-    paymentStatus: fullOrder.paymentStatus || 'paid',
-    paymentMethod: fullOrder.paymentMethod || 'razorpay',
-    trackingAwb: fullOrder.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
-    courierName: fullOrder.courierName || 'NimbusPost Express Partner',
-    createdAt: fullOrder.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    items: Array.isArray(fullOrder.items) && fullOrder.items.length > 0 ? fullOrder.items : baseOrder.items || [],
+    shippingAddress:
+      fullOrder.shippingAddress && Object.keys(fullOrder.shippingAddress).length > 0
+        ? fullOrder.shippingAddress
+        : baseOrder.shippingAddress || {},
+    statusHistory:
+      Array.isArray(fullOrder.statusHistory) && fullOrder.statusHistory.length > 0
+        ? fullOrder.statusHistory
+        : baseOrder.statusHistory || [],
   };
 
-  // 1. Save to in-memory & disk storage SERVER_ORDERS
+  // Resolve product UUIDs, authoritative prices, maker IDs, and exact maker_share_amount
+  const breakdown = await resolveOrderItemsAndCommission(
+    mergedInput.items,
+    mergedInput.itemsTotal ?? mergedInput.amount ?? mergedInput.totalAmount
+  );
+
+  // Determine assigned_maker_id strictly (prefer explicit valid UUID -> product's makerId -> existing DB makerId)
+  const resolvedMakerId = isValidUuid(fullOrder.makerId || fullOrder.assignedMakerId)
+    ? String(fullOrder.makerId || fullOrder.assignedMakerId).trim()
+    : breakdown.primaryMakerId || (isValidUuid(baseOrder.makerId) ? baseOrder.makerId : null);
+
+  const resolvedCustomerId = isValidUuid(mergedInput.customerId || mergedInput.userId)
+    ? String(mergedInput.customerId || mergedInput.userId).trim()
+    : null;
+
+  const cleanTotalAmount = roundCurrency(
+    Number(
+      mergedInput.amount ??
+        mergedInput.totalAmount ??
+        Math.max(
+          0,
+          breakdown.itemsTotal +
+            Number(mergedInput.packagingFee || 0) +
+            Number(mergedInput.shippingFee || 0) -
+            Number(mergedInput.discountAmount || 0)
+        )
+    )
+  );
+
+  // Guarantee maker_share_amount is NEVER null, NaN, or missing
+  const computedMakerShare = Number.isFinite(breakdown.makerShareAmount)
+    ? breakdown.makerShareAmount
+    : roundCurrency(breakdown.itemsTotal * (breakdown.makerEarningPercent / 100));
+
+  const lifecycleStatus = mergedInput.status || 'awaiting_maker_acceptance';
+  const dbStatus = mapLifecycleStatusToDbEnum(lifecycleStatus);
+
+  const rawAddress = { ...(mergedInput.shippingAddress || {}) };
+  delete rawAddress._orderMeta;
+
+  const orderMeta = {
+    lifecycleStatus,
+    paymentStatus: mergedInput.paymentStatus || 'pending',
+    paymentMethod: mergedInput.paymentMethod || 'razorpay',
+    paymentGatewayOrderId: mergedInput.paymentGatewayOrderId || null,
+    paymentGatewayPaymentId: mergedInput.paymentGatewayPaymentId || null,
+    trackingAwb: mergedInput.trackingAwb || `NP-${Math.floor(100000 + Math.random() * 900000)}`,
+    courierName: mergedInput.courierName || 'NimbusPost Express Partner',
+    itemsTotal: breakdown.itemsTotal,
+    packagingFee: Number(mergedInput.packagingFee || 0),
+    shippingFee: Number(mergedInput.shippingFee || 0),
+    discountAmount: Number(mergedInput.discountAmount || 0),
+    couponCode: mergedInput.couponCode || null,
+    makerEarningPercent: breakdown.makerEarningPercent,
+    makerShareAmount: computedMakerShare,
+    makerName: breakdown.primaryMakerName || mergedInput.makerName || 'Independent Artisan',
+    makerShares: breakdown.makerShares,
+    itemDetails: breakdown.items,
+    pickupPincode: mergedInput.pickupPincode || '110016',
+    confirmedPrepDays: mergedInput.confirmedPrepDays || null,
+    rejectionReason: mergedInput.rejectionReason || null,
+    parcelWeightKg: mergedInput.parcelWeightKg || null,
+    parcelDimensions: mergedInput.parcelDimensions || null,
+    statusHistory: Array.isArray(mergedInput.statusHistory) ? mergedInput.statusHistory.slice(-30) : [],
+  };
+
+  const shippingAddressWithMeta = {
+    ...rawAddress,
+    _orderMeta: orderMeta,
+  };
+
+  const nowIso = new Date().toISOString();
+  const createdAtIso = mergedInput.createdAt || nowIso;
+
+  const orderRowPayload: Record<string, any> = {
+    order_number: orderNumber,
+    customer_id: resolvedCustomerId,
+    customer_name: String(mergedInput.customerName || rawAddress.fullName || 'Artisan Customer').trim(),
+    customer_email: String(mergedInput.customerEmail || '').trim(),
+    customer_phone: String(mergedInput.customerPhone || rawAddress.phone || '9876543210').trim(),
+    shipping_address: shippingAddressWithMeta,
+    total_amount: cleanTotalAmount,
+    maker_share_amount: computedMakerShare,
+    status: dbStatus,
+    assigned_maker_id: resolvedMakerId,
+    created_at: createdAtIso,
+    updated_at: nowIso,
+  };
+
+  // Upsert into public.orders using exact verified PostgreSQL columns
+  const { data: dbOrder, error: orderErr } = await adminDb
+    .from('orders')
+    .upsert(orderRowPayload, { onConflict: 'order_number' })
+    .select()
+    .maybeSingle();
+
+  if (orderErr || !dbOrder) {
+    console.error('❌ [Supabase orders Table Error]:', orderErr?.message || 'No row returned');
+    throw new Error(orderErr?.message || 'Failed to persist order in Supabase orders table.');
+  }
+
+  // Replace public.order_items using exact verified columns (product_id UUID, product_title, unit_price, quantity, subtotal)
+  if (breakdown.items.length > 0) {
+    const { error: delItemsErr } = await adminDb.from('order_items').delete().eq('order_id', dbOrder.id);
+    if (delItemsErr) {
+      console.error('❌ [Supabase order_items Delete Error]:', delItemsErr.message);
+      throw new Error(delItemsErr.message);
+    }
+
+    const itemsPayload = breakdown.items.map((item) => {
+      const row: Record<string, any> = {
+        order_id: dbOrder.id,
+        product_title: item.title,
+        unit_price: item.unitPrice,
+        quantity: item.quantity,
+        subtotal: item.subtotal,
+      };
+      if (isValidUuid(item.productUuid)) {
+        row.product_id = item.productUuid;
+      } else {
+        row.product_id = null;
+      }
+      return row;
+    });
+
+    const { error: itemsErr } = await adminDb.from('order_items').insert(itemsPayload);
+    if (itemsErr) {
+      console.error('❌ [Supabase order_items Table Error]:', itemsErr.message);
+      throw new Error(itemsErr.message);
+    }
+  }
+
+  const hydratedSaved = hydrateOrderFromDbRow({
+    ...dbOrder,
+    order_items: breakdown.items.map((i) => ({
+      product_id: i.productUuid,
+      product_title: i.title,
+      unit_price: i.unitPrice,
+      quantity: i.quantity,
+      subtotal: i.subtotal,
+    })),
+  });
+
+  // Update local in-memory / dev disk cache after authoritative DB success
   const existingIndex = SERVER_ORDERS.findIndex(
-    (o) => o.orderNumber === cleanOrder.orderNumber || String(o.id) === String(cleanOrder.id)
+    (o) => String(o.orderNumber || '').toLowerCase() === orderNumber.toLowerCase() || String(o.id) === String(hydratedSaved.id)
   );
   if (existingIndex >= 0) {
-    SERVER_ORDERS[existingIndex] = { ...SERVER_ORDERS[existingIndex], ...cleanOrder };
+    SERVER_ORDERS[existingIndex] = hydratedSaved;
   } else {
-    SERVER_ORDERS.unshift(cleanOrder);
+    SERVER_ORDERS.unshift(hydratedSaved);
   }
   saveOrdersToDisk(SERVER_ORDERS);
 
-  // 2. Map status to valid Postgres enum order_status ('pending', 'accepted', 'in_production', 'completed', 'cancelled')
-  let dbStatus = 'pending';
-  const statusLower = String(cleanOrder.status || '').toLowerCase();
-  if (statusLower === 'in_production' || statusLower === 'making') {
-    dbStatus = 'in_production';
-  } else if (statusLower === 'accepted' || statusLower === 'ready' || statusLower === 'ready_for_pickup') {
-    dbStatus = 'accepted';
-  } else if (statusLower === 'completed' || statusLower === 'shipped' || statusLower === 'delivered') {
-    dbStatus = 'completed';
-  } else if (statusLower === 'cancelled' || statusLower === 'rejected' || statusLower === 'maker_rejected') {
-    dbStatus = 'cancelled';
-  }
-
-  // 3. Persist to Postgres public.orders & public.order_items using verified existing columns
-  try {
-    // Resolve maker details for each item from products table (products -> order_items -> maker)
-    const enrichedItems = [];
-    if (Array.isArray(cleanOrder.items)) {
-      for (const item of cleanOrder.items) {
-        let makerId = item.makerId;
-        let makerName = item.makerName;
-        const pId = item.productId || item.id;
-
-        if (pId && (!makerId || !makerName)) {
-          try {
-            const { data: prodData } = await supabaseAdmin
-              .from('products')
-              .select('maker_id, maker_name, maker')
-              .eq('id', pId)
-              .maybeSingle();
-
-            if (prodData) {
-              makerId = prodData.maker_id || makerId;
-              makerName = prodData.maker_name || prodData.maker || makerName;
-            }
-          } catch (e) {}
-        }
-
-        enrichedItems.push({
-          ...item,
-          makerId: makerId || null,
-          makerName: makerName || 'Independent Artisan',
-        });
-      }
-      cleanOrder.items = enrichedItems;
-      if (enrichedItems.length > 0) {
-        cleanOrder.makerId = enrichedItems[0].makerId;
-        cleanOrder.makerName = enrichedItems[0].makerName;
-      }
-    }
-
-    const { data: dbOrder, error: orderErr } = await supabaseAdmin
-      .from('orders')
-      .upsert({
-        order_number: cleanOrder.orderNumber,
-        customer_name: cleanOrder.customerName || 'Artisan Customer',
-        customer_email: cleanOrder.customerEmail || '',
-        customer_phone: cleanOrder.customerPhone || '9876543210',
-        shipping_address: cleanOrder.shippingAddress || {},
-        total_amount: Number(cleanOrder.amount || cleanOrder.totalAmount || cleanOrder.itemsTotal || 0),
-        status: dbStatus,
-        created_at: cleanOrder.createdAt,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'order_number' })
-      .select()
-      .maybeSingle();
-
-    if (orderErr) {
-      console.error('❌ [Supabase orders Table Error]:', orderErr.message);
-      throw new Error(orderErr.message);
-    } else if (dbOrder && Array.isArray(cleanOrder.items) && cleanOrder.items.length > 0) {
-      await supabaseAdmin.from('order_items').delete().eq('order_id', dbOrder.id);
-      const itemsPayload = cleanOrder.items.map((item: any) => ({
-        order_id: dbOrder.id,
-        product_id: Number(item.productId || item.id || 1),
-        product_title: item.title || item.product_title || 'Handcrafted Artisan Craft',
-        unit_price: Number(item.unitPrice || item.price || 0),
-        quantity: Number(item.quantity || item.qty || 1),
-        subtotal: Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1)),
-      }));
-
-      const { error: itemsErr } = await supabaseAdmin.from('order_items').insert(itemsPayload);
-      if (itemsErr) {
-        console.error('❌ [Supabase order_items Table Error]:', itemsErr.message);
-        throw new Error(itemsErr.message);
-      }
-    }
-  } catch (dbEx: any) {
-    console.error('❌ [Database Order Sync Failure]:', dbEx.message);
-    throw dbEx;
-  }
-
-  // 4. Anonymized backup summary to site_settings under key 'orders_v1' (strips customer PII for security)
+  // Secondary anonymized status registry (zero PII)
   try {
     const sanitizedBackup = {
-      id: cleanOrder.id,
-      orderNumber: cleanOrder.orderNumber,
-      amount: cleanOrder.amount,
-      status: cleanOrder.status,
-      trackingAwb: cleanOrder.trackingAwb,
-      courierName: cleanOrder.courierName,
-      createdAt: cleanOrder.createdAt,
-      updatedAt: cleanOrder.updatedAt,
-      itemsSummary: Array.isArray(cleanOrder.items) ? cleanOrder.items.map((i: any) => ({ title: i.title, quantity: i.quantity })) : [],
+      id: hydratedSaved.id,
+      orderNumber: hydratedSaved.orderNumber,
+      amount: hydratedSaved.amount,
+      makerShareAmount: hydratedSaved.makerShareAmount,
+      status: hydratedSaved.status,
+      trackingAwb: hydratedSaved.trackingAwb,
+      courierName: hydratedSaved.courierName,
+      createdAt: hydratedSaved.createdAt,
+      updatedAt: hydratedSaved.updatedAt,
+      itemsSummary: breakdown.items.map((i) => ({ title: i.title, quantity: i.quantity })),
     };
 
-    const { data: existingSettings } = await supabaseAdmin
+    const { data: existingSettings } = await adminDb
       .from('site_settings')
       .select('value')
       .eq('key', 'orders_v1')
       .maybeSingle();
 
     const siteOrders = Array.isArray(existingSettings?.value) ? existingSettings.value : [];
-    const updatedSiteOrders = [sanitizedBackup, ...siteOrders.filter((o: any) => o.orderNumber !== cleanOrder.orderNumber)];
+    const updatedSiteOrders = [
+      sanitizedBackup,
+      ...siteOrders.filter((o: any) => o.orderNumber !== hydratedSaved.orderNumber),
+    ].slice(0, 200);
 
-    await supabaseAdmin.from('site_settings').upsert({
-      key: 'orders_v1',
-      value: updatedSiteOrders,
-      description: 'Anonymized order status registry',
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' });
-  } catch (settingsEx) {}
+    await adminDb.from('site_settings').upsert(
+      {
+        key: 'orders_v1',
+        value: updatedSiteOrders,
+        description: 'Anonymized order status registry',
+        updated_at: nowIso,
+      },
+      { onConflict: 'key' }
+    );
+  } catch {}
 
-  return cleanOrder;
+  console.log(
+    `✅ [Supabase Order Persisted] #${hydratedSaved.orderNumber} | Total: ₹${hydratedSaved.amount} | ` +
+      `Maker Share (${breakdown.makerEarningPercent}%): ₹${hydratedSaved.makerShareAmount} | ` +
+      `Maker UUID: ${hydratedSaved.makerId || 'unassigned'} | Items: ${breakdown.items.length}`
+  );
+
+  return hydratedSaved;
 }
 
 export async function getAllOrdersFromAllStores(): Promise<any[]> {
-  const mergedMap = new Map<string, any>();
+  if (!supabaseServiceClient) return [...SERVER_ORDERS];
 
-  // 1. Memory / Disk SERVER_ORDERS
-  for (const o of SERVER_ORDERS) {
-    if (o && (o.orderNumber || o.id)) {
-      mergedMap.set(String(o.orderNumber || o.id), o);
-    }
-  }
-
-  // 2. site_settings key 'orders_v1'
   try {
-    const { data: siteData } = await supabaseAdmin
-      .from('site_settings')
-      .select('value')
-      .eq('key', 'orders_v1')
-      .maybeSingle();
-
-    if (siteData && Array.isArray(siteData.value)) {
-      for (const o of siteData.value) {
-        const key = String(o.orderNumber || o.id);
-        if (key) {
-          const existing = mergedMap.get(key);
-          mergedMap.set(key, existing ? { ...existing, ...o } : o);
-        }
-      }
-    }
-  } catch (e) {}
-
-  // 3. Supabase orders + order_items tables
-  try {
-    const { data: dbOrders } = await supabaseAdmin
+    const { data: dbOrders, error } = await supabaseServiceClient
       .from('orders')
       .select('*, order_items(*)')
       .order('created_at', { ascending: false });
 
-    if (dbOrders && Array.isArray(dbOrders)) {
-      for (const d of dbOrders) {
-        const key = String(d.order_number || d.id);
-        const existing = mergedMap.get(key);
-
-        const mappedItems = Array.isArray(d.order_items)
-          ? d.order_items.map((i: any) => ({
-              productId: i.product_id,
-              title: i.product_title || i.title || 'Artisan Craft',
-              unitPrice: Number(i.unit_price || 0),
-              quantity: Number(i.quantity || 1),
-              subtotal: Number(i.subtotal || 0),
-            }))
-          : [];
-
-        const mappedDbOrder = {
-          id: d.id,
-          orderNumber: d.order_number,
-          customerName: d.customer_name,
-          customerEmail: d.customer_email,
-          customerPhone: d.customer_phone,
-          shippingAddress: d.shipping_address,
-          amount: Number(d.total_amount || 0),
-          status: d.status || 'awaiting_maker_acceptance',
-          createdAt: d.created_at,
-          updatedAt: d.updated_at,
-          items: mappedItems,
-        };
-
-        if (existing) {
-          mergedMap.set(key, { ...mappedDbOrder, ...existing });
-        } else {
-          mergedMap.set(key, mappedDbOrder);
-        }
-      }
+    if (!error && Array.isArray(dbOrders)) {
+      const hydrated = dbOrders.map(hydrateOrderFromDbRow).filter(Boolean);
+      SERVER_ORDERS = hydrated;
+      saveOrdersToDisk(SERVER_ORDERS);
+      return hydrated;
     }
-  } catch (e) {}
+  } catch (err: any) {
+    console.warn('[getAllOrdersFromAllStores Warning]:', err.message);
+  }
 
-  return Array.from(mergedMap.values());
+  return [...SERVER_ORDERS];
 }
 
 // -------------------------------------------------------------
@@ -696,36 +1169,56 @@ export function evaluateCoupon(code: string, subtotal: number, userEmail?: strin
 // -------------------------------------------------------------
 async function resolveProductDetails(
   idOrSlug: string | number,
-  fallback?: { title?: string; price?: number; stock?: number; maker?: string }
-): Promise<{ title: string; price: number; stock: number; maker: string }> {
+  fallback?: { uuid?: string; slug?: string; title?: string; price?: number; stock?: number; maker?: string }
+): Promise<{ uuid: string | null; title: string; price: number; stock: number; maker: string; makerId: string | null }> {
+  const dbProducts = await fetchCatalogProductsForOrder();
+  const strRef = String(idOrSlug || '').trim();
   const numId = Number(idOrSlug);
-  if (!isNaN(numId) && SERVER_PRODUCT_CATALOG[numId]) {
-    return SERVER_PRODUCT_CATALOG[numId];
+
+  let matched: any = null;
+  if (isValidUuid(fallback?.uuid)) {
+    matched = dbProducts.find((p) => String(p.id).toLowerCase() === String(fallback!.uuid).toLowerCase()) || null;
   }
-  try {
-    let query = supabaseAdmin.from('products').select('*');
-    if (!isNaN(numId) && numId > 0) {
-      query = query.eq('id', numId);
-    } else {
-      query = query.eq('slug', String(idOrSlug));
-    }
-    const { data, error } = await query.maybeSingle();
-    if (!error && data) {
-      return {
-        title: data.title || fallback?.title || `Craft #${idOrSlug}`,
-        price: typeof data.price === 'number' ? data.price : Number(data.price || fallback?.price || 299),
-        stock: typeof data.stock === 'number' ? data.stock : 20,
-        maker: data.maker || data.artisan_name || fallback?.maker || 'Independent Artisan',
-      };
-    }
-  } catch (err) {
-    // ignore query failure, fallback to provided values
+  if (!matched && isValidUuid(strRef)) {
+    matched = dbProducts.find((p) => String(p.id).toLowerCase() === strRef.toLowerCase()) || null;
   }
+  if (!matched && fallback?.slug) {
+    matched = dbProducts.find((p) => String(p.slug || '').toLowerCase() === String(fallback.slug).toLowerCase()) || null;
+  }
+  if (!matched && strRef && !Number.isFinite(numId)) {
+    matched = dbProducts.find((p) => String(p.slug || '').toLowerCase() === strRef.toLowerCase()) || null;
+  }
+  if (!matched && Number.isFinite(numId) && numId > 0) {
+    matched = dbProducts.find((p) => computeStableProductHash(String(p.id)) === numId) || null;
+  }
+  if (!matched && fallback?.title) {
+    const cleanTitle = String(fallback.title).trim().toLowerCase();
+    matched = dbProducts.find((p) => String(p.title || '').trim().toLowerCase() === cleanTitle) || null;
+  }
+
+  if (matched) {
+    return {
+      uuid: matched.id,
+      title: matched.title || fallback?.title || `Craft #${idOrSlug}`,
+      price: Number(matched.price ?? fallback?.price ?? 0),
+      stock: 20,
+      maker: matched.maker_name || fallback?.maker || 'Independent Artisan',
+      makerId: isValidUuid(matched.maker_id) ? matched.maker_id : null,
+    };
+  }
+
+  if (Number.isFinite(numId) && SERVER_PRODUCT_CATALOG[numId]) {
+    const cat = SERVER_PRODUCT_CATALOG[numId];
+    return { uuid: null, title: cat.title, price: cat.price, stock: cat.stock, maker: cat.maker, makerId: null };
+  }
+
   return {
+    uuid: null,
     title: fallback?.title || `Craft #${idOrSlug}`,
     price: fallback?.price !== undefined && !isNaN(Number(fallback.price)) ? Number(fallback.price) : 299,
     stock: fallback?.stock !== undefined ? Number(fallback.stock) : 20,
     maker: fallback?.maker || 'Independent Maker',
+    makerId: null,
   };
 }
 
@@ -740,32 +1233,8 @@ app.post('/api/checkout/validate-order', async (req: Request, res: Response) => 
       return res.status(400).json({ error: 'Cart is empty or invalid.' });
     }
 
-    let itemsTotal = 0;
-    const validatedItems = [];
-
-    for (const item of items) {
-      const prodId = item.id || item.productId;
-      const qty = Math.max(1, Math.floor(Number(item.qty || item.quantity || 1)));
-
-      const catalogItem = await resolveProductDetails(prodId, {
-        title: item.title,
-        price: item.price,
-        maker: item.maker,
-      });
-
-      const lineSubtotal = catalogItem.price * qty;
-      itemsTotal += lineSubtotal;
-
-      validatedItems.push({
-        productId: prodId,
-        title: catalogItem.title,
-        unitPrice: catalogItem.price,
-        quantity: qty,
-        subtotal: lineSubtotal,
-        makerName: catalogItem.maker,
-        availableStock: catalogItem.stock,
-      });
-    }
+    const breakdown = await resolveOrderItemsAndCommission(items);
+    const itemsTotal = breakdown.itemsTotal;
 
     // Secure server-authoritative coupon evaluation
     const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal, userEmail, userRole) : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
@@ -788,7 +1257,10 @@ app.post('/api/checkout/validate-order', async (req: Request, res: Response) => 
       shippingFee: validShippingFee,
       discountAmount,
       totalAmount: finalPayable,
-      validatedItems,
+      makerEarningPercent: breakdown.makerEarningPercent,
+      makerShareAmount: breakdown.makerShareAmount,
+      makerShares: breakdown.makerShares,
+      validatedItems: breakdown.items,
       couponApplied: (discountAmount > 0 || couponResult.valid) ? couponResult.code : null,
       couponMessage: couponResult.message || undefined,
       currency: 'INR',
@@ -968,23 +1440,16 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     let itemsTotal = 0;
     const bodyItems = Array.isArray(body.items) ? body.items : [];
     if (bodyItems.length > 0) {
-      for (const item of bodyItems) {
-        const prodId = item.id || item.productId;
-        const qty = Math.max(1, Math.floor(Number(item.quantity || item.qty || 1)));
-        const catalogItem = await resolveProductDetails(prodId, {
-          title: item.title,
-          price: item.unitPrice || item.price || item.product?.price,
-          maker: item.maker,
-        });
-        itemsTotal += catalogItem.price * qty;
-      }
+      const breakdown = await resolveOrderItemsAndCommission(bodyItems);
+      itemsTotal = breakdown.itemsTotal;
     } else if (targetOrderNumber) {
-      const sOrder = SERVER_ORDERS.find(o => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase());
+      const sOrder =
+        SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
+        (await fetchOrderFromDbByRef(targetOrderNumber));
       if (sOrder) {
         itemsTotal = Number(sOrder.itemsTotal || sOrder.amount || 1);
       } else {
-        const { data: dbOrder } = await supabaseAdmin.from('orders').select('*').eq('order_number', targetOrderNumber).maybeSingle();
-        itemsTotal = dbOrder ? Number(dbOrder.items_total || dbOrder.total_amount || 1) : 1;
+        itemsTotal = 1;
       }
     } else {
       itemsTotal = Number(body.itemsTotal || body.subtotal || rawAmount || 1);
@@ -1056,7 +1521,6 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     );
 
     if (keyId && keySecret) {
-      // 3. Wrap Razorpay order creation call in try/catch block with explicit Vercel console logging
       try {
         console.log(`[Razorpay Order Creation] Requesting https://api.razorpay.com/v1/orders | ₹${parsedAmount} (${amountInPaise} paise) | Currency: ${currency} | Key: ${maskedKeyId} | Receipt: ${cleanReceipt}`);
 
@@ -1090,24 +1554,24 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
         console.log(`[Razorpay Order Response] HTTP ${response.status} ${response.statusText}`);
 
         if (response.ok && data.id) {
-          // Link Razorpay order ID to internal order in both Supabase and SERVER_ORDERS
+          // Link Razorpay order ID to internal order via persistOrderRecord
           if (targetOrderNumber) {
-            try {
-              await supabaseAdmin
-                .from('orders')
-                .update({
-                  payment_gateway_order_id: data.id,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('order_number', targetOrderNumber);
-            } catch (e) {}
-
-            const sOrder = SERVER_ORDERS.find(
-              (o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()
-            );
-            if (sOrder) {
-              sOrder.paymentGatewayOrderId = data.id;
-              sOrder.updatedAt = new Date().toISOString();
+            const existingOrder =
+              SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
+              (await fetchOrderFromDbByRef(targetOrderNumber));
+            if (existingOrder && hasServiceRoleKey) {
+              try {
+                await persistOrderRecord({
+                  ...existingOrder,
+                  paymentGatewayOrderId: data.id,
+                  updatedAt: new Date().toISOString(),
+                });
+              } catch (e: any) {
+                console.warn('[create-order] Link gateway order ID notice:', e.message);
+              }
+            } else if (existingOrder) {
+              existingOrder.paymentGatewayOrderId = data.id;
+              existingOrder.updatedAt = new Date().toISOString();
               saveOrdersToDisk(SERVER_ORDERS);
             }
           }
@@ -1137,23 +1601,7 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
             errMsg = data.message;
           }
 
-          // Exact error logging to Vercel console
           console.error(`[Razorpay Order Creation Failed - HTTP ${response.status}]:`, JSON.stringify(data));
-
-          if (errMsg.toLowerCase().includes('authentication failed')) {
-            console.error(
-              `[Razorpay Authentication Failure Diagnostic]:\n` +
-              `  - HTTP Status: ${response.status}\n` +
-              `  - Key ID configured: ${hasKeyId} (Prefix: ${keyPrefix}, Masked: ${maskedKeyId})\n` +
-              `  - Key Secret configured: ${hasKeySecret} (Length: ${secretLength} chars)\n` +
-              `  - Cause: Razorpay's API server rejected this Key ID / Secret pair.\n` +
-              `  - Resolution:\n` +
-              `    1. In Razorpay Dashboard (dashboard.razorpay.com), verify if the account is in Live Mode.\n` +
-              `    2. Go to Settings -> API Keys and confirm the Active Key ID matches "${maskedKeyId}".\n` +
-              `    3. If the key was regenerated, update RAZORPAY_KEY_SECRET in Vercel Environment Variables and redeploy.\n` +
-              `    4. Ensure Live payments are activated and KYC is approved on this Razorpay account.`
-            );
-          }
 
           return res.status(response.status >= 400 && response.status < 500 ? response.status : 400).json({
             success: false,
@@ -1170,7 +1618,6 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
           });
         }
       } catch (error: any) {
-        // Logs the exact error message to Vercel console and returns clear JSON response
         console.error('[Razorpay Order Creation Error / Vercel Console]:', error?.message || error);
         return res.status(502).json({
           success: false,
@@ -1179,7 +1626,6 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
       }
     }
 
-    // When in live/production mode or when rzp_live_ is used without complete keys:
     if (isProd || keyPrefix === 'rzp_live') {
       const missingVar = !hasKeyId ? 'RAZORPAY_KEY_ID' : 'RAZORPAY_KEY_SECRET';
       console.error(`[Razorpay Configuration Error] ${missingVar} is missing on the server.`);
@@ -1197,22 +1643,20 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
     // Safe Test Gateway Simulation (Only active during local sandbox development with zero keys)
     const mockOrderId = `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     if (targetOrderNumber) {
-      try {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_gateway_order_id: mockOrderId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_number', targetOrderNumber);
-      } catch (e) {}
-
-      const sOrder = SERVER_ORDERS.find(
-        (o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()
-      );
-      if (sOrder) {
-        sOrder.paymentGatewayOrderId = mockOrderId;
-        sOrder.updatedAt = new Date().toISOString();
+      const existingOrder =
+        SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
+        (await fetchOrderFromDbByRef(targetOrderNumber));
+      if (existingOrder && hasServiceRoleKey) {
+        try {
+          await persistOrderRecord({
+            ...existingOrder,
+            paymentGatewayOrderId: mockOrderId,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch {}
+      } else if (existingOrder) {
+        existingOrder.paymentGatewayOrderId = mockOrderId;
+        existingOrder.updatedAt = new Date().toISOString();
         saveOrdersToDisk(SERVER_ORDERS);
       }
     }
@@ -1244,52 +1688,13 @@ app.post('/api/payment/create-order', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): Promise<void> {
   try {
-    const sOrder = sOrderInput || SERVER_ORDERS.find((o) =>
-      String(o.orderNumber || o.id).toLowerCase() === String(targetRef).toLowerCase()
-    );
+    const sOrder =
+      sOrderInput ||
+      SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(targetRef).toLowerCase()) ||
+      (await fetchOrderFromDbByRef(targetRef));
 
-    if (!sOrder) {
-      const { data: dbOrder } = await supabaseAdmin
-        .from('orders')
-        .select('*')
-        .eq('order_number', targetRef)
-        .maybeSingle();
-
-      if (dbOrder && (!dbOrder.tracking_awb || dbOrder.tracking_awb.startsWith('NP-'))) {
-        const payload = {
-          orderNumber: dbOrder.order_number,
-          customerName: dbOrder.customer_name || 'Artisan Patron',
-          phone: dbOrder.customer_phone || '9876543210',
-          email: dbOrder.customer_email || 'patron@artisanskart.in',
-          address: dbOrder.shipping_address?.addressLine || dbOrder.shipping_address?.address || 'Studio Address',
-          city: dbOrder.shipping_address?.city || 'New Delhi',
-          state: dbOrder.shipping_address?.state || 'Delhi',
-          pincode: dbOrder.shipping_address?.pincode || '110016',
-          items: [{ title: 'Handcrafted Artisan Craft', price: dbOrder.total_amount || 499, quantity: 1 }],
-          totalAmount: Number(dbOrder.total_amount || 499),
-          paymentMethod: dbOrder.payment_method || 'Prepaid',
-          pickupPincode: '110016',
-          weightKg: 0.5,
-          dimensions: '15x15x10 cm',
-        };
-        const shipmentResult = await createShipmentOrder(payload);
-        if (shipmentResult.success && shipmentResult.awb) {
-          await supabaseAdmin
-            .from('orders')
-            .update({
-              tracking_awb: shipmentResult.awb,
-              courier_name: shipmentResult.courierName,
-              status: 'shipment_booked',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('order_number', targetRef);
-          console.log(`📦 [NimbusPost Auto-Booking] Created shipment for order ${targetRef} | AWB: ${shipmentResult.awb}`);
-        }
-      }
-      return;
-    }
-
-    if (sOrder.trackingAwb && !sOrder.trackingAwb.startsWith('NP-')) {
+    if (!sOrder) return;
+    if (sOrder.trackingAwb && !String(sOrder.trackingAwb).startsWith('NP-')) {
       return; // Already booked with live courier AWB
     }
 
@@ -1298,13 +1703,14 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
       customerName: sOrder.customerName || 'Artisan Patron',
       phone: sOrder.customerPhone || sOrder.phone || '9876543210',
       email: sOrder.customerEmail || sOrder.email || 'patron@artisanskart.in',
-      address: sOrder.shippingAddress?.addressLine || sOrder.shippingAddress?.address || 'Studio Address',
+      address: sOrder.shippingAddress?.buildingHouse || sOrder.shippingAddress?.addressLine || sOrder.shippingAddress?.address || 'Studio Address',
       city: sOrder.shippingAddress?.city || 'New Delhi',
       state: sOrder.shippingAddress?.state || 'Delhi',
       pincode: sOrder.shippingAddress?.pincode || '110016',
-      items: Array.isArray(sOrder.items) && sOrder.items.length > 0
-        ? sOrder.items
-        : [{ title: 'Handcrafted Artisan Craft', price: sOrder.amount || 499, quantity: 1 }],
+      items:
+        Array.isArray(sOrder.items) && sOrder.items.length > 0
+          ? sOrder.items
+          : [{ title: 'Handcrafted Artisan Craft', price: sOrder.amount || 499, quantity: 1 }],
       totalAmount: Number(sOrder.amount || sOrder.itemsTotal || 499),
       paymentMethod: sOrder.paymentMethod || 'Prepaid',
       pickupPincode: sOrder.pickupPincode || '110016',
@@ -1314,84 +1720,114 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
 
     const res = await createShipmentOrder(payload);
     if (res.success && res.awb) {
-      sOrder.trackingAwb = res.awb;
-      sOrder.courierName = res.courierName;
-      sOrder.status = 'shipment_booked';
-      sOrder.updatedAt = new Date().toISOString();
-      sOrder.statusHistory = sOrder.statusHistory || [];
-      sOrder.statusHistory.push({
-        id: `auto_ship_${Date.now()}`,
-        orderId: sOrder.id,
-        fromStatus: sOrder.status,
-        toStatus: 'shipment_booked',
-        actorName: 'NimbusPost Logistics Engine',
-        actorRole: 'shipping',
-        note: `Automated NimbusPost shipment booked on payment verification (AWB: ${res.awb}, Courier: ${res.courierName})`,
-        createdAt: new Date().toISOString(),
-      });
-      saveOrdersToDisk(SERVER_ORDERS);
+      const prevStatus = sOrder.status || 'awaiting_maker_acceptance';
+      const updatedOrder = {
+        ...sOrder,
+        trackingAwb: res.awb,
+        courierName: res.courierName,
+        status: 'shipment_booked',
+        updatedAt: new Date().toISOString(),
+        statusHistory: [
+          ...(Array.isArray(sOrder.statusHistory) ? sOrder.statusHistory : []),
+          {
+            id: `auto_ship_${Date.now()}`,
+            orderId: sOrder.id,
+            fromStatus: prevStatus,
+            toStatus: 'shipment_booked',
+            actorName: 'NimbusPost Logistics Engine',
+            actorRole: 'shipping',
+            note: `Automated NimbusPost shipment booked on payment verification (AWB: ${res.awb}, Courier: ${res.courierName})`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
 
-      try {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            tracking_awb: res.awb,
-            courier_name: res.courierName,
-            status: 'shipment_booked',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_number', sOrder.orderNumber || sOrder.id);
-      } catch (e) {}
+      if (hasServiceRoleKey) {
+        await persistOrderRecord(updatedOrder);
+      } else {
+        Object.assign(sOrder, updatedOrder);
+        saveOrdersToDisk(SERVER_ORDERS);
+      }
 
-      console.log(`📦 [NimbusPost Auto-Booking] Created shipment for order ${sOrder.orderNumber || targetRef} | AWB: ${res.awb}`);
+      console.log(`📦 [NimbusPost Auto-Booking] Created shipment for order ${updatedOrder.orderNumber || targetRef} | AWB: ${res.awb}`);
     }
   } catch (err: any) {
     console.warn(`[NimbusPost Auto-Booking Notice]:`, err.message);
   }
 }
 
-// ... existing code ...
-async function assignOrderToMaker(orderId: string): Promise<void> {
+async function assignOrderToMaker(orderRefOrId: string, existingOrderInput?: any): Promise<any> {
   try {
+    const currentOrder =
+      existingOrderInput ||
+      (await fetchOrderFromDbByRef(orderRefOrId)) ||
+      SERVER_ORDERS.find(
+        (o) => String(o.orderNumber || '').toLowerCase() === String(orderRefOrId).toLowerCase() || String(o.id) === String(orderRefOrId)
+      );
+
+    if (!currentOrder) return null;
+
+    // Never overwrite a valid product-assigned maker UUID
+    if (isValidUuid(currentOrder.makerId)) {
+      return currentOrder;
+    }
+
+    if (!supabaseServiceClient) return currentOrder;
+
     // 1. Fetch approved makers from profiles table
-    const { data: makers, error } = await supabaseAdmin
+    const { data: makers } = await supabaseServiceClient
       .from('profiles')
-      .select('id, email, full_name, role')
+      .select('id, email, full_name, role, status')
       .eq('role', 'maker');
 
-    let makerId: string | null = null;
-    if (error) {
-      console.warn('Notice fetching maker profiles for assignment:', error.message);
-    }
+    const approvedMakers = (makers || []).filter((m: any) => !m.status || m.status === 'approved');
+    const candidateMakers = approvedMakers.length > 0 ? approvedMakers : makers || [];
 
-    if (makers && makers.length > 0) {
-      makerId = makers[0].id;
+    let pickedMaker: any = null;
+    if (candidateMakers.length > 0) {
+      // Round-robin based on existing order count per maker
+      const { data: recentOrders } = await supabaseServiceClient
+        .from('orders')
+        .select('assigned_maker_id')
+        .not('assigned_maker_id', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      const counts = new Map<string, number>();
+      candidateMakers.forEach((m: any) => counts.set(m.id, 0));
+      (recentOrders || []).forEach((o: any) => {
+        if (o.assigned_maker_id && counts.has(o.assigned_maker_id)) {
+          counts.set(o.assigned_maker_id, (counts.get(o.assigned_maker_id) || 0) + 1);
+        }
+      });
+
+      pickedMaker = candidateMakers.sort((a: any, b: any) => (counts.get(a.id) || 0) - (counts.get(b.id) || 0))[0];
     } else {
-      // Fallback to Master Admin
-      const { data: admin } = await supabaseAdmin
+      const { data: admin } = await supabaseServiceClient
         .from('profiles')
-        .select('id')
+        .select('id, email, full_name')
         .eq('email', 'ssumollah@gmail.com')
         .maybeSingle();
-      if (admin) makerId = admin.id;
+      if (admin) pickedMaker = admin;
     }
 
-    if (makerId) {
-      // Update maker assignment in order items and orders
-      await supabaseAdmin
-        .from('order_items')
-        .update({ maker_id: makerId })
-        .eq('order_id', orderId);
-
-      await supabaseAdmin
-        .from('orders')
-        .update({ maker_id: makerId, status: 'awaiting_maker_acceptance' })
-        .eq('id', orderId);
-
-      console.log(`👤 [Maker Distribution] Assigned order ID ${orderId} to maker ${makerId}`);
+    if (pickedMaker?.id && isValidUuid(pickedMaker.id)) {
+      const makerName = pickedMaker.full_name || pickedMaker.email?.split('@')[0] || currentOrder.makerName || 'Artisan Creator';
+      const updated = await persistOrderRecord({
+        ...currentOrder,
+        makerId: pickedMaker.id,
+        makerName,
+        status: currentOrder.status || 'awaiting_maker_acceptance',
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(`👤 [Maker Distribution] Assigned order #${updated.orderNumber} to maker ${makerName} (${pickedMaker.id})`);
+      return updated;
     }
+
+    return currentOrder;
   } catch (err: any) {
     console.warn('[Maker Assignment Notice]:', err.message);
+    return existingOrderInput || null;
   }
 }
 
@@ -1400,11 +1836,29 @@ async function assignOrderToMaker(orderId: string): Promise<void> {
 // Strictly enforces server-side cryptographic HMAC-SHA256 verification
 // -------------------------------------------------------------
 app.post('/api/payment/verify', async (req: Request, res: Response) => {
-// ... existing code ...
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
-    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderNumber } = req.body;
+    const {
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      orderNumber,
+      items,
+      customerName,
+      customerEmail,
+      customerPhone,
+      customerId,
+      shippingAddress,
+      amount,
+      itemsTotal,
+      packagingFee,
+      shippingFee,
+      discountAmount,
+      couponCode,
+    } = req.body || {};
+
     const creds = getRazorpayCredentials();
-    const { keyId, keySecret, isLive, keyPrefix } = creds;
+    const { keyId, keySecret, isLive } = creds;
     const isProd = process.env.NODE_ENV === 'production' || isLive;
 
     if (keySecret) {
@@ -1431,68 +1885,85 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
         });
       }
 
-      // Update SERVER_ORDERS & Supabase via persistOrderRecord
-      let sOrder = SERVER_ORDERS.find((o) =>
-        (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
-        (razorpayOrderId && o.paymentGatewayOrderId === razorpayOrderId)
-      );
+      // Look up existing order in memory OR Supabase DB across serverless lambdas
+      let sOrder =
+        SERVER_ORDERS.find(
+          (o) =>
+            (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
+            (razorpayOrderId && o.paymentGatewayOrderId === razorpayOrderId)
+        ) || (await fetchOrderFromDbByRef(orderNumber || razorpayOrderId));
 
-      if (!sOrder && orderNumber) {
-        sOrder = {
-          orderNumber,
-          paymentGatewayOrderId: razorpayOrderId,
-          paymentGatewayPaymentId: razorpayPaymentId,
-          paymentStatus: 'paid',
-          status: 'awaiting_maker_acceptance',
-          updatedAt: new Date().toISOString(),
-        };
+      // Cold-start recovery: if order wasn't found yet, fetch Razorpay order metadata & reconstruct cleanly
+      let rzpAmountINR: number | undefined;
+      let rzpNotes: Record<string, any> = {};
+      if (!sOrder && razorpayOrderId && keyId && keySecret) {
+        try {
+          const auth = Buffer.from(`${keyId}:${keySecret}`).toString('base64');
+          const rzpRes = await fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(razorpayOrderId)}`, {
+            headers: { Authorization: `Basic ${auth}` },
+          });
+          if (rzpRes.ok) {
+            const rzpData: any = await rzpRes.json();
+            if (rzpData?.amount) rzpAmountINR = roundCurrency(Number(rzpData.amount) / 100);
+            if (rzpData?.notes && typeof rzpData.notes === 'object') rzpNotes = rzpData.notes;
+          }
+        } catch {}
       }
 
-      if (sOrder) {
-        sOrder.paymentStatus = 'paid';
-        sOrder.paymentGatewayPaymentId = razorpayPaymentId;
-        sOrder.status = 'awaiting_maker_acceptance';
-        sOrder.updatedAt = new Date().toISOString();
-        sOrder.statusHistory = sOrder.statusHistory || [];
-        sOrder.statusHistory.push({
-          id: `pay_${Date.now()}`,
-          orderId: sOrder.id,
-          fromStatus: sOrder.status,
-          toStatus: 'awaiting_maker_acceptance',
-          actorName: 'Razorpay Payment Gateway',
-          actorRole: 'system',
-          note: `Payment verified via Razorpay Live (Payment ID: ${razorpayPaymentId})`,
-          createdAt: new Date().toISOString(),
-        });
+      const resolvedOrderNum = String(
+        sOrder?.orderNumber || orderNumber || rzpNotes.order_number || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`
+      ).trim();
 
-        await persistOrderRecord(sOrder);
-      }
+      const orderToPersist = {
+        ...(sOrder || {}),
+        orderNumber: resolvedOrderNum,
+        customerId: customerId || sOrder?.customerId,
+        customerName: customerName || sOrder?.customerName || shippingAddress?.fullName || 'Artisan Customer',
+        customerEmail: customerEmail || sOrder?.customerEmail || '',
+        customerPhone: customerPhone || sOrder?.customerPhone || shippingAddress?.phone || '9876543210',
+        shippingAddress: shippingAddress || sOrder?.shippingAddress || {},
+        items: Array.isArray(items) && items.length > 0 ? items : sOrder?.items || [],
+        amount: sOrder?.amount ?? (amount !== undefined ? Number(amount) : rzpAmountINR),
+        itemsTotal: sOrder?.itemsTotal ?? (itemsTotal !== undefined ? Number(itemsTotal) : undefined),
+        packagingFee: sOrder?.packagingFee ?? (packagingFee !== undefined ? Number(packagingFee) : 0),
+        shippingFee: sOrder?.shippingFee ?? (shippingFee !== undefined ? Number(shippingFee) : 0),
+        discountAmount: sOrder?.discountAmount ?? (discountAmount !== undefined ? Number(discountAmount) : 0),
+        couponCode: couponCode || sOrder?.couponCode,
+        paymentGatewayOrderId: razorpayOrderId,
+        paymentGatewayPaymentId: razorpayPaymentId,
+        paymentStatus: 'paid',
+        paymentMethod: 'razorpay',
+        status: 'awaiting_maker_acceptance',
+        updatedAt: new Date().toISOString(),
+        statusHistory: [
+          ...(Array.isArray(sOrder?.statusHistory) ? sOrder.statusHistory : []),
+          {
+            id: `pay_${Date.now()}`,
+            orderId: sOrder?.id || resolvedOrderNum,
+            fromStatus: sOrder?.status || 'order_placed',
+            toStatus: 'awaiting_maker_acceptance',
+            actorName: 'Razorpay Payment Gateway',
+            actorRole: 'system',
+            note: `Payment verified via Razorpay Live (Payment ID: ${razorpayPaymentId})`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
 
-      console.log(`✅ [Payment Verified] Order #${orderNumber || razorpayOrderId} verified via Razorpay ID: ${razorpayPaymentId}`);
+      const savedOrder = await persistOrderRecord(orderToPersist);
+      console.log(`✅ [Payment Verified] Order #${savedOrder.orderNumber} verified via Razorpay ID: ${razorpayPaymentId} | maker_share_amount: ₹${savedOrder.makerShareAmount}`);
 
-      // Perform Round-Robin Maker Assignment
-      try {
-        const { data: dbOrder } = await supabaseAdmin
-          .from('orders')
-          .select('id')
-          .eq(orderNumber ? 'order_number' : 'payment_gateway_order_id', orderNumber || razorpayOrderId)
-          .single();
-        
-        if (dbOrder) {
-          await assignOrderToMaker(dbOrder.id);
-          console.log(`👤 [Maker Assignment] Assigned order ${dbOrder.id} via Round-Robin.`);
-        }
-      } catch (err: any) {
-        console.error('❌ [Maker Assignment Error]:', err.message);
+      // Assign maker only if not already resolved from product makerId
+      let finalOrder = savedOrder;
+      if (!isValidUuid(finalOrder.makerId)) {
+        finalOrder = (await assignOrderToMaker(finalOrder.orderNumber, finalOrder)) || finalOrder;
       }
 
       // Auto-book shipment with NimbusPost
-      autoBookShipmentForOrder(orderNumber || razorpayOrderId, sOrder).catch(() => {});
+      autoBookShipmentForOrder(finalOrder.orderNumber, finalOrder).catch(() => {});
 
-      return res.json({ verified: true, paymentId: razorpayPaymentId });
+      return res.json({ verified: true, paymentId: razorpayPaymentId, order: finalOrder });
     }
-
-    // ... existing code ...
 
     // In production or live mode, unverified payments are strictly rejected
     if (isProd || keyId.startsWith('rzp_live_')) {
@@ -1502,29 +1973,19 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
       });
     }
 
-    // In local sandbox development mode only: verify order was received
+    // In local sandbox development mode only
     if (razorpayOrderId) {
       const simulatedPaymentId = razorpayPaymentId || `pay_test_${Date.now()}`;
-      if (orderNumber) {
-        try {
-          await supabaseAdmin
-            .from('orders')
-            .update({
-              payment_status: 'paid',
-              payment_gateway_payment_id: simulatedPaymentId,
-              status: 'awaiting_maker_acceptance',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('order_number', orderNumber);
-        } catch (e) {}
-      }
+      let sOrder =
+        SERVER_ORDERS.find(
+          (o) =>
+            (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
+            (razorpayOrderId && o.paymentGatewayOrderId === razorpayOrderId)
+        ) || (await fetchOrderFromDbByRef(orderNumber || razorpayOrderId));
 
-      const sOrder = SERVER_ORDERS.find((o) =>
-        (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
-        (razorpayOrderId && o.paymentGatewayOrderId === razorpayOrderId)
-      );
       if (sOrder) {
         sOrder.paymentStatus = 'paid';
+        sOrder.paymentGatewayOrderId = razorpayOrderId;
         sOrder.paymentGatewayPaymentId = simulatedPaymentId;
         sOrder.status = 'awaiting_maker_acceptance';
         sOrder.updatedAt = new Date().toISOString();
@@ -1539,16 +2000,46 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
           note: `Sandbox payment approved (ID: ${simulatedPaymentId})`,
           createdAt: new Date().toISOString(),
         });
-        saveOrdersToDisk(SERVER_ORDERS);
+
+        if (hasServiceRoleKey) {
+          sOrder = await persistOrderRecord(sOrder);
+        } else {
+          saveOrdersToDisk(SERVER_ORDERS);
+        }
+      } else if (hasServiceRoleKey && orderNumber) {
+        sOrder = await persistOrderRecord({
+          orderNumber,
+          customerId,
+          customerName,
+          customerEmail,
+          customerPhone,
+          shippingAddress,
+          items,
+          amount,
+          itemsTotal,
+          packagingFee,
+          shippingFee,
+          discountAmount,
+          couponCode,
+          paymentGatewayOrderId: razorpayOrderId,
+          paymentGatewayPaymentId: simulatedPaymentId,
+          paymentStatus: 'paid',
+          paymentMethod: 'test_gateway',
+          status: 'awaiting_maker_acceptance',
+        });
       }
 
-      // Auto-book shipment with NimbusPost
+      if (sOrder && !isValidUuid(sOrder.makerId)) {
+        sOrder = (await assignOrderToMaker(sOrder.orderNumber, sOrder)) || sOrder;
+      }
+
       autoBookShipmentForOrder(orderNumber || razorpayOrderId, sOrder).catch(() => {});
 
       return res.json({
         verified: true,
         paymentId: simulatedPaymentId,
         mode: 'test_verified',
+        order: sOrder || undefined,
       });
     }
 
@@ -1564,36 +2055,38 @@ app.post('/api/payment/verify', async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 app.post('/api/payment/record-failure', async (req: Request, res: Response) => {
   try {
-    const { orderNumber, error } = req.body;
+    const { orderNumber, error } = req.body || {};
     if (orderNumber) {
-      try {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_status: 'failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_number', orderNumber);
-      } catch (e) {}
+      const sOrder =
+        SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
+        (await fetchOrderFromDbByRef(orderNumber));
 
-      const sOrder = SERVER_ORDERS.find(
-        (o) => String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()
-      );
       if (sOrder) {
-        sOrder.paymentStatus = 'failed';
-        sOrder.updatedAt = new Date().toISOString();
-        sOrder.statusHistory = sOrder.statusHistory || [];
-        sOrder.statusHistory.push({
-          id: `pay_fail_${Date.now()}`,
-          orderId: sOrder.id,
-          fromStatus: sOrder.status,
-          toStatus: sOrder.status,
-          actorName: 'Razorpay Payment Gateway',
-          actorRole: 'system',
-          note: `Payment failed or was cancelled: ${error?.description || error?.message || 'Payment attempt unsuccessful'}`,
-          createdAt: new Date().toISOString(),
-        });
-        saveOrdersToDisk(SERVER_ORDERS);
+        const updatedOrder = {
+          ...sOrder,
+          paymentStatus: 'failed',
+          updatedAt: new Date().toISOString(),
+          statusHistory: [
+            ...(Array.isArray(sOrder.statusHistory) ? sOrder.statusHistory : []),
+            {
+              id: `pay_fail_${Date.now()}`,
+              orderId: sOrder.id,
+              fromStatus: sOrder.status,
+              toStatus: sOrder.status,
+              actorName: 'Razorpay Payment Gateway',
+              actorRole: 'system',
+              note: `Payment failed or was cancelled: ${error?.description || error?.message || 'Payment attempt unsuccessful'}`,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        };
+
+        if (hasServiceRoleKey) {
+          await persistOrderRecord(updatedOrder);
+        } else {
+          Object.assign(sOrder, updatedOrder);
+          saveOrdersToDisk(SERVER_ORDERS);
+        }
       }
     }
     return res.json({ success: true, recorded: true });
@@ -1644,21 +2137,19 @@ app.post('/api/coupons/validate', (req: Request, res: Response) => {
 // API Route 3c: Server-Authoritative Order Total Calculation
 // Prevents browser manipulation of prices and discounts.
 // -------------------------------------------------------------
-app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
+app.post('/api/orders/calculate-total', async (req: Request, res: Response) => {
   try {
-    const { items, couponCode, userEmail, userRole } = req.body;
+    const { items, couponCode, userEmail, userRole } = req.body || {};
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Order must contain items.' });
     }
 
-    let itemsTotal = 0;
-    for (const item of items) {
-      const qty = Math.max(1, Number(item.quantity || item.qty || 1));
-      const price = Math.max(0, Number(item.unitPrice || item.price || 0));
-      itemsTotal += price * qty;
-    }
+    const breakdown = await resolveOrderItemsAndCommission(items);
+    const itemsTotal = breakdown.itemsTotal;
 
-    const couponResult = couponCode ? evaluateCoupon(couponCode, itemsTotal, userEmail, userRole) : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
+    const couponResult = couponCode
+      ? evaluateCoupon(couponCode, itemsTotal, userEmail, userRole)
+      : { valid: false, code: '', discountAmount: 0, message: '', waivedPackaging: false, waivedShipping: false };
     const discountAmount = couponResult.valid ? couponResult.discountAmount : 0;
 
     const FIXED_PACKAGING_FEE = 30;
@@ -1674,7 +2165,11 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
       packagingFee,
       shippingFee,
       grandTotal,
-      couponApplied: (discountAmount > 0 || couponResult.valid) ? couponResult.code : null,
+      makerEarningPercent: breakdown.makerEarningPercent,
+      makerShareAmount: breakdown.makerShareAmount,
+      makerShares: breakdown.makerShares,
+      validatedItems: breakdown.items,
+      couponApplied: discountAmount > 0 || couponResult.valid ? couponResult.code : null,
       couponMessage: couponResult.message || '',
     });
   } catch (err: any) {
@@ -1687,105 +2182,82 @@ app.post('/api/orders/calculate-total', (req: Request, res: Response) => {
 // Allows makers and customers to fetch, create, and track orders across browsers
 // -------------------------------------------------------------
 app.get('/api/orders', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
-    const { user, profile } = await getAuthenticatedUser(req);
+    let authContext: { user: any; profile: any };
+    try {
+      authContext = await getAuthenticatedUser(req);
+    } catch {
+      return res.status(401).json({ success: false, error: 'Authentication required to access order records.' });
+    }
+
+    const { user, profile } = authContext;
+    const userRole = String(profile?.role || (user.email?.toLowerCase() === 'ssumollah@gmail.com' ? 'master_admin' : 'customer')).toLowerCase();
     const { makerId, status, orderNumber } = req.query;
 
-    // Fetch live orders directly from Supabase DB
-    let query = supabaseAdmin
+    const adminDb = requireSupabaseAdmin();
+    let query = adminDb
       .from('orders')
       .select('*, order_items(*)')
       .order('created_at', { ascending: false });
 
-    // Filter based on user profile role
-    if (profile.role === 'customer') {
-      query = query.eq('customer_email', user.email);
+    if (userRole === 'customer') {
+      if (user.email) {
+        query = query.or(`customer_id.eq.${user.id},customer_email.ilike.${user.email}`);
+      } else {
+        query = query.eq('customer_id', user.id);
+      }
     }
 
     if (orderNumber) {
       query = query.ilike('order_number', String(orderNumber));
     }
-    if (status) {
-      query = query.eq('status', String(status));
-    }
 
     const { data: dbOrders, error: dbErr } = await query;
 
-    if (!dbErr && Array.isArray(dbOrders)) {
-      const mappedDbOrders = dbOrders.map((d: any) => {
-        const items = Array.isArray(d.order_items)
-          ? d.order_items.map((i: any) => ({
-              productId: i.product_id,
-              title: i.title,
-              imageUrl: i.image_url,
-              unitPrice: Number(i.unit_price),
-              quantity: i.quantity,
-              subtotal: Number(i.subtotal),
-              makerName: i.maker_name,
-              makerId: i.maker_id,
-              productionStatus: i.production_status,
-            }))
-          : [];
+    if (dbErr) {
+      console.error('❌ [GET /api/orders DB Error]:', dbErr.message);
+      return res.status(500).json({ success: false, error: dbErr.message });
+    }
 
-        return {
-          id: d.id,
-          orderNumber: d.order_number,
-          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-          product: items.map((i: any) => i.title).join(', ') || 'Handmade Creation',
-          qty: items.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
-          deadline: d.estimated_delivery || '3-5 business days',
-          status: d.status,
-          amount: Number(d.total_amount || d.amount || 0),
-          itemsTotal: Number(d.items_total || 0),
-          shippingFee: Number(d.shipping_fee || 0),
-          discountAmount: Number(d.discount_amount || 0),
-          customerName: d.customer_name,
-          customerEmail: d.customer_email,
-          customerPhone: d.customer_phone,
-          shippingAddress: d.shipping_address,
-          paymentStatus: d.payment_status,
-          paymentMethod: d.payment_method,
-          trackingAwb: d.tracking_awb,
-          courierName: d.courier_name || 'NimbusPost Express Partner',
-          createdAt: d.created_at,
-          makerId: d.maker_id,
-          items,
-        };
-      });
+    const hydrated = (dbOrders || []).map(hydrateOrderFromDbRow).filter(Boolean);
 
-      // Synchronize in-memory SERVER_ORDERS array with Supabase DB
-      SERVER_ORDERS = mappedDbOrders;
+    if (userRole !== 'customer' && !orderNumber) {
+      SERVER_ORDERS = hydrated;
       saveOrdersToDisk(SERVER_ORDERS);
-
-      let results = [...SERVER_ORDERS];
-      if (makerId) {
-        results = results.filter((o) =>
-          o.makerId === makerId ||
-          (Array.isArray(o.items) && o.items.some((i: any) => i.makerId === makerId))
-        );
-      }
-
-      return res.json({ success: true, count: results.length, orders: results });
     }
 
-    // Fallback if DB unavailable
-    let results = [...SERVER_ORDERS];
-    if (orderNumber) {
-      results = results.filter((o) =>
-        String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()
+    let results = [...hydrated];
+
+    if (userRole === 'maker') {
+      results = results.filter(
+        (o) =>
+          o.makerId === user.id ||
+          (Array.isArray(o.items) && o.items.some((i: any) => i.makerId === user.id)) ||
+          (Array.isArray(o.makerShares) && o.makerShares.some((m: any) => m.makerId === user.id)) ||
+          (!o.makerId && ['awaiting_maker_acceptance', 'order_placed', 'pending', 'new'].includes(String(o.status).toLowerCase()))
       );
     }
+
     if (status) {
-      results = results.filter((o) => String(o.status).toLowerCase() === String(status).toLowerCase());
-    }
-    if (makerId) {
-      results = results.filter((o) =>
-        o.makerId === makerId ||
-        (Array.isArray(o.items) && o.items.some((i: any) => i.makerId === makerId))
+      const targetStatus = String(status).toLowerCase();
+      results = results.filter(
+        (o) =>
+          String(o.status || '').toLowerCase() === targetStatus ||
+          String(o.dbStatus || '').toLowerCase() === targetStatus
       );
     }
 
-    results.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    if (makerId) {
+      const mRef = String(makerId);
+      results = results.filter(
+        (o) =>
+          o.makerId === mRef ||
+          (Array.isArray(o.items) && o.items.some((i: any) => i.makerId === mRef)) ||
+          (Array.isArray(o.makerShares) && o.makerShares.some((m: any) => m.makerId === mRef))
+      );
+    }
+
     return res.json({ success: true, count: results.length, orders: results });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -1793,75 +2265,20 @@ app.get('/api/orders', async (req: Request, res: Response) => {
 });
 
 app.get('/api/orders/:ref', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const cleanRef = String(req.params.ref || '').trim();
     if (!cleanRef) {
       return res.status(400).json({ success: false, error: 'Order reference is required.' });
     }
 
-    // 1. Query Supabase orders table
-    try {
-      const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
-      let dbQuery = supabaseAdmin
-        .from('orders')
-        .select('*, order_items(*)');
-
-      if (isNum) {
-        dbQuery = dbQuery.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
-      } else {
-        dbQuery = dbQuery.or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
-      }
-
-      const { data: dbOrders, error } = await dbQuery;
-
-      if (!error && dbOrders && dbOrders.length > 0) {
-        const d = dbOrders[0];
-        const mappedItems = Array.isArray(d.order_items)
-          ? d.order_items.map((i: any) => ({
-              productId: i.product_id,
-              title: i.title,
-              imageUrl: i.image_url,
-              unitPrice: Number(i.unit_price),
-              quantity: i.quantity,
-              subtotal: Number(i.subtotal),
-              makerName: i.maker_name,
-              makerId: i.maker_id,
-              productionStatus: i.production_status,
-            }))
-          : [];
-
-        const mappedOrder = {
-          id: d.id,
-          orderNumber: d.order_number,
-          city: d.shipping_address ? `${d.shipping_address.city || ''}, ${d.shipping_address.state || ''}` : 'India',
-          product: mappedItems.map((i: any) => i.title).join(', ') || 'Handmade Craft',
-          qty: mappedItems.reduce((s: number, i: any) => s + (i.quantity || 1), 0),
-          deadline: d.estimated_delivery ? new Date(d.estimated_delivery).toLocaleDateString('en-IN') : '3-5 business days',
-          status: d.status,
-          amount: Number(d.total_amount || d.amount || 0),
-          itemsTotal: Number(d.items_total || 0),
-          shippingFee: Number(d.shipping_fee || 0),
-          discountAmount: Number(d.discount_amount || 0),
-          customerName: d.customer_name,
-          customerEmail: d.customer_email,
-          customerPhone: d.customer_phone,
-          shippingAddress: d.shipping_address,
-          paymentStatus: d.payment_status,
-          paymentMethod: d.payment_method,
-          trackingAwb: d.tracking_awb,
-          courierName: d.courier_name || 'NimbusPost Express Partner',
-          estimatedDelivery: d.estimated_delivery,
-          createdAt: d.created_at,
-          items: mappedItems,
-        };
-
-        return res.json({ success: true, order: mappedOrder });
-      }
-    } catch (dbErr) {
-      console.warn('Supabase order lookup notice:', dbErr);
+    // 1. Authoritative lookup from Supabase orders + order_items
+    const dbMatch = await fetchOrderFromDbByRef(cleanRef);
+    if (dbMatch) {
+      return res.json({ success: true, order: dbMatch });
     }
 
-    // 2. Check SERVER_ORDERS memory store
+    // 2. Fallback to memory store if DB key is absent in local dev
     const match = SERVER_ORDERS.find(
       (o) =>
         String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() ||
@@ -1880,6 +2297,7 @@ app.get('/api/orders/:ref', async (req: Request, res: Response) => {
 });
 
 app.post('/api/orders', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const orderData = req.body;
     if (!orderData || (!orderData.orderNumber && !orderData.id)) {
@@ -1887,9 +2305,10 @@ app.post('/api/orders', async (req: Request, res: Response) => {
     }
 
     const savedOrder = await persistOrderRecord(orderData);
-    console.log(`[Order Saved to Central Stores] ${savedOrder.orderNumber} - Status: ${savedOrder.status}`);
+    console.log(`[Order Saved to Central Stores] ${savedOrder.orderNumber} - Status: ${savedOrder.status} | Maker Share: ₹${savedOrder.makerShareAmount}`);
     return res.status(201).json({ success: true, order: savedOrder });
   } catch (err: any) {
+    console.error('❌ [POST /api/orders Failed]:', err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1900,7 +2319,8 @@ app.post('/api/orders', async (req: Request, res: Response) => {
 app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
   try {
     const { user, profile } = await getAuthenticatedUser(req);
-    const isMaster = profile?.email === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
+    const cleanEmail = (user?.email || profile?.email || '').toLowerCase();
+    const isMaster = cleanEmail === 'ssumollah@gmail.com' || profile?.role === 'master_admin';
 
     if (!isMaster) {
       return res.status(403).json({
@@ -1908,6 +2328,8 @@ app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
         error: 'Unauthorized.',
       });
     }
+
+    const { mode, confirmationText } = req.body || {};
 
     if (mode === 'all') {
       if (confirmationText !== 'CLEAR ORDERS') {
@@ -1999,11 +2421,12 @@ app.post('/api/admin/clear-orders', async (req: Request, res: Response) => {
         const orderNum = String(o.order_number || o.orderNumber || o.id || '').trim().toUpperCase();
         if (explicitTestNumbers.includes(orderNum)) return true;
 
-        const coupon = String(o.coupon_applied || o.couponCode || '').toUpperCase();
-        const payId = String(o.payment_gateway_payment_id || o.paymentGatewayPaymentId || '').toLowerCase();
-        const payOrderId = String(o.payment_gateway_order_id || o.paymentGatewayOrderId || '').toLowerCase();
+        const meta = o.shipping_address?._orderMeta || {};
+        const coupon = String(o.coupon_applied || o.couponCode || meta.couponCode || '').toUpperCase();
+        const payId = String(o.payment_gateway_payment_id || o.paymentGatewayPaymentId || meta.paymentGatewayPaymentId || '').toLowerCase();
+        const payOrderId = String(o.payment_gateway_order_id || o.paymentGatewayOrderId || meta.paymentGatewayOrderId || '').toLowerCase();
         const custEmail = String(o.customer_email || o.customerEmail || '').toLowerCase();
-        const payStatus = String(o.payment_status || o.paymentStatus || '').toLowerCase();
+        const payStatus = String(o.payment_status || o.paymentStatus || meta.paymentStatus || '').toLowerCase();
         const notesStr = String(JSON.stringify(o.notes || o.shipping_address || {})).toLowerCase();
 
         return (
@@ -2538,26 +2961,27 @@ app.post('/api/shipping/create-shipment', async (req: Request, res: Response) =>
 
     const targetOrderNumber = orderNumber || `AK-${Date.now().toString().slice(-6)}`;
 
-    // Cross-reference existing order in SERVER_ORDERS to backfill any missing details
-    const existingOrder = SERVER_ORDERS.find(
-      (o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()
-    );
+    // Cross-reference existing order in SERVER_ORDERS or DB to backfill any missing details
+    const existingOrder =
+      SERVER_ORDERS.find((o) => String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
+      (await fetchOrderFromDbByRef(targetOrderNumber));
 
     const shipmentPayload = {
       orderNumber: targetOrderNumber,
       customerName: customerName || existingOrder?.customerName || 'Artisan Patron',
       phone: phone || existingOrder?.customerPhone || '9876543210',
       email: email || existingOrder?.customerEmail || 'patron@artisanskart.in',
-      address: address || existingOrder?.shippingAddress?.addressLine || 'Studio Address',
+      address: address || existingOrder?.shippingAddress?.buildingHouse || existingOrder?.shippingAddress?.addressLine || 'Studio Address',
       city: city || existingOrder?.shippingAddress?.city || 'New Delhi',
       state: state || existingOrder?.shippingAddress?.state || 'Delhi',
       pincode: pincode || existingOrder?.shippingAddress?.pincode || '110016',
-      items: Array.isArray(items) && items.length > 0
-        ? items
-        : (existingOrder?.items || [{ title: 'Handcrafted Artisan Craft', price: totalAmount || 499, quantity: 1 }]),
+      items:
+        Array.isArray(items) && items.length > 0
+          ? items
+          : existingOrder?.items || [{ title: 'Handcrafted Artisan Craft', price: totalAmount || 499, quantity: 1 }],
       totalAmount: Number(totalAmount || existingOrder?.amount || 499),
       paymentMethod: paymentMethod || existingOrder?.paymentMethod || 'Prepaid',
-      pickupPincode: pickupPincode || '110016',
+      pickupPincode: pickupPincode || existingOrder?.pickupPincode || '110016',
       weightKg: Number(weightKg || existingOrder?.parcelWeightKg || 0.5),
       dimensions: dimensions || existingOrder?.parcelDimensions || '15x15x10 cm',
     };
@@ -2571,38 +2995,35 @@ app.post('/api/shipping/create-shipment', async (req: Request, res: Response) =>
       });
     }
 
-    // 1. Synchronize AWB and Courier into SERVER_ORDERS
     if (existingOrder) {
-      existingOrder.trackingAwb = shipmentResult.awb;
-      existingOrder.courierName = shipmentResult.courierName;
-      existingOrder.status = 'shipment_booked';
-      existingOrder.updatedAt = new Date().toISOString();
-      existingOrder.statusHistory = existingOrder.statusHistory || [];
-      existingOrder.statusHistory.push({
-        id: `ship_${Date.now()}`,
-        orderId: existingOrder.id,
-        fromStatus: existingOrder.status,
-        toStatus: 'shipment_booked',
-        actorName: 'NimbusPost Logistics',
-        actorRole: 'shipping',
-        note: `Shipment booked with ${shipmentResult.courierName} (AWB: ${shipmentResult.awb})`,
-        createdAt: new Date().toISOString(),
-      });
-      saveOrdersToDisk(SERVER_ORDERS);
-    }
+      const updated = {
+        ...existingOrder,
+        trackingAwb: shipmentResult.awb,
+        courierName: shipmentResult.courierName,
+        status: 'shipment_booked',
+        updatedAt: new Date().toISOString(),
+        statusHistory: [
+          ...(Array.isArray(existingOrder.statusHistory) ? existingOrder.statusHistory : []),
+          {
+            id: `ship_${Date.now()}`,
+            orderId: existingOrder.id,
+            fromStatus: existingOrder.status,
+            toStatus: 'shipment_booked',
+            actorName: 'NimbusPost Logistics',
+            actorRole: 'shipping',
+            note: `Shipment booked with ${shipmentResult.courierName} (AWB: ${shipmentResult.awb})`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
 
-    // 2. Synchronize in Supabase orders table
-    try {
-      await supabaseAdmin
-        .from('orders')
-        .update({
-          tracking_awb: shipmentResult.awb,
-          courier_name: shipmentResult.courierName,
-          status: 'shipment_booked',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('order_number', targetOrderNumber);
-    } catch (e) {}
+      if (hasServiceRoleKey) {
+        await persistOrderRecord(updated);
+      } else {
+        Object.assign(existingOrder, updated);
+        saveOrdersToDisk(SERVER_ORDERS);
+      }
+    }
 
     console.log(`📦 [Shipment Created] Order: ${targetOrderNumber} | AWB: ${shipmentResult.awb} | Courier: ${shipmentResult.courierName}`);
 
@@ -2763,53 +3184,41 @@ app.post(['/api/shipping/webhook', '/api/webhook/nimbuspost'], async (req: Reque
     }
 
     if (newStatus) {
-      // 1. Synchronize into SERVER_ORDERS
-      const orderMatch = SERVER_ORDERS.find(
-        (o) =>
-          (targetOrderNumber && String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
-          (targetAwb && String(o.trackingAwb || '').toLowerCase() === String(targetAwb).toLowerCase())
-      );
+      const orderMatch =
+        SERVER_ORDERS.find(
+          (o) =>
+            (targetOrderNumber && String(o.orderNumber || o.id).toLowerCase() === String(targetOrderNumber).toLowerCase()) ||
+            (targetAwb && String(o.trackingAwb || '').toLowerCase() === String(targetAwb).toLowerCase())
+        ) || (await fetchOrderFromDbByRef(targetOrderNumber || targetAwb));
 
       if (orderMatch) {
         const prevStatus = orderMatch.status;
-        orderMatch.status = newStatus;
-        if (targetAwb) orderMatch.trackingAwb = targetAwb;
-        orderMatch.updatedAt = new Date().toISOString();
-        orderMatch.statusHistory = orderMatch.statusHistory || [];
-        orderMatch.statusHistory.push({
-          id: `np_wh_${Date.now()}`,
-          orderId: orderMatch.id,
-          fromStatus: prevStatus,
-          toStatus: newStatus,
-          actorName: 'NimbusPost Courier Webhook',
-          actorRole: 'shipping',
-          note: `Shipment status updated to ${newStatus}`,
-          createdAt: new Date().toISOString(),
-        });
-        saveOrdersToDisk(SERVER_ORDERS);
-      }
+        const updated = {
+          ...orderMatch,
+          status: newStatus,
+          trackingAwb: targetAwb || orderMatch.trackingAwb,
+          updatedAt: new Date().toISOString(),
+          statusHistory: [
+            ...(Array.isArray(orderMatch.statusHistory) ? orderMatch.statusHistory : []),
+            {
+              id: `np_wh_${Date.now()}`,
+              orderId: orderMatch.id,
+              fromStatus: prevStatus,
+              toStatus: newStatus,
+              actorName: 'NimbusPost Courier Webhook',
+              actorRole: 'shipping',
+              note: `Shipment status updated to ${newStatus}`,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        };
 
-      // 2. Synchronize into Supabase orders table
-      const updatePayload: Record<string, any> = {
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      };
-      if (targetAwb) updatePayload.tracking_awb = targetAwb;
-
-      try {
-        if (targetOrderNumber) {
-          await supabaseAdmin
-            .from('orders')
-            .update(updatePayload)
-            .eq('order_number', targetOrderNumber);
-        } else if (targetAwb) {
-          await supabaseAdmin
-            .from('orders')
-            .update(updatePayload)
-            .eq('tracking_awb', targetAwb);
+        if (hasServiceRoleKey) {
+          await persistOrderRecord(updated);
+        } else {
+          Object.assign(orderMatch, updated);
+          saveOrdersToDisk(SERVER_ORDERS);
         }
-      } catch (dbErr: any) {
-        console.warn('[Shipping Webhook DB sync]:', dbErr.message);
       }
 
       console.log(`📦 [Shipping Webhook] Order ${targetOrderNumber || targetAwb} status updated to ${newStatus}`);
@@ -2879,108 +3288,112 @@ app.post('/api/webhook/razorpay', async (req: Request, res: Response) => {
     const paymentId = payment?.id;
 
     if (event === 'payment.captured' || event === 'order.paid' || event === 'payment.authorized') {
-      // Update SERVER_ORDERS
-      const sOrder = SERVER_ORDERS.find(
-        (o) =>
-          (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
-          (rzpOrderId && o.paymentGatewayOrderId === rzpOrderId)
-      );
-      if (sOrder) {
-        sOrder.paymentStatus = 'paid';
-        if (paymentId) sOrder.paymentGatewayPaymentId = paymentId;
-        sOrder.status = 'awaiting_maker_acceptance';
-        sOrder.updatedAt = new Date().toISOString();
-        sOrder.statusHistory = sOrder.statusHistory || [];
-        sOrder.statusHistory.push({
-          id: `rzp_wh_${Date.now()}`,
-          orderId: sOrder.id,
-          fromStatus: sOrder.status,
-          toStatus: 'awaiting_maker_acceptance',
-          actorName: 'Razorpay Live Webhook',
-          actorRole: 'system',
-          note: `Payment confirmed via webhook event "${event}" (ID: ${paymentId || rzpOrderId})`,
-          createdAt: new Date().toISOString(),
-        });
-        saveOrdersToDisk(SERVER_ORDERS);
+      const existingOrder =
+        SERVER_ORDERS.find(
+          (o) =>
+            (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
+            (rzpOrderId && o.paymentGatewayOrderId === rzpOrderId)
+        ) || (await fetchOrderFromDbByRef(orderNumber || rzpOrderId));
+
+      const resolvedOrderNumber = String(
+        existingOrder?.orderNumber || orderNumber || rzpOrderId || `AK-2026-${Math.floor(10000 + Math.random() * 90000)}`
+      ).trim();
+
+      const paidAmountINR = roundCurrency(Number(payment?.amount || orderEntity?.amount || 0) / 100);
+      const orderToPersist = {
+        ...(existingOrder || {}),
+        orderNumber: resolvedOrderNumber,
+        customerName:
+          existingOrder?.customerName || payment?.notes?.customer_name || orderEntity?.notes?.customer_name || 'ArtisansKart Customer',
+        customerEmail: existingOrder?.customerEmail || payment?.email || payment?.notes?.customer_email || '',
+        customerPhone: existingOrder?.customerPhone || payment?.contact || payment?.notes?.customer_phone || '9876543210',
+        amount: existingOrder?.amount ?? (paidAmountINR > 0 ? paidAmountINR : 0),
+        itemsTotal: existingOrder?.itemsTotal ?? (paidAmountINR > 0 ? paidAmountINR : 0),
+        paymentStatus: 'paid',
+        paymentMethod: 'razorpay',
+        paymentGatewayOrderId: rzpOrderId || existingOrder?.paymentGatewayOrderId,
+        paymentGatewayPaymentId: paymentId || existingOrder?.paymentGatewayPaymentId,
+        status: 'awaiting_maker_acceptance',
+        updatedAt: new Date().toISOString(),
+        statusHistory: [
+          ...(Array.isArray(existingOrder?.statusHistory) ? existingOrder.statusHistory : []),
+          {
+            id: `rzp_wh_${Date.now()}`,
+            orderId: existingOrder?.id || resolvedOrderNumber,
+            fromStatus: existingOrder?.status || 'order_placed',
+            toStatus: 'awaiting_maker_acceptance',
+            actorName: 'Razorpay Live Webhook',
+            actorRole: 'system',
+            note: `Payment confirmed via webhook event "${event}" (ID: ${paymentId || rzpOrderId})`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      };
+
+      const savedOrder = await persistOrderRecord(orderToPersist);
+      console.log(`✅ [Razorpay Webhook] Order #${savedOrder.orderNumber} marked PAID & persisted (maker_share_amount: ₹${savedOrder.makerShareAmount}).`);
+
+      if (!isValidUuid(savedOrder.makerId)) {
+        await assignOrderToMaker(savedOrder.orderNumber, savedOrder);
       }
 
-      if (sOrder) {
-        await persistOrderRecord(sOrder);
-        console.log(`✅ [Razorpay Webhook] Order #${sOrder.orderNumber} marked PAID & persisted.`);
-      }
-
-      // Auto-book shipment in NimbusPost
-      autoBookShipmentForOrder(orderNumber || rzpOrderId, sOrder).catch(() => {});
+      autoBookShipmentForOrder(savedOrder.orderNumber, savedOrder).catch(() => {});
     } else if (event === 'payment.failed') {
-      const sOrder = SERVER_ORDERS.find(
-        (o) =>
-          (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
-          (rzpOrderId && o.paymentGatewayOrderId === rzpOrderId)
-      );
-      if (sOrder) {
-        sOrder.paymentStatus = 'failed';
-        sOrder.updatedAt = new Date().toISOString();
-        sOrder.statusHistory = sOrder.statusHistory || [];
-        sOrder.statusHistory.push({
-          id: `rzp_wh_fail_${Date.now()}`,
-          orderId: sOrder.id,
-          fromStatus: sOrder.status,
-          toStatus: sOrder.status,
-          actorName: 'Razorpay Live Webhook',
-          actorRole: 'system',
-          note: `Payment failed notification received from gateway`,
-          createdAt: new Date().toISOString(),
-        });
-        saveOrdersToDisk(SERVER_ORDERS);
-      }
+      const sOrder =
+        SERVER_ORDERS.find(
+          (o) =>
+            (orderNumber && String(o.orderNumber || o.id).toLowerCase() === String(orderNumber).toLowerCase()) ||
+            (rzpOrderId && o.paymentGatewayOrderId === rzpOrderId)
+        ) || (await fetchOrderFromDbByRef(orderNumber || rzpOrderId));
 
-      if (orderNumber) {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_status: 'failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('order_number', orderNumber);
-      } else if (rzpOrderId) {
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_status: 'failed',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('payment_gateway_order_id', rzpOrderId);
+      if (sOrder) {
+        await persistOrderRecord({
+          ...sOrder,
+          paymentStatus: 'failed',
+          updatedAt: new Date().toISOString(),
+          statusHistory: [
+            ...(Array.isArray(sOrder.statusHistory) ? sOrder.statusHistory : []),
+            {
+              id: `rzp_wh_fail_${Date.now()}`,
+              orderId: sOrder.id,
+              fromStatus: sOrder.status,
+              toStatus: sOrder.status,
+              actorName: 'Razorpay Live Webhook',
+              actorRole: 'system',
+              note: `Payment failed notification received from gateway`,
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        });
       }
     } else if (event === 'refund.processed' || event === 'refund.created') {
       const refund = req.body.payload?.refund?.entity;
       const refundPaymentId = refund?.payment_id || paymentId;
 
       if (refundPaymentId) {
-        const sOrder = SERVER_ORDERS.find((o) => o.paymentGatewayPaymentId === refundPaymentId);
+        const sOrder =
+          SERVER_ORDERS.find((o) => o.paymentGatewayPaymentId === refundPaymentId) ||
+          (await fetchOrderFromDbByRef(refundPaymentId));
         if (sOrder) {
-          sOrder.paymentStatus = 'refunded';
-          sOrder.updatedAt = new Date().toISOString();
-          sOrder.statusHistory = sOrder.statusHistory || [];
-          sOrder.statusHistory.push({
-            id: `rzp_wh_ref_${Date.now()}`,
-            orderId: sOrder.id,
-            fromStatus: sOrder.status,
-            toStatus: sOrder.status,
-            actorName: 'Razorpay Live Webhook',
-            actorRole: 'system',
-            note: `Refund recorded via webhook: ₹${(refund?.amount || 0) / 100}`,
-            createdAt: new Date().toISOString(),
+          await persistOrderRecord({
+            ...sOrder,
+            paymentStatus: 'refunded',
+            updatedAt: new Date().toISOString(),
+            statusHistory: [
+              ...(Array.isArray(sOrder.statusHistory) ? sOrder.statusHistory : []),
+              {
+                id: `rzp_wh_ref_${Date.now()}`,
+                orderId: sOrder.id,
+                fromStatus: sOrder.status,
+                toStatus: sOrder.status,
+                actorName: 'Razorpay Live Webhook',
+                actorRole: 'system',
+                note: `Refund recorded via webhook: ₹${(refund?.amount || 0) / 100}`,
+                createdAt: new Date().toISOString(),
+              },
+            ],
           });
-          saveOrdersToDisk(SERVER_ORDERS);
         }
-
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            payment_status: 'refunded',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('payment_gateway_payment_id', refundPaymentId);
       }
     }
   } catch (err: any) {
@@ -3076,20 +3489,23 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
       confirmedPrepDays,
     };
 
-    // 1. Update in centralized persistent SERVER_ORDERS
+    // 1. Hydrate existing order from memory OR authoritative Supabase DB
     const orderIndex = SERVER_ORDERS.findIndex(
       (o) =>
         String(o.orderNumber || '').toLowerCase() === String(targetRef).toLowerCase() ||
         String(o.id) === String(targetRef)
     );
 
+    const existing =
+      (orderIndex >= 0 ? SERVER_ORDERS[orderIndex] : null) ||
+      (await fetchOrderFromDbByRef(String(targetRef)));
+
     let updatedOrderRecord: any = null;
-    if (orderIndex >= 0) {
-      const existing = SERVER_ORDERS[orderIndex];
-      const history = existing.statusHistory || [];
+    if (existing) {
+      const history = Array.isArray(existing.statusHistory) ? [...existing.statusHistory] : [];
       history.push(auditEntry);
 
-      SERVER_ORDERS[orderIndex] = {
+      updatedOrderRecord = {
         ...existing,
         status: targetStatus,
         rejectionReason: rejectionReason || existing.rejectionReason,
@@ -3103,26 +3519,24 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
         statusHistory: history,
         updatedAt: new Date().toISOString(),
       };
-      updatedOrderRecord = SERVER_ORDERS[orderIndex];
-      saveOrdersToDisk(SERVER_ORDERS);
+
+      if (hasServiceRoleKey) {
+        updatedOrderRecord = await persistOrderRecord(updatedOrderRecord);
+      } else {
+        if (orderIndex >= 0) {
+          SERVER_ORDERS[orderIndex] = updatedOrderRecord;
+        } else {
+          SERVER_ORDERS.unshift(updatedOrderRecord);
+        }
+        saveOrdersToDisk(SERVER_ORDERS);
+      }
     }
 
-    // 2. Persist updated status to orders table and central store via persistOrderRecord
-    if (updatedOrderRecord) {
-      await persistOrderRecord(updatedOrderRecord);
-    }
-
-    // 3. Persist audit trail into order_status_history table
-    try {
-      const { data: matchedOrder } = await supabaseAdmin
-        .from('orders')
-        .select('id')
-        .eq('order_number', targetRef)
-        .maybeSingle();
-
-      if (matchedOrder?.id) {
-        await supabaseAdmin.from('order_status_history').insert({
-          order_id: matchedOrder.id,
+    // 2. Best-effort audit trail in order_status_history (non-fatal if optional table does not exist)
+    if (supabaseServiceClient && updatedOrderRecord?.id && isValidUuid(updatedOrderRecord.id)) {
+      try {
+        await supabaseServiceClient.from('order_status_history').insert({
+          order_id: updatedOrderRecord.id,
           from_status: fromStatus,
           to_status: targetStatus,
           actor_name: actorName || 'System',
@@ -3130,9 +3544,7 @@ app.post('/api/orders/update-status', async (req: Request, res: Response) => {
           note: note || `Status transitioned from ${fromStatus} to ${targetStatus}`,
           created_at: new Date().toISOString(),
         });
-      }
-    } catch (auditErr: any) {
-      console.warn('[Order Lifecycle Audit History Warning]:', auditErr.message);
+      } catch {}
     }
 
     console.log(`[Order Lifecycle] ${targetRef}: ${fromStatus} -> ${targetStatus} by ${actorName || actorRole}`);
@@ -4411,7 +4823,7 @@ function mapDbRowToProduct(item: any): any {
 // GET /api/products
 app.get('/api/products', async (_req: Request, res: Response) => {
   try {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await supabaseReadClient
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
@@ -4437,21 +4849,29 @@ app.get('/api/products/:ref', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Product reference is required.' });
     }
 
+    const { data: allProds, error } = await supabaseReadClient
+      .from('products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!error && Array.isArray(allProds)) {
+      const numId = Number(cleanRef);
+      const cleanLower = cleanRef.toLowerCase();
+      const matched = allProds.find((p: any) => {
+        if (isValidUuid(cleanRef) && String(p.id).toLowerCase() === cleanLower) return true;
+        if (String(p.slug || '').toLowerCase() === cleanLower) return true;
+        if (Number.isFinite(numId) && numId > 0 && computeStableProductHash(String(p.id)) === numId) return true;
+        if (String(p.title || '').toLowerCase().includes(cleanLower)) return true;
+        return false;
+      });
+
+      if (matched) {
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
+        return res.json({ success: true, product: mapDbRowToProduct(matched) });
+      }
+    }
+
     const numId = Number(cleanRef);
-    let query = supabaseAdmin.from('products').select('*');
-    if (!isNaN(numId) && numId > 0) {
-      query = query.eq('id', numId);
-    } else {
-      query = query.or(`slug.ilike.${cleanRef},title.ilike.%${cleanRef}%`);
-    }
-
-    const { data, error } = await query.maybeSingle();
-    if (!error && data) {
-      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
-      return res.json({ success: true, product: mapDbRowToProduct(data) });
-    }
-
-    // Fallback check memory catalog
     if (!isNaN(numId) && SERVER_PRODUCT_CATALOG[numId]) {
       const cat = SERVER_PRODUCT_CATALOG[numId];
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
@@ -4718,51 +5138,56 @@ app.get('/api/debug/schema', async (_req, res) => {
 // -------------------------------------------------------------
 app.post('/api/maker/accept', async (req: Request, res: Response) => {
   try {
-    const { orderId, makerId, makerName } = req.body;
+    const { orderId, makerId, makerName } = req.body || {};
     const cleanRef = String(orderId || '').trim();
     if (!cleanRef) {
       return res.status(400).json({ success: false, error: 'Order reference is required.' });
     }
 
-    const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
+    const existing =
+      (await fetchOrderFromDbByRef(cleanRef)) ||
+      SERVER_ORDERS.find(
+        (o) => String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() || String(o.id) === cleanRef
+      );
 
-    // Atomic update: only accept if status is still pending maker acceptance
-    let updateQuery = supabaseAdmin
-      .from('orders')
-      .update({
-        status: 'accepted',
-        maker_id: makerId,
-        maker_name: makerName,
-        accepted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .or('status.eq.awaiting_maker_acceptance,status.eq.order_placed,status.eq.new,status.eq.paid');
-
-    if (isNum) {
-      updateQuery = updateQuery.or(`id.eq.${cleanRef},order_number.eq.${cleanRef}`);
-    } else {
-      updateQuery = updateQuery.eq('order_number', cleanRef);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Order not found.' });
     }
 
-    const { data, error } = await updateQuery.select().maybeSingle();
-
-    if (error || !data) {
+    const eligibleStatuses = ['awaiting_maker_acceptance', 'order_placed', 'new', 'paid', 'pending'];
+    if (!eligibleStatuses.includes(String(existing.status || '').toLowerCase())) {
       return res.status(409).json({ success: false, error: 'Order already accepted by another maker or not available.' });
     }
 
-    // Also update in-memory SERVER_ORDERS
-    const sOrder = SERVER_ORDERS.find(
-      (o) => String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() || String(o.id) === cleanRef
-    );
-    if (sOrder) {
-      sOrder.status = 'accepted';
-      sOrder.makerId = makerId || sOrder.makerId;
-      sOrder.makerName = makerName || sOrder.makerName;
-      sOrder.updatedAt = new Date().toISOString();
+    const updatedOrder = {
+      ...existing,
+      status: 'accepted',
+      makerId: isValidUuid(makerId) ? makerId : existing.makerId,
+      makerName: makerName || existing.makerName,
+      acceptedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      statusHistory: [
+        ...(Array.isArray(existing.statusHistory) ? existing.statusHistory : []),
+        {
+          id: `accept_${Date.now()}`,
+          orderId: existing.id,
+          fromStatus: existing.status,
+          toStatus: 'accepted',
+          actorName: makerName || 'Artisan Maker',
+          actorRole: 'maker',
+          note: 'Maker accepted order and scheduled crafting',
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const saved = hasServiceRoleKey ? await persistOrderRecord(updatedOrder) : updatedOrder;
+    if (!hasServiceRoleKey) {
+      Object.assign(existing, updatedOrder);
       saveOrdersToDisk(SERVER_ORDERS);
     }
 
-    return res.json({ success: true, order: data });
+    return res.json({ success: true, order: saved });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -4770,39 +5195,53 @@ app.post('/api/maker/accept', async (req: Request, res: Response) => {
 
 app.post('/api/maker/update-status', async (req: Request, res: Response) => {
   try {
-    const { orderId, status, makerId } = req.body;
-    
-    // Verify maker is assigned
-    const { data: order, error: fetchError } = await supabaseAdmin
-      .from('orders')
-      .select('maker_id')
-      .eq('id', orderId)
-      .maybeSingle();
+    const { orderId, status, makerId, actorName, note } = req.body || {};
+    const cleanRef = String(orderId || '').trim();
+    if (!cleanRef || !status) {
+      return res.status(400).json({ success: false, error: 'orderId and status are required.' });
+    }
 
-    if (fetchError || !order || order.maker_id !== makerId) {
+    const existing =
+      (await fetchOrderFromDbByRef(cleanRef)) ||
+      SERVER_ORDERS.find(
+        (o) => String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() || String(o.id) === cleanRef
+      );
+
+    if (!existing || (existing.makerId && makerId && existing.makerId !== makerId)) {
       return res.status(403).json({ success: false, error: 'Unauthorized or invalid order.' });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('orders')
-      .update({
-        status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', orderId)
-      .select()
-      .maybeSingle();
+    const updatedOrder = {
+      ...existing,
+      status,
+      makerId: existing.makerId || (isValidUuid(makerId) ? makerId : undefined),
+      updatedAt: new Date().toISOString(),
+      statusHistory: [
+        ...(Array.isArray(existing.statusHistory) ? existing.statusHistory : []),
+        {
+          id: `maker_upd_${Date.now()}`,
+          orderId: existing.id,
+          fromStatus: existing.status,
+          toStatus: status,
+          actorName: actorName || existing.makerName || 'Artisan Maker',
+          actorRole: 'maker',
+          note: note || `Maker moved order to ${status}`,
+          createdAt: new Date().toISOString(),
+        },
+      ],
+    };
 
-    if (error || !data) {
-      return res.status(400).json({ success: false, error: 'Failed to update order status.' });
+    const saved = hasServiceRoleKey ? await persistOrderRecord(updatedOrder) : updatedOrder;
+    if (!hasServiceRoleKey) {
+      Object.assign(existing, updatedOrder);
+      saveOrdersToDisk(SERVER_ORDERS);
     }
 
-    // If status is ready_to_pack, trigger shipment
     if (status === 'ready_to_pack') {
-      await autoBookShipmentForOrder(data.order_number, data);
+      await autoBookShipmentForOrder(saved.orderNumber, saved);
     }
 
-    return res.json({ success: true, order: data });
+    return res.json({ success: true, order: saved });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
   }

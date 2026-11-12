@@ -531,8 +531,13 @@ export const AdminPortalPage: React.FC = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const getOrderMakerShare = (o: Order) =>
+    typeof o.makerShareAmount === 'number' && Number.isFinite(o.makerShareAmount)
+      ? o.makerShareAmount
+      : Math.round(((o.itemsTotal && o.itemsTotal > 0 ? o.itemsTotal : o.amount) * ((o.makerEarningPercent || makerEarningPercent) / 100)) * 100) / 100;
+
   const totalSalesVolume = orders.reduce((sum, o) => sum + o.amount, 0);
-  const makerSharePaid = totalSalesVolume * (makerEarningPercent / 100);
+  const makerSharePaid = orders.reduce((sum, o) => sum + getOrderMakerShare(o), 0);
 
   const isMasterAdmin =
     (currentUser?.email || '').trim().toLowerCase() === MASTER_ADMIN_EMAIL.toLowerCase() ||
@@ -2672,9 +2677,9 @@ export const AdminPortalPage: React.FC = () => {
 
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <span className="text-xs text-slate-400 block">Total / {makerEarningPercent}% Split</span>
+                      <span className="text-xs text-slate-400 block">Total / {o.makerEarningPercent || makerEarningPercent}% Split</span>
                       <span className="text-sm font-black text-slate-900">
-                        ₹{o.amount} <span className="text-[#C85A32]">(₹{Math.round(o.amount * (makerEarningPercent / 100))})</span>
+                        ₹{o.amount} <span className="text-[#C85A32]">(₹{Math.round(getOrderMakerShare(o))})</span>
                       </span>
                     </div>
 
