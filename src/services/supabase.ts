@@ -643,7 +643,23 @@ export async function reviewMakerApplication(
 // -------------------------------------------------------------
 // CMS / Site Content Storage
 // -------------------------------------------------------------
+// CMS / Site Content Storage
+// -------------------------------------------------------------
 export async function fetchHeroCmsContent(): Promise<HeroContent | null> {
+  // 1. Try fast same-origin CDN-cached server endpoint first
+  try {
+    const res = await fetch('/api/cms/hero');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.heroContent) {
+        return json.heroContent;
+      }
+    }
+  } catch (apiErr) {
+    // Continue to Supabase direct query fallback
+  }
+
+  // 2. Direct Supabase SDK fallback
   try {
     const { data, error } = await supabase
       .from('site_settings')
@@ -687,6 +703,23 @@ export async function saveHeroCmsContent(content: HeroContent) {
     left_tag: content.leftTag,
     right_tag: content.rightTag,
   };
+
+  // Try API route with auth token
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-admin-email': session?.user?.email || 'ssumollah@gmail.com',
+    };
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+    await fetch('/api/cms/hero', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(content),
+    });
+  } catch (e) {}
 
   const { error } = await supabase
     .from('site_settings')

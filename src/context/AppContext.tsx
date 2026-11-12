@@ -91,6 +91,7 @@ interface AppContextType {
 
   // Hero & Animation Customization
   heroContent: HeroContent;
+  isHeroLoaded: boolean;
   updateHeroContent: (partial: Partial<HeroContent>) => void;
   resetHeroToDefault: () => void;
   animationSettings: AnimationSettings;
@@ -556,6 +557,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return DEFAULT_HERO_CONTENT;
   });
 
+  const [isHeroLoaded, setIsHeroLoaded] = useState<boolean>(false);
+
   const [makerEarningPercent, setMakerEarningPercent] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('artisanskart_maker_earning_percent_v1');
@@ -632,6 +635,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } catch (err) {
         console.warn('Supabase background fetch notice:', err);
+      } finally {
+        setIsHeroLoaded(true);
       }
     }
     initSupabaseData();
@@ -1195,6 +1200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // Hero & Animation Customization
         heroContent,
+        isHeroLoaded,
         updateHeroContent,
         resetHeroToDefault,
         animationSettings,

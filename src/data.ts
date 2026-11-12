@@ -287,17 +287,17 @@ export const COLLECTIONS: CollectionItem[] = [
 export const ABOUT_TEXT = "ArtisansKart.in is a conscious marketplace built for independent creators, homemakers, and skilled artisans who craft with their hands and hearts — crochet artists, ceramicists, painters, and independent makers. Every piece is handcrafted with care. Made by creators. Chosen by you.";
 
 export const DEFAULT_HERO_CONTENT: HeroContent = {
-  badgeText: "Handcrafted by Independent Artisans & Creators",
+  badgeText: "✨ Handcrafted by Artisan Creators",
   headlineLine1: "Made by Creators.",
   headlineLine2: "Chosen by You.",
   headlineLine3: "",
-  subhead: "Discover one-of-a-kind crochet pieces, pottery, hand-painted art, jewelry & decorative crafts made with heart by independent creators, homemakers, and skilled artisans.",
-  mainImage: "https://images.unsplash.com/photo-1584589167171-541ce45f1eea?auto=format&fit=crop&w=1200&q=80",
-  leftImage: "https://images.pexels.com/photos/34387792/pexels-photo-34387792.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-  rightImage: "https://images.pexels.com/photos/15955332/pexels-photo-15955332.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-  mainTag: "Crochet Creations",
-  leftTag: "Fine Art",
-  rightTag: "Silver & Wire",
+  subhead: "Discover one-of-a-kind clay crafts, fine art cards, accessories & keychains. Every purchase directly funds an independent creator's craft.",
+  mainImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1792161024992_p32u1i_IMG_20261013_105851.png",
+  leftImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1794140088590_am2z7b_cropped_image_1794140088589.jpg",
+  rightImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1792161073910_93a22e_seedream-5.0-pro_b_Transform_this_photo.jpeg",
+  mainTag: "Live Wheel Pottery",
+  leftTag: "Bouquet",
+  rightTag: "Beaded Accessories",
 };
 
 export const DEFAULT_ANIMATION_SETTINGS: AnimationSettings = {

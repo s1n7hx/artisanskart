@@ -50,41 +50,42 @@ export const CheckoutPage: React.FC = () => {
   const directQtyParam = Number(searchParams.get('qty') || 1);
   const directVariantParam = searchParams.get('variant');
 
+  const [directProduct, setDirectProduct] = useState<Product | null>(null);
   const [isDirectLoading, setIsDirectLoading] = useState(false);
 
   // Handle direct product ordering injection if navigated via "Order Now"
   useEffect(() => {
-    if (directProductSlug) {
-      const prod = findProductBySlugOrId(products, directProductSlug);
-      if (prod) {
-        const inCart = cart.find((c) => c.id === prod.id);
-        if (!inCart) {
-          addToCart(prod.id);
-          if (directQtyParam > 1) {
-            changeQty(prod.id, directQtyParam);
-          }
-        } else if (directQtyParam > 1 && inCart.qty !== directQtyParam) {
+    if (!directProductSlug) return;
+    const prod = findProductBySlugOrId(products, directProductSlug);
+    if (prod) {
+      setDirectProduct(prod);
+      const inCart = cart.find((c) => c.id === prod.id);
+      if (!inCart) {
+        addToCart(prod.id);
+        if (directQtyParam > 1) {
           changeQty(prod.id, directQtyParam);
         }
-      } else {
-        // Fetch product directly from server/Supabase if not loaded in AppContext yet
-        setIsDirectLoading(true);
-        fetch(`/api/products/${encodeURIComponent(directProductSlug)}`)
-          .then(async (res) => {
-            if (res.ok) {
-              const data = await res.json();
-              if (data.product) {
-                // If product is not already in global products context, temporarily inject or addToCart
-                addToCart(data.product.id);
-                if (directQtyParam > 1) {
-                  changeQty(data.product.id, directQtyParam);
-                }
+      } else if (directQtyParam > 1 && inCart.qty !== directQtyParam) {
+        changeQty(prod.id, directQtyParam);
+      }
+    } else {
+      // Fetch product directly from server/Supabase if not loaded in AppContext yet
+      setIsDirectLoading(true);
+      fetch(`/api/products/${encodeURIComponent(directProductSlug)}`)
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json();
+            if (data.product) {
+              setDirectProduct(data.product);
+              addToCart(data.product.id);
+              if (directQtyParam > 1) {
+                changeQty(data.product.id, directQtyParam);
               }
             }
-          })
-          .catch(() => {})
-          .finally(() => setIsDirectLoading(false));
-      }
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsDirectLoading(false));
     }
   }, [directProductSlug, products]);
 
@@ -311,15 +312,27 @@ export const CheckoutPage: React.FC = () => {
 
   // Detailed items in order
   const checkoutItems = useMemo(() => {
-    return cart.map((item) => {
-      const prod = products.find((p) => p.id === item.id);
+    const items = cart.map((item) => {
+      const prod = products.find((p) => p.id === item.id) || (directProduct?.id === item.id ? directProduct : undefined);
       return {
         ...item,
         product: prod,
         subtotal: (prod?.price || 0) * item.qty,
       };
     }).filter((i) => Boolean(i.product));
-  }, [cart, products]);
+
+    // If cart is empty or pending injection but directProduct is ready, synthesize the direct item immediately!
+    if (items.length === 0 && directProduct) {
+      return [{
+        id: directProduct.id,
+        qty: directQtyParam || 1,
+        product: directProduct,
+        subtotal: (directProduct.price || 0) * (directQtyParam || 1),
+      }];
+    }
+
+    return items;
+  }, [cart, products, directProduct, directQtyParam]);
 
   // Pricing calculations
   const itemsSubtotal = checkoutItems.reduce((sum, item) => sum + item.subtotal, 0);
@@ -669,9 +682,9 @@ export const CheckoutPage: React.FC = () => {
   // =========================================================
   // LOADING / EMPTY CART GUARD
   // =========================================================
-  if ((isDirectLoading || (directProductSlug && checkoutItems.length === 0)) && !orderComplete) {
+  if (isDirectLoading && checkoutItems.length === 0 && !orderComplete) {
     return (
-      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6 animate-in fade-in">
+      <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-6">
         <div className="w-16 h-16 rounded-full bg-[#C85A32]/10 text-[#C85A32] flex items-center justify-center mx-auto">
           <RefreshCw className="w-8 h-8 animate-spin" />
         </div>

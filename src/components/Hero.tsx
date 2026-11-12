@@ -8,7 +8,7 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSignup }) => {
-  const { heroContent, animationSettings, setIsWpModalOpen, userRole, makerEarningPercent } = useApp();
+  const { heroContent, isHeroLoaded, animationSettings, setIsWpModalOpen, userRole, makerEarningPercent } = useApp();
   const stageRef = useRef<HTMLDivElement>(null);
   const mainElRef = useRef<HTMLDivElement>(null);
   const leftElRef = useRef<HTMLDivElement>(null);
@@ -18,6 +18,30 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
   const [statEarnings, setStatEarnings] = useState(0);
   const [statHandmade, setStatHandmade] = useState(0);
   const [statVerified, setStatVerified] = useState(0);
+
+  // Authoritative Hero Image Loading & Anti-Flash State
+  const [mainLoaded, setMainLoaded] = useState(false);
+  const [leftLoaded, setLeftLoaded] = useState(false);
+  const [rightLoaded, setRightLoaded] = useState(false);
+
+  const prevMainRef = useRef(heroContent.mainImage);
+  const prevLeftRef = useRef(heroContent.leftImage);
+  const prevRightRef = useRef(heroContent.rightImage);
+
+  useEffect(() => {
+    if (prevMainRef.current !== heroContent.mainImage) {
+      prevMainRef.current = heroContent.mainImage;
+      setMainLoaded(false);
+    }
+    if (prevLeftRef.current !== heroContent.leftImage) {
+      prevLeftRef.current = heroContent.leftImage;
+      setLeftLoaded(false);
+    }
+    if (prevRightRef.current !== heroContent.rightImage) {
+      prevRightRef.current = heroContent.rightImage;
+      setRightLoaded(false);
+    }
+  }, [heroContent.mainImage, heroContent.leftImage, heroContent.rightImage]);
 
   // Magnet effect - respects animationSettings.enableMagnet
   useEffect(() => {
@@ -257,15 +281,24 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
           <div
             ref={leftElRef}
             id="magnetHeroLeft"
-            className="magnet-el fade-in absolute top-2 left-1 sm:left-4 md:left-2 z-20 w-[135px] sm:w-[165px] md:w-[190px] h-[155px] sm:h-[185px] md:h-[210px] rounded-2xl overflow-hidden shadow-xl border-4 border-white/95 -rotate-6 hover:rotate-0 transition-transform duration-500 group/left"
+            className="magnet-el fade-in absolute top-2 left-1 sm:left-4 md:left-2 z-20 w-[135px] sm:w-[165px] md:w-[190px] h-[155px] sm:h-[185px] md:h-[210px] rounded-2xl overflow-hidden shadow-xl border-4 border-white/95 -rotate-6 hover:rotate-0 transition-transform duration-500 group/left bg-slate-100"
             style={{ transitionDelay: '550ms' }}
           >
+            {(!leftLoaded || !isHeroLoaded) && (
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 animate-pulse z-0" />
+            )}
             <img
               src={heroContent.leftImage}
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover transition-opacity duration-500 ${
+                leftLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
               alt="Ceramic painting craft"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              onLoad={() => setLeftLoaded(true)}
             />
-            <span className="absolute bottom-2 left-2 bg-[#1E293B]/80 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
+            <span className="absolute bottom-2 left-2 bg-[#1E293B]/80 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full z-10">
               {heroContent.leftTag}
             </span>
           </div>
@@ -274,16 +307,25 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
           <div
             ref={mainElRef}
             id="magnetHero"
-            className="magnet-el fade-in relative z-10 w-[220px] sm:w-[270px] md:w-[320px] h-[310px] sm:h-[370px] md:h-[420px] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white/95 group/main"
+            className="magnet-el fade-in relative z-10 w-[220px] sm:w-[270px] md:w-[320px] h-[310px] sm:h-[370px] md:h-[420px] rounded-[2rem] overflow-hidden shadow-2xl border-4 border-white/95 group/main bg-slate-100"
             style={{ transitionDelay: '480ms' }}
           >
+            {(!mainLoaded || !isHeroLoaded) && (
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 animate-pulse z-0" />
+            )}
             <img
               src={heroContent.mainImage}
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover transition-opacity duration-500 ${
+                mainLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
               alt="Artisan crafting clay art"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              onLoad={() => setMainLoaded(true)}
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#1E293B]/45 via-transparent to-transparent" />
-            <span className="absolute bottom-3 left-3.5 text-white text-xs font-semibold tracking-wide flex items-center gap-1.5">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1E293B]/45 via-transparent to-transparent pointer-events-none" />
+            <span className="absolute bottom-3 left-3.5 text-white text-xs font-semibold tracking-wide flex items-center gap-1.5 z-10">
               <Flame className="w-3.5 h-3.5 text-[#C85A32]" /> {heroContent.mainTag}
             </span>
           </div>
@@ -292,15 +334,24 @@ export const Hero: React.FC<HeroProps> = ({ onExploreMarketplace, onOpenMakerSig
           <div
             ref={rightElRef}
             id="magnetHeroRight"
-            className="magnet-el fade-in absolute bottom-2 right-1 sm:right-4 md:right-2 z-20 w-[140px] sm:w-[170px] md:w-[195px] h-[160px] sm:h-[190px] md:h-[215px] rounded-2xl overflow-hidden shadow-xl border-4 border-white/95 rotate-6 hover:rotate-0 transition-transform duration-500 group/right"
+            className="magnet-el fade-in absolute bottom-2 right-1 sm:right-4 md:right-2 z-20 w-[140px] sm:w-[170px] md:w-[195px] h-[160px] sm:h-[190px] md:h-[215px] rounded-2xl overflow-hidden shadow-xl border-4 border-white/95 rotate-6 hover:rotate-0 transition-transform duration-500 group/right bg-slate-100"
             style={{ transitionDelay: '640ms' }}
           >
+            {(!rightLoaded || !isHeroLoaded) && (
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 animate-pulse z-0" />
+            )}
             <img
               src={heroContent.rightImage}
-              className="w-full h-full object-cover"
+              className={`w-full h-full object-cover transition-opacity duration-500 ${
+                rightLoaded ? 'opacity-100' : 'opacity-0'
+              }`}
               alt="Handmade jewelry craft"
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              onLoad={() => setRightLoaded(true)}
             />
-            <span className="absolute bottom-2 right-2 bg-[#C85A32]/90 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full">
+            <span className="absolute bottom-2 right-2 bg-[#C85A32]/90 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-0.5 rounded-full z-10">
               {heroContent.rightTag}
             </span>
           </div>

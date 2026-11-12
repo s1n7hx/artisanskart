@@ -4684,6 +4684,108 @@ const DEFAULT_INITIAL_COLLECTIONS = [
   },
 ];
 
+// -------------------------------------------------------------
+// CMS Hero Section API Endpoint (Fast Server & CDN Cached)
+// -------------------------------------------------------------
+app.get(['/api/cms/hero', '/api/hero'], async (_req: Request, res: Response) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('site_settings')
+      .select('value, updated_at')
+      .eq('key', 'hero_section')
+      .maybeSingle();
+
+    if (!error && data?.value) {
+      const val = data.value;
+      const formatted = {
+        badgeText: val.badge_text || val.badgeText,
+        headlineLine1: val.headline_line1 || val.headlineLine1,
+        headlineLine2: val.headline_line2 || val.headlineLine2,
+        headlineLine3: val.headline_line3 || val.headlineLine3,
+        subhead: val.subhead,
+        mainImage: val.main_image || val.mainImage,
+        leftImage: val.left_image || val.leftImage,
+        rightImage: val.right_image || val.rightImage,
+        mainTag: val.main_tag || val.mainTag,
+        leftTag: val.left_tag || val.leftTag,
+        rightTag: val.right_tag || val.rightTag,
+        version: data.updated_at || new Date().toISOString(),
+      };
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
+      return res.json({ success: true, heroContent: formatted, version: data.updated_at });
+    }
+
+    // Default fallback if not yet in database
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
+    return res.json({
+      success: true,
+      heroContent: {
+        badgeText: "✨ Handcrafted by Artisan Creators",
+        headlineLine1: "Made by Creators.",
+        headlineLine2: "Chosen by You.",
+        headlineLine3: "",
+        subhead: "Discover one-of-a-kind clay crafts, fine art cards, accessories & keychains. Every purchase directly funds an independent creator's craft.",
+        mainImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1792161024992_p32u1i_IMG_20261013_105851.png",
+        leftImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1794140088590_am2z7b_cropped_image_1794140088589.jpg",
+        rightImage: "https://xhzphnfzuutduztukiln.supabase.co/storage/v1/object/public/cms-assets/products/1792161073910_93a22e_seedream-5.0-pro_b_Transform_this_photo.jpeg",
+        mainTag: "Live Wheel Pottery",
+        leftTag: "Bouquet",
+        rightTag: "Beaded Accessories",
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post(['/api/cms/hero', '/api/hero'], async (req: Request, res: Response) => {
+  try {
+    const authCheck = await verifyMasterAdmin(req);
+    if (!authCheck.authorized) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Admin privileges required.' });
+    }
+
+    const content = req.body;
+    if (!content) {
+      return res.status(400).json({ success: false, error: 'Hero content payload required.' });
+    }
+
+    const formatted = {
+      badge_text: content.badgeText,
+      headline_line1: content.headlineLine1,
+      headline_line2: content.headlineLine2,
+      headline_line3: content.headlineLine3,
+      subhead: content.subhead,
+      main_image: content.mainImage,
+      left_image: content.leftImage,
+      right_image: content.rightImage,
+      main_tag: content.mainTag,
+      left_tag: content.leftTag,
+      right_tag: content.rightTag,
+    };
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin
+      .from('site_settings')
+      .upsert(
+        {
+          key: 'hero_section',
+          value: formatted,
+          updated_at: now,
+        },
+        { onConflict: 'key' }
+      );
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({ success: true, heroContent: content, version: now });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/collections', async (_req: Request, res: Response) => {
   try {
     const { data, error } = await supabaseAdmin

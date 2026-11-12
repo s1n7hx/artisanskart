@@ -127,8 +127,53 @@ export const AdminPortalPage: React.FC = () => {
     setLoadingMakers(true);
     setMakersError(null);
     try {
-      const makers = await fetchApprovedMakers();
-      setApprovedMakers(makers);
+      const fetchedMakers = await fetchApprovedMakers();
+      const makerMap = new Map<string, UserProfile>();
+
+      // 1. Add makers returned from API/Supabase
+      fetchedMakers.forEach((m) => {
+        const key = (m.id || m.email || '').toLowerCase();
+        if (key) makerMap.set(key, m);
+      });
+
+      // 2. Add all registered users / makers / admins from AppContext
+      usersList.forEach((u) => {
+        const key = (u.id || u.email || '').toLowerCase();
+        if (key && !makerMap.has(key)) {
+          makerMap.set(key, {
+            id: u.id,
+            email: u.email,
+            full_name: u.name || u.email.split('@')[0],
+            avatar_url: u.avatarUrl || '',
+            role: (u.role || 'maker') as any,
+            status: u.status || 'approved',
+            school: u.school || 'Independent Studio Guild',
+            created_at: new Date().toISOString(),
+          });
+        }
+      });
+
+      // 3. Add any creator referenced on existing marketplace products
+      products.forEach((p) => {
+        const makerKey = (p.makerId || p.maker || '').toLowerCase();
+        if (makerKey && !makerMap.has(makerKey)) {
+          makerMap.set(makerKey, {
+            id: p.makerId || `prod_maker_${p.id}`,
+            email: (p.maker || '').includes('@') ? p.maker : `${p.maker || 'artisan'}@artisanskart.in`,
+            full_name: p.maker || 'Artisan Creator',
+            avatar_url: '',
+            role: 'maker',
+            status: 'approved',
+            school: p.school || 'Independent Studio Guild',
+            created_at: new Date().toISOString(),
+          });
+        }
+      });
+
+      const allList = Array.from(makerMap.values()).sort((a, b) =>
+        (a.full_name || a.email || '').localeCompare(b.full_name || b.email || '')
+      );
+      setApprovedMakers(allList);
     } catch (err: any) {
       setMakersError(err.message || 'Failed to load makers.');
     } finally {
@@ -138,7 +183,7 @@ export const AdminPortalPage: React.FC = () => {
 
   React.useEffect(() => {
     loadApprovedMakers();
-  }, [activeTab, usersList.length]);
+  }, [activeTab, usersList.length, products.length]);
 
   React.useEffect(() => {
     setCustomPercentInput(makerEarningPercent);

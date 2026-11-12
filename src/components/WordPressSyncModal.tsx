@@ -35,6 +35,7 @@ import { useApp } from '../context/AppContext';
 import { Product } from '../types';
 import { testWordPressApi, getWordPressPhpSnippet } from '../services/wordpress';
 import { generateClientThemeZip } from '../services/themeGenerator';
+import { processAndUploadImage } from '../services/supabase';
 
 interface WordPressSyncModalProps {
   isOpen: boolean;
@@ -196,17 +197,24 @@ export const WordPressSyncModal: React.FC<WordPressSyncModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setter(event.target.result as string);
-          showToast('Image uploaded and loaded into preview!', 'check-circle-2');
+      setIsUploadingImage(true);
+      showToast('Uploading photo with unique storage version...', 'sparkles');
+      try {
+        const url = await processAndUploadImage(file, 'cms-assets');
+        if (url) {
+          setter(url);
+          showToast('Image uploaded and versioned successfully!', 'check-circle-2');
         }
-      };
-      reader.readAsDataURL(file);
+      } catch (err: any) {
+        showToast(err.message || 'Failed to upload photo.', 'alert-circle');
+      } finally {
+        setIsUploadingImage(false);
+      }
     }
   };
 
