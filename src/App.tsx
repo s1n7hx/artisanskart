@@ -17,6 +17,7 @@ import { BecomeAMakerPage } from './pages/BecomeAMakerPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { CheckoutPage } from './pages/CheckoutPage';
 import { OrderTrackingPage } from './pages/OrderTrackingPage';
+import { OrderConfirmationPage } from './pages/OrderConfirmationPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 import { MakerRouteGuard, AdminRouteGuard } from './components/RouteGuards';
@@ -34,9 +35,12 @@ export default function App() {
             <Route path="marketplace" element={<MarketplacePage />} />
             <Route path="product/:slug" element={<ProductDetailPage />} />
             <Route path="checkout" element={<CheckoutPage />} />
+            <Route path="order-confirmation/:orderNumber" element={<OrderConfirmationPage />} />
+            <Route path="order-confirmation" element={<OrderConfirmationPage />} />
+            <Route path="order/:orderNumber" element={<OrderConfirmationPage />} />
             <Route path="track" element={<OrderTrackingPage />} />
             <Route path="track/:orderNumber" element={<OrderTrackingPage />} />
-            <Route path="order/:orderNumber" element={<OrderTrackingPage />} />
+            <Route path="track-order" element={<OrderTrackingPage />} />
             <Route path="orders" element={<OrderTrackingPage />} />
             <Route
               path="maker"

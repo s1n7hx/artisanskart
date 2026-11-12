@@ -501,6 +501,7 @@ export const CheckoutPage: React.FC = () => {
         setIsProcessing(false);
         setOrderComplete(true);
         showToast('100% Test Discount applied! Order confirmed.', 'check-circle');
+        navigate(`/order-confirmation/${orderNum}`);
         return;
       }
 
@@ -567,6 +568,7 @@ export const CheckoutPage: React.FC = () => {
           setIsProcessing(false);
           setOrderComplete(true);
           showToast(`Payment verified! Order #${orderNum} placed.`, 'check-circle');
+          navigate(`/order-confirmation/${orderNum}`);
         },
         onFailure: (err) => {
           setIsProcessing(false);

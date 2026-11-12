@@ -66,13 +66,21 @@ export const OrderTrackingPage: React.FC = () => {
       );
 
       // 3. Fetch from Supabase
-      const { data: dbOrders, error } = await supabase
+      const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
+      let query = supabase
         .from('orders')
         .select(`
           *,
           order_items (*)
-        `)
-        .or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+        `);
+
+      if (isNum) {
+        query = query.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      } else {
+        query = query.or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      }
+
+      const { data: dbOrders, error } = await query;
 
       if (dbOrders && dbOrders.length > 0) {
         const d = dbOrders[0];

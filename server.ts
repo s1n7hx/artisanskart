@@ -1580,10 +1580,18 @@ app.get('/api/orders/:ref', async (req: Request, res: Response) => {
 
     // 1. Query Supabase orders table
     try {
-      const { data: dbOrders, error } = await supabaseAdmin
+      const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
+      let dbQuery = supabaseAdmin
         .from('orders')
-        .select('*, order_items(*)')
-        .or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+        .select('*, order_items(*)');
+
+      if (isNum) {
+        dbQuery = dbQuery.or(`id.eq.${cleanRef},order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      } else {
+        dbQuery = dbQuery.or(`order_number.ilike.${cleanRef},tracking_awb.ilike.${cleanRef}`);
+      }
+
+      const { data: dbOrders, error } = await dbQuery;
 
       if (!error && dbOrders && dbOrders.length > 0) {
         const d = dbOrders[0];
@@ -4579,24 +4587,47 @@ app.get('/api/debug/schema', async (_req, res) => {
 app.post('/api/maker/accept', async (req: Request, res: Response) => {
   try {
     const { orderId, makerId, makerName } = req.body;
-    
-    // Atomic update: only accept if status is still 'awaiting_maker_acceptance'
-    const { data, error } = await supabaseAdmin
+    const cleanRef = String(orderId || '').trim();
+    if (!cleanRef) {
+      return res.status(400).json({ success: false, error: 'Order reference is required.' });
+    }
+
+    const isNum = !isNaN(Number(cleanRef)) && Number(cleanRef) > 0;
+
+    // Atomic update: only accept if status is still pending maker acceptance
+    let updateQuery = supabaseAdmin
       .from('orders')
       .update({
-        status: 'MAKER_ACCEPTED',
+        status: 'accepted',
         maker_id: makerId,
         maker_name: makerName,
         accepted_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
-      .eq('id', orderId)
-      .eq('status', 'awaiting_maker_acceptance')
-      .select()
-      .maybeSingle();
+      .or('status.eq.awaiting_maker_acceptance,status.eq.order_placed,status.eq.new,status.eq.paid');
+
+    if (isNum) {
+      updateQuery = updateQuery.or(`id.eq.${cleanRef},order_number.eq.${cleanRef}`);
+    } else {
+      updateQuery = updateQuery.eq('order_number', cleanRef);
+    }
+
+    const { data, error } = await updateQuery.select().maybeSingle();
 
     if (error || !data) {
       return res.status(409).json({ success: false, error: 'Order already accepted by another maker or not available.' });
+    }
+
+    // Also update in-memory SERVER_ORDERS
+    const sOrder = SERVER_ORDERS.find(
+      (o) => String(o.orderNumber || '').toLowerCase() === cleanRef.toLowerCase() || String(o.id) === cleanRef
+    );
+    if (sOrder) {
+      sOrder.status = 'accepted';
+      sOrder.makerId = makerId || sOrder.makerId;
+      sOrder.makerName = makerName || sOrder.makerName;
+      sOrder.updatedAt = new Date().toISOString();
+      saveOrdersToDisk(SERVER_ORDERS);
     }
 
     return res.json({ success: true, order: data });
