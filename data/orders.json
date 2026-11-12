@@ -1,5 +1,38 @@
 [
   {
+    "orderNumber": "AK-PROD-739145",
+    "customerName": "Production Test Patron",
+    "customerEmail": "patron.prod@artisanskart.in",
+    "customerPhone": "9876543210",
+    "shippingAddress": {
+      "addressLine": "100 Studio Road",
+      "city": "Jaipur",
+      "state": "Rajasthan",
+      "pincode": "302001"
+    },
+    "amount": 599,
+    "itemsTotal": 599,
+    "shippingFee": 0,
+    "discountAmount": 0,
+    "status": "awaiting_maker_acceptance",
+    "paymentStatus": "paid",
+    "paymentMethod": "razorpay",
+    "createdAt": "2026-11-12T18:04:48.783Z",
+    "items": [
+      {
+        "productId": 1,
+        "title": "Crochet sunflower ",
+        "unitPrice": 599,
+        "quantity": 1,
+        "subtotal": 599
+      }
+    ],
+    "id": 1794506688875,
+    "trackingAwb": "NP-517200",
+    "courierName": "NimbusPost Express Partner",
+    "updatedAt": "2026-11-12T18:04:48.875Z"
+  },
+  {
     "orderNumber": "AK-CONFIRM-280384",
     "customerName": "Confirmation Tester",
     "customerEmail": "confirm@artisanskart.in",

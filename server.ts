@@ -323,6 +323,42 @@ export async function persistOrderRecord(fullOrder: any): Promise<any> {
 
   // 3. Persist to Postgres public.orders & public.order_items using verified existing columns
   try {
+    // Resolve maker details for each item from products table (products -> order_items -> maker)
+    const enrichedItems = [];
+    if (Array.isArray(cleanOrder.items)) {
+      for (const item of cleanOrder.items) {
+        let makerId = item.makerId;
+        let makerName = item.makerName;
+        const pId = item.productId || item.id;
+
+        if (pId && (!makerId || !makerName)) {
+          try {
+            const { data: prodData } = await supabaseAdmin
+              .from('products')
+              .select('maker_id, maker_name, maker')
+              .eq('id', pId)
+              .maybeSingle();
+
+            if (prodData) {
+              makerId = prodData.maker_id || makerId;
+              makerName = prodData.maker_name || prodData.maker || makerName;
+            }
+          } catch (e) {}
+        }
+
+        enrichedItems.push({
+          ...item,
+          makerId: makerId || null,
+          makerName: makerName || 'Independent Artisan',
+        });
+      }
+      cleanOrder.items = enrichedItems;
+      if (enrichedItems.length > 0) {
+        cleanOrder.makerId = enrichedItems[0].makerId;
+        cleanOrder.makerName = enrichedItems[0].makerName;
+      }
+    }
+
     const { data: dbOrder, error: orderErr } = await supabaseAdmin
       .from('orders')
       .upsert({
@@ -340,25 +376,28 @@ export async function persistOrderRecord(fullOrder: any): Promise<any> {
       .maybeSingle();
 
     if (orderErr) {
-      console.warn('⚠️ [Supabase orders Table Notice]:', orderErr.message);
+      console.error('❌ [Supabase orders Table Error]:', orderErr.message);
+      throw new Error(orderErr.message);
     } else if (dbOrder && Array.isArray(cleanOrder.items) && cleanOrder.items.length > 0) {
-      try {
-        await supabaseAdmin.from('order_items').delete().eq('order_id', dbOrder.id);
-        const itemsPayload = cleanOrder.items.map((item: any) => ({
-          order_id: dbOrder.id,
-          product_id: Number(item.productId || item.id || 1),
-          product_title: item.title || item.product_title || 'Handcrafted Artisan Craft',
-          unit_price: Number(item.unitPrice || item.price || 0),
-          quantity: Number(item.quantity || item.qty || 1),
-          subtotal: Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1)),
-        }));
-        await supabaseAdmin.from('order_items').insert(itemsPayload);
-      } catch (itemErr: any) {
-        console.warn('⚠️ [Supabase order_items Table Notice]:', itemErr.message);
+      await supabaseAdmin.from('order_items').delete().eq('order_id', dbOrder.id);
+      const itemsPayload = cleanOrder.items.map((item: any) => ({
+        order_id: dbOrder.id,
+        product_id: Number(item.productId || item.id || 1),
+        product_title: item.title || item.product_title || 'Handcrafted Artisan Craft',
+        unit_price: Number(item.unitPrice || item.price || 0),
+        quantity: Number(item.quantity || item.qty || 1),
+        subtotal: Number(item.subtotal || (item.unitPrice || item.price || 0) * (item.quantity || 1)),
+      }));
+
+      const { error: itemsErr } = await supabaseAdmin.from('order_items').insert(itemsPayload);
+      if (itemsErr) {
+        console.error('❌ [Supabase order_items Table Error]:', itemsErr.message);
+        throw new Error(itemsErr.message);
       }
     }
   } catch (dbEx: any) {
-    console.warn('⚠️ [Database Order Sync Notice]:', dbEx.message);
+    console.error('❌ [Database Order Sync Failure]:', dbEx.message);
+    throw dbEx;
   }
 
   // 4. Anonymized backup summary to site_settings under key 'orders_v1' (strips customer PII for security)
