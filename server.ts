@@ -1117,40 +1117,46 @@ async function autoBookShipmentForOrder(targetRef: string, sOrderInput?: any): P
 
 // ... existing code ...
 async function assignOrderToMaker(orderId: string): Promise<void> {
-  // Find active makers ordered by last_assigned_at ASC
-  const { data: makers, error } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('role', 'maker')
-    .eq('is_available', true)
-    .order('last_assigned_at', { ascending: true })
-    .limit(1);
-
-  let makerId: string | null = null;
-  if (makers && makers.length > 0) {
-    makerId = makers[0].id;
-  } else {
-    // Fallback to Master Admin
-    const { data: admin } = await supabaseAdmin
+  try {
+    // 1. Fetch approved makers from profiles table
+    const { data: makers, error } = await supabaseAdmin
       .from('profiles')
-      .select('id')
-      .eq('email', 'ssumollah@gmail.com')
-      .single();
-    if (admin) makerId = admin.id;
-  }
+      .select('id, email, full_name, role')
+      .eq('role', 'maker');
 
-  if (makerId) {
-    // Update maker assignment
-    await supabaseAdmin
-      .from('profiles')
-      .update({ last_assigned_at: new Date().toISOString() })
-      .eq('id', makerId);
+    let makerId: string | null = null;
+    if (error) {
+      console.warn('Notice fetching maker profiles for assignment:', error.message);
+    }
 
-    // Assign to order items
-    await supabaseAdmin
-      .from('order_items')
-      .update({ maker_id: makerId })
-      .eq('order_id', orderId);
+    if (makers && makers.length > 0) {
+      makerId = makers[0].id;
+    } else {
+      // Fallback to Master Admin
+      const { data: admin } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('email', 'ssumollah@gmail.com')
+        .maybeSingle();
+      if (admin) makerId = admin.id;
+    }
+
+    if (makerId) {
+      // Update maker assignment in order items and orders
+      await supabaseAdmin
+        .from('order_items')
+        .update({ maker_id: makerId })
+        .eq('order_id', orderId);
+
+      await supabaseAdmin
+        .from('orders')
+        .update({ maker_id: makerId, status: 'awaiting_maker_acceptance' })
+        .eq('id', orderId);
+
+      console.log(`👤 [Maker Distribution] Assigned order ID ${orderId} to maker ${makerId}`);
+    }
+  } catch (err: any) {
+    console.warn('[Maker Assignment Notice]:', err.message);
   }
 }
 
@@ -4276,6 +4282,7 @@ app.get('/api/products', async (_req: Request, res: Response) => {
     }
 
     const mapped = (data || []).map(mapDbRowToProduct);
+    res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
     return res.json({ success: true, count: mapped.length, products: mapped });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message });
@@ -4300,12 +4307,14 @@ app.get('/api/products/:ref', async (req: Request, res: Response) => {
 
     const { data, error } = await query.maybeSingle();
     if (!error && data) {
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
       return res.json({ success: true, product: mapDbRowToProduct(data) });
     }
 
     // Fallback check memory catalog
     if (!isNaN(numId) && SERVER_PRODUCT_CATALOG[numId]) {
       const cat = SERVER_PRODUCT_CATALOG[numId];
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=86400');
       return res.json({
         success: true,
         product: {
